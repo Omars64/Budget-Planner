@@ -1,16 +1,28 @@
 import { useEffect, useRef, useState } from 'react'
-import { Download, LockKeyhole, Plus, RefreshCcw, Save, ShieldCheck, Trash2, Upload } from 'lucide-react'
+import { Camera, Download, Image, Plus, RefreshCcw, Save, ShieldCheck, Trash2, Upload, UserRound, X } from 'lucide-react'
 import { api, jsonBody } from '../lib/api'
 import { useApp } from '../App'
 import Modal from '../components/Modal'
 
+const imageData = (file, maxBytes, label) => new Promise((resolve, reject) => {
+  if (!file) return reject(new Error(`Choose a ${label.toLowerCase()} first`))
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) return reject(new Error(`${label} must be PNG, JPEG, or WebP`))
+  if (file.size > maxBytes) return reject(new Error(`${label} is too large`))
+  const reader = new FileReader()
+  reader.onerror = () => reject(new Error(`Could not read the ${label.toLowerCase()}`))
+  reader.onload = () => resolve(String(reader.result || ''))
+  reader.readAsDataURL(file)
+})
+
 export default function Settings(){
-  const {user,settings,setSettings,reloadSettings,refresh,notify,lock}=useApp()
+  const {user,settings,setSettings,appearance,setAppearance,reloadSettings,refresh,notify,lock}=useApp()
   const [form,setForm]=useState(settings)
   const [cats,setCats]=useState([])
   const [catOpen,setCatOpen]=useState(false)
   const [cat,setCat]=useState({name:'',kind:'expense',icon:'circle',color:'#0a4173'})
   const inputRef=useRef(null)
+  const profileRef=useRef(null)
+  const wallpaperRef=useRef(null)
   useEffect(()=>setForm(settings),[settings])
   useEffect(()=>{api('/api/categories').then(setCats)},[])
   const save=async e=>{e.preventDefault();const updated=await api('/api/settings',{method:'PUT',...jsonBody(form)});setSettings(updated);notify('Settings saved')}
@@ -19,10 +31,18 @@ export default function Settings(){
   const exportBackup=async()=>{const data=await api('/api/backup');const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`flowbudget-backup-${new Date().toISOString().slice(0,10)}.json`;a.click();URL.revokeObjectURL(url);notify('Backup exported')}
   const restore=async e=>{const file=e.target.files?.[0]; if(!file)return; try{const data=JSON.parse(await file.text());await api('/api/backup/restore',{method:'POST',body:JSON.stringify(data)});await reloadSettings();refresh();setCats(await api('/api/categories'));notify('Backup restored')}catch(err){notify(`Restore failed: ${err.message}`,'error')} finally {e.target.value=''}}
   const resetDemo=async()=>{if(!confirm('Reset your budget workspace? This replaces your current wallets and transactions.'))return;await api('/api/reset-demo',{method:'POST'});await reloadSettings();refresh();setCats(await api('/api/categories'));notify('Workspace reset')}
+
+  const updateAppearance=async patch=>{const updated=await api('/api/account/appearance',{method:'PUT',...jsonBody(patch)});setAppearance(updated);return updated}
+  const pickProfile=async e=>{const file=e.target.files?.[0];try{const data=await imageData(file,1_000_000,'Profile picture');await updateAppearance({profile_image:data});notify('Profile picture updated')}catch(err){notify(err.message,'error')}finally{e.target.value=''}}
+  const pickWallpaper=async e=>{const file=e.target.files?.[0];try{const data=await imageData(file,2_500_000,'Wallpaper');await updateAppearance({wallpaper_image:data});notify('Wallpaper updated')}catch(err){notify(err.message,'error')}finally{e.target.value=''}}
+  const clearAppearance=async key=>{try{await updateAppearance({[key]:''});notify(key==='profile_image'?'Profile picture removed':'Wallpaper removed')}catch(err){notify(err.message,'error')}}
+
   return <div className="settings-grid">
     <section className="panel glass"><div className="panel-head"><div><p className="eyebrow">Preferences</p><h3>Display & locale</h3></div></div><form onSubmit={save} className="stack gap-16"><label className="field"><span>Budget name</span><input value={form.display_name||''} onChange={e=>setForm({...form,display_name:e.target.value})}/></label><div className="form-grid two"><label className="field"><span>Currency</span><input value={form.currency||'KWD'} maxLength="6" onChange={e=>setForm({...form,currency:e.target.value.toUpperCase()})}/></label><label className="field"><span>Week starts on</span><select value={form.week_starts_on||'sunday'} onChange={e=>setForm({...form,week_starts_on:e.target.value})}><option value="sunday">Sunday</option><option value="monday">Monday</option></select></label></div><label className="check-row"><input type="checkbox" checked={!!form.compact_numbers} onChange={e=>setForm({...form,compact_numbers:e.target.checked})}/><span>Use compact large numbers where possible</span></label><button className="button primary self-start"><Save/>Save preferences</button></form></section>
 
-    <section className="panel glass"><div className="panel-head"><div><p className="eyebrow">Account</p><h3>Session</h3></div><ShieldCheck className="muted-icon"/></div><div className="security-card"><span className="security-status enabled"><LockKeyhole/>{user?.username}</span><p className="muted">{user?.email} · {user?.role === 'admin' ? 'Administrator' : 'User'} access</p><button className="button ghost self-start" onClick={lock}>Sign out</button></div></section>
+    <section className="panel glass"><div className="panel-head"><div><p className="eyebrow">Account</p><h3>Profile & session</h3></div><ShieldCheck className="muted-icon"/></div><div className="security-card"><div className="profile-account-row">{appearance.profile_image?<img className="settings-avatar" src={appearance.profile_image} alt="Profile"/>:<span className="settings-avatar fallback"><UserRound/></span>}<div><strong>{user?.username}</strong><p className="muted">{user?.email} · {user?.role === 'admin' ? 'Administrator' : 'User'} access</p></div></div><div className="button-row"><button className="button ghost small" onClick={()=>profileRef.current?.click()}><Camera/>Change photo</button>{appearance.profile_image&&<button className="button ghost small" onClick={()=>clearAppearance('profile_image')}><X/>Remove</button>}<button className="button ghost small" onClick={lock}>Sign out</button></div><input ref={profileRef} hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={pickProfile}/></div></section>
+
+    <section className="panel glass span-2-settings appearance-panel"><div className="panel-head"><div><p className="eyebrow">Personalization</p><h3>Workspace wallpaper</h3></div><Image className="muted-icon"/></div><div className="wallpaper-settings"><div className={`wallpaper-preview ${appearance.wallpaper_image?'has-image':''}`} style={appearance.wallpaper_image?{backgroundImage:`url(${JSON.stringify(appearance.wallpaper_image)})`}:{}}>{!appearance.wallpaper_image&&<><Image/><span>No wallpaper selected</span></>}</div><div className="stack gap-10"><p className="muted">Your wallpaper is private to your account. FlowBudget’s glass panels stay translucent above it.</p><div className="button-row"><button className="button primary small" onClick={()=>wallpaperRef.current?.click()}><Upload/>Choose wallpaper</button>{appearance.wallpaper_image&&<button className="button ghost small" onClick={()=>clearAppearance('wallpaper_image')}><Trash2/>Remove wallpaper</button>}</div><small className="appearance-hint">PNG, JPEG, or WebP · maximum 2.5 MB</small></div><input ref={wallpaperRef} hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={pickWallpaper}/></div></section>
 
     <section className="panel glass span-2-settings"><div className="panel-head"><div><p className="eyebrow">Organization</p><h3>Categories</h3></div><button className="button ghost small" onClick={()=>setCatOpen(true)}><Plus/>Add category</button></div><div className="category-settings">{cats.map(c=><div key={c.id}><span><i style={{background:c.color}}/>{c.name}<small>{c.kind}</small></span><button className="row-icon danger" onClick={()=>removeCat(c)}><Trash2/></button></div>)}</div></section>
 
