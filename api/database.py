@@ -4,7 +4,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_DB = ROOT / "flowbudget.db"
+DEFAULT_DB = Path("/tmp/flowbudget.db") if os.getenv("VERCEL") else ROOT / "flowbudget.db"
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DEFAULT_DB}")
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = "postgresql+psycopg://" + DATABASE_URL[len("postgres://"):]
