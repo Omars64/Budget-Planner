@@ -1,6 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { BarChart3, CalendarDays, Gauge, Landmark, LayoutDashboard, LogOut, Menu, PiggyBank, Plus, ReceiptText, Settings, ShieldCheck, Sparkles, Target, WalletCards, X } from 'lucide-react'
+import { BarChart3, CalendarDays, Gauge, LayoutDashboard, LogOut, Menu, PiggyBank, Plus, ReceiptText, Settings, Share2, ShieldCheck, Sparkles, Target, WalletCards, X } from 'lucide-react'
 import { useState } from 'react'
 import { useApp } from '../App'
 import TransactionModal from './TransactionModal'
@@ -8,6 +8,7 @@ import TransactionModal from './TransactionModal'
 const nav = [
   ['/', 'Overview', LayoutDashboard],
   ['/transactions', 'Transactions', ReceiptText],
+  ['/shared-transactions', 'Shared Transactions', Share2],
   ['/calendar', 'Calendar', CalendarDays],
   ['/analytics', 'Analytics', BarChart3],
   ['/budgets', 'Budgets', Gauge],
@@ -19,7 +20,7 @@ const nav = [
 export default function AppShell({ children }) {
   const [menu, setMenu] = useState(false)
   const [txModal, setTxModal] = useState(false)
-  const { user, settings, refresh, notify, lock } = useApp()
+  const { user, settings, appearance, refresh, notify, lock } = useApp()
   const location = useLocation()
   const visibleNav = user?.role === 'admin' ? [...nav, ['/admin', 'Admin', ShieldCheck]] : nav
   const title = visibleNav.find(([path]) => path === location.pathname)?.[1] || 'FlowBudget'
@@ -39,7 +40,7 @@ export default function AppShell({ children }) {
         </NavLink>)}
       </nav>
       <div className="sidebar-foot glass-subtle">
-        <PiggyBank size={22}/><div><strong>{user?.username || 'FlowBudget'}</strong><small>{user?.role === 'admin' ? 'Admin account' : 'Personal workspace'}</small></div>
+        {appearance.profile_image ? <img className="sidebar-avatar" src={appearance.profile_image} alt="Profile"/> : <PiggyBank size={22}/>}<div><strong>{user?.username || 'FlowBudget'}</strong><small>{user?.role === 'admin' ? 'Admin account' : 'Personal workspace'}</small></div>
       </div>
     </aside>
     {menu && <div className="sidebar-scrim" onClick={() => setMenu(false)} />}
@@ -56,7 +57,7 @@ export default function AppShell({ children }) {
     </main>
 
     <nav className="mobile-nav glass">
-      {visibleNav.slice(0, 4).map(([to, label, Icon]) => <NavLink key={to} to={to} end={to === '/'} className={({isActive}) => isActive ? 'active' : ''}><Icon size={19}/><span>{label === 'Transactions' ? 'Activity' : label}</span></NavLink>)}
+      {visibleNav.slice(0, 4).map(([to, label, Icon]) => <NavLink key={to} to={to} end={to === '/'} className={({isActive}) => isActive ? 'active' : ''}><Icon size={19}/><span>{label === 'Transactions' ? 'Activity' : label === 'Shared Transactions' ? 'Shared' : label}</span></NavLink>)}
       <button onClick={() => setMenu(true)}><Menu size={19}/><span>More</span></button>
     </nav>
 
