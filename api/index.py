@@ -18,8 +18,8 @@ from sqlalchemy import extract, func, or_
 from sqlalchemy.orm import Session
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
-from .database import Base, SessionLocal, engine, get_db
-from .models import AppSetting, Budget, Category, Debt, Goal, Transaction, User, Wallet
+from .database import Base, IS_EPHEMERAL_VERCEL_SQLITE, SessionLocal, engine, get_db
+from .models import AppSetting, Budget, Category, Debt, Goal, PendingSignup, Transaction, User, Wallet, WalletShare
 from .schemas import (
     BudgetIn, CategoryIn, ContributionIn, DebtIn, GoalIn, LoginPayload, PinPayload,
     SettingsPayload, TransactionIn, UserCreate, UserUpdate, WalletIn,
@@ -33,6 +33,8 @@ auth_serializer = URLSafeTimedSerializer(APP_SECRET, salt="flowbudget-auth")
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    if IS_EPHEMERAL_VERCEL_SQLITE:
+        raise RuntimeError("FlowBudget on Vercel requires a persistent DATABASE_URL. SQLite in /tmp loses users and transactions between function instances.")
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
@@ -304,7 +306,12 @@ def seed_user_workspace(db: Session, user_id: int):
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "service": "FlowBudget", "time": datetime.now().astimezone().isoformat()}
+    return {
+        "ok": True,
+        "service": "FlowBudget",
+        "time": datetime.now().astimezone().isoformat(),
+        "persistent_storage": not IS_EPHEMERAL_VERCEL_SQLITE,
+    }
 
 
 @app.post("/api/auth/login")
@@ -331,7 +338,11 @@ def admin_create_user(payload: UserCreate, _: User = Depends(admin_user), db: Se
     if db.query(User).filter(User.email == email).first():
         raise HTTPException(409, "Email is already in use")
     row = User(username=payload.username.strip(), email=email, role=payload.role, active=payload.active, password_hash=hash_password(payload.password))
-    db.add(row); db.commit(); db.refresh(row)
+    db.add(row); db.flush()
+    db.query(PendingSignup).filter(PendingSignup.email == email).delete()
+    for share in db.query(WalletShare).filter(WalletShare.invitee_email == email, WalletShare.member_user_id.is_(None)).all():
+        share.member_user_id = row.id
+    db.commit(); db.refresh(row)
     seed_user_workspace(db, row.id)
     return user_payload(row)
 
@@ -349,12 +360,26 @@ def admin_update_user(user_id: int, payload: UserUpdate, admin: User = Depends(a
     duplicate = db.query(User).filter(User.email == email, User.id != user_id).first()
     if duplicate:
         raise HTTPException(409, "Email is already in use")
+    old_email = row.email
     row.username = payload.username.strip()
     row.email = email
     row.role = payload.role
     row.active = payload.active
     if payload.password:
         row.password_hash = hash_password(payload.password)
+    db.query(PendingSignup).filter(PendingSignup.email.in_([old_email, email])).delete(synchronize_session=False)
+    for share in db.query(WalletShare).filter(WalletShare.member_user_id == user_id).all():
+        conflict = db.query(WalletShare).filter(
+            WalletShare.wallet_id == share.wallet_id,
+            WalletShare.invitee_email == email,
+            WalletShare.id != share.id,
+        ).first()
+        if conflict:
+            conflict.member_user_id = row.id
+            conflict.permission = "edit" if "edit" in {conflict.permission, share.permission} else conflict.permission
+            db.delete(share)
+        else:
+            share.invitee_email = email
     db.commit(); db.refresh(row)
     return user_payload(row)
 
@@ -366,6 +391,10 @@ def admin_delete_user(user_id: int, admin: User = Depends(admin_user), db: Sessi
     row = db.get(User, user_id)
     if not row:
         raise HTTPException(404, "User not found")
+    db.query(WalletShare).filter(WalletShare.owner_id == user_id).delete(synchronize_session=False)
+    db.query(WalletShare).filter(WalletShare.member_user_id == user_id).delete(synchronize_session=False)
+    db.query(WalletShare).filter(WalletShare.invitee_email == normalize_email(row.email)).delete(synchronize_session=False)
+    db.query(PendingSignup).filter(PendingSignup.email == normalize_email(row.email)).delete(synchronize_session=False)
     for model in [Transaction, Budget, Goal, Debt, Category, Wallet]:
         db.query(model).filter(model.user_id == user_id).delete()
     db.query(AppSetting).filter(AppSetting.user_id == user_id).delete()

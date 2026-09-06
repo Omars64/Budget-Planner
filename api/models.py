@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 from .database import Base
 
@@ -108,3 +108,29 @@ class User(Base):
     role = Column(String(20), default="user", nullable=False)  # admin | user
     active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.now)
+
+
+class PendingSignup(Base):
+    __tablename__ = "pending_signups"
+    id = Column(Integer, primary_key=True)
+    username = Column(String(80), nullable=False)
+    email = Column(String(160), nullable=False, unique=True, index=True)
+    password_hash = Column(Text, nullable=False)
+    code_hash = Column(String(64), nullable=False)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    last_sent_at = Column(DateTime, nullable=False)
+    attempts = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+    updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
+
+
+class WalletShare(Base):
+    __tablename__ = "wallet_shares"
+    __table_args__ = (UniqueConstraint("wallet_id", "invitee_email", name="uq_wallet_share_email"),)
+    id = Column(Integer, primary_key=True)
+    wallet_id = Column(Integer, ForeignKey("wallets.id", ondelete="CASCADE"), nullable=False, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    invitee_email = Column(String(160), nullable=False, index=True)
+    member_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    permission = Column(String(12), nullable=False, default="view")
+    created_at = Column(DateTime, nullable=False, default=datetime.now)

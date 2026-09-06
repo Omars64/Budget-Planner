@@ -144,7 +144,7 @@ The generated static build is written to `dist/`.
 
 Copy `.env.example` if you want explicit configuration.
 
-- `DATABASE_URL` — defaults to local SQLite if omitted
+- `DATABASE_URL` — defaults to local SQLite if omitted outside Vercel
 - `APP_SECRET` — signing secret for PIN unlock sessions; **replace before deployment**
 - `CORS_ORIGINS` — comma-separated cross-origin frontend origins for development or split deployments
 - `ADMIN_INITIAL_USERNAME` — first admin account display name, defaults to `Omar`
@@ -159,7 +159,7 @@ postgresql+psycopg://USER:PASSWORD@HOST/DATABASE?sslmode=require
 
 ## Vercel deployment notes
 
-The repository is intentionally shaped as a Vite app with a FastAPI entry point at `api/index.py`. Current Vercel Python support recognizes FastAPI applications as Python Functions.
+The repository is intentionally shaped as a Vite app with a FastAPI entry point at `api/app.py`. Current Vercel Python support recognizes FastAPI applications as Python Functions.
 
 Before a real deployment:
 
@@ -170,7 +170,7 @@ Before a real deployment:
 5. Build with `npm run build`.
 6. Verify `/api/health` after deployment.
 
-**Do not rely on SQLite for persistent data on a serverless deployment.** Local SQLite is excellent for development, but a hosted serverless filesystem is not the correct persistence layer for personal financial records. Use managed Postgres in production.
+**Do not rely on SQLite for persistent data on a serverless deployment.** Local SQLite is excellent for development, but a hosted serverless filesystem is not the correct persistence layer for personal financial records. The API now refuses to start on Vercel with SQLite unless `ALLOW_EPHEMERAL_SQLITE=true` is explicitly set for a temporary preview; use managed Postgres in production.
 
 The frontend uses hash routing so static-host refreshes do not require SPA rewrite rules.
 

@@ -16,11 +16,11 @@ from typing import Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from pydantic import BaseModel, Field, model_validator
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, or_
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from .database import Base, get_db
-from .models import Category, Transaction, User, Wallet
+from .database import get_db
+from .models import Category, PendingSignup, Transaction, User, Wallet, WalletShare
 from .schemas import TransactionIn
 from .index import (
     APP_SECRET,
@@ -39,32 +39,6 @@ router = APIRouter()
 signup_serializer = URLSafeTimedSerializer(APP_SECRET, salt="flowbudget-signup")
 EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 IMAGE_RE = re.compile(r"^data:image/(png|jpeg|webp);base64,([A-Za-z0-9+/=\r\n]+)$", re.I)
-
-
-class PendingSignup(Base):
-    __tablename__ = "pending_signups"
-    id = Column(Integer, primary_key=True)
-    username = Column(String(80), nullable=False)
-    email = Column(String(160), nullable=False, unique=True, index=True)
-    password_hash = Column(Text, nullable=False)
-    code_hash = Column(String(64), nullable=False)
-    expires_at = Column(DateTime, nullable=False, index=True)
-    last_sent_at = Column(DateTime, nullable=False)
-    attempts = Column(Integer, nullable=False, default=0)
-    created_at = Column(DateTime, nullable=False, default=datetime.now)
-    updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
-
-
-class WalletShare(Base):
-    __tablename__ = "wallet_shares"
-    __table_args__ = (UniqueConstraint("wallet_id", "invitee_email", name="uq_wallet_share_email"),)
-    id = Column(Integer, primary_key=True)
-    wallet_id = Column(Integer, ForeignKey("wallets.id", ondelete="CASCADE"), nullable=False, index=True)
-    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    invitee_email = Column(String(160), nullable=False, index=True)
-    member_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
-    permission = Column(String(12), nullable=False, default="view")
-    created_at = Column(DateTime, nullable=False, default=datetime.now)
 
 
 class SignupStart(BaseModel):

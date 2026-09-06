@@ -69,3 +69,52 @@ def test_verified_signup_reentry_appearance_and_shared_wallet(monkeypatch):
         downgrade = client.post(f"/api/shared/wallets/{wallet['id']}/shares", headers=owner_headers, json={"email": signup["email"], "permission": "view"})
         assert downgrade.status_code == 201
         assert client.post("/api/shared/transactions", headers=member_headers, json={**payload, "description": "Should fail"}).status_code == 403
+
+
+def test_share_before_signup_links_and_admin_delete_cleans_access(monkeypatch):
+    sent = {}
+    monkeypatch.setattr(extensions, "send_code", lambda email, username, code: sent.__setitem__(email, code))
+
+    with TestClient(app) as client:
+        owner_headers = admin_headers(client)
+        wallet = client.get("/api/wallets", headers=owner_headers).json()[0]
+        invite_email = "future-member@example.com"
+
+        pending_share = client.post(
+            f"/api/shared/wallets/{wallet['id']}/shares",
+            headers=owner_headers,
+            json={"email": invite_email, "permission": "edit"},
+        )
+        assert pending_share.status_code == 201, pending_share.text
+        assert pending_share.json()["registered"] is False
+
+        signup = {"username": "Future Member", "email": invite_email, "password": "StrongPass123!"}
+        started = client.post("/api/auth/signup/start", json=signup)
+        assert started.status_code == 200, started.text
+        verified = client.post(
+            "/api/auth/signup/verify",
+            json={"challenge": started.json()["challenge"], "code": sent[invite_email]},
+        )
+        assert verified.status_code == 200, verified.text
+        member_headers = headers(verified.json()["token"])
+        member_id = verified.json()["user"]["id"]
+
+        shared_wallets = client.get("/api/shared/wallets", headers=member_headers).json()
+        assert any(w["wallet_id"] == wallet["id"] and w["can_edit"] for w in shared_wallets)
+
+        category = next(c for c in client.get(f"/api/shared/wallets/{wallet['id']}/categories", headers=member_headers).json() if c["kind"] == "expense")
+        payload = {
+            "type": "expense", "amount": 7.125, "description": "Pre-signup share regression", "notes": "",
+            "date": "2026-09-03T12:00:00", "wallet_id": wallet["id"], "transfer_wallet_id": None,
+            "category_id": category["id"], "recurring_frequency": "none", "recurring_until": None,
+        }
+        created = client.post("/api/shared/transactions", headers=member_headers, json=payload)
+        assert created.status_code == 201, created.text
+        assert any(t["id"] == created.json()["id"] for t in client.get("/api/shared/transactions", headers=member_headers).json())
+        assert any(t["id"] == created.json()["id"] for t in client.get("/api/transactions?search=Pre-signup", headers=owner_headers).json())
+
+        assert client.delete(f"/api/admin/users/{member_id}", headers=owner_headers).status_code == 204
+        owner_shared_wallets = client.get("/api/shared/wallets", headers=owner_headers).json()
+        owner_wallet = next(w for w in owner_shared_wallets if w["wallet_id"] == wallet["id"])
+        assert all(s["email"] != invite_email for s in owner_wallet["shares"])
+        assert client.get("/api/shared/wallets", headers=member_headers).status_code == 401
