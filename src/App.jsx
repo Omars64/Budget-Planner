@@ -14,6 +14,7 @@ import GoalsDebts from './pages/GoalsDebts'
 import Wallets from './pages/Wallets'
 import Settings from './pages/Settings'
 import Admin from './pages/Admin'
+import { useConfirmation } from './components/Confirmation'
 
 const AppContext = createContext(null)
 export const useApp = () => useContext(AppContext)
@@ -125,6 +126,7 @@ function LoginScreen({ onLogin }) {
 }
 
 export default function App() {
+  const { confirm, confirmation } = useConfirmation()
   const [session, setSession] = useState({ loading: true, user: null })
   const [settings, setSettings] = useState({ currency: 'KWD', display_name: 'FlowBudget', week_starts_on: 'sunday', compact_numbers: false })
   const [appearance, setAppearance] = useState({ profile_image: '', wallpaper_image: '' })
@@ -133,8 +135,12 @@ export default function App() {
 
   const notify = useCallback((message, type = 'success') => {
     setToast({ id: Date.now(), message, type })
-    window.setTimeout(() => setToast(null), 2600)
   }, [])
+  useEffect(() => {
+    if (!toast) return undefined
+    const timer = window.setTimeout(() => setToast(null), 5000)
+    return () => window.clearTimeout(timer)
+  }, [toast])
   const refresh = useCallback(() => setRefreshKey(v => v + 1), [])
 
   const loadSettings = useCallback(async () => {
@@ -189,8 +195,8 @@ export default function App() {
 
   const value = useMemo(() => ({
     user: session.user, settings, setSettings, appearance, setAppearance,
-    refreshKey, refresh, notify, reloadSettings: loadSettings, reloadAppearance: loadAppearance, lock: signOut,
-  }), [session.user, settings, appearance, refreshKey, refresh, notify, loadSettings, loadAppearance, signOut])
+    refreshKey, refresh, notify, confirm, reloadSettings: loadSettings, reloadAppearance: loadAppearance, lock: signOut,
+  }), [session.user, settings, appearance, refreshKey, refresh, notify, confirm, loadSettings, loadAppearance, signOut])
 
   if (session.loading) return <div className="app-loading"><div className="brand-mark pulse"><Sparkles /></div></div>
   if (!session.user) return <LoginScreen onLogin={completeLogin} />
@@ -212,6 +218,7 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AppShell>
-    <AnimatePresence>{toast && <motion.div className={`toast ${toast.type}`} initial={{ opacity: 0, y: 18, scale: .96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12 }}>{toast.message}</motion.div>}</AnimatePresence>
+    {confirmation}
+    <AnimatePresence>{toast && <motion.div role={toast.type === 'error' ? 'alert' : 'status'} className={`toast ${toast.type}`} initial={{ opacity: 0, y: 18, scale: .96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12 }}>{toast.message}</motion.div>}</AnimatePresence>
   </AppContext.Provider>
 }

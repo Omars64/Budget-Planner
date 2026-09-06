@@ -8,7 +8,7 @@ import TransactionModal from '../components/TransactionModal'
 import EmptyState from '../components/EmptyState'
 
 export default function Transactions() {
-  const { settings, refreshKey, refresh, notify } = useApp()
+  const { settings, refreshKey, refresh, notify ,confirm} = useApp()
   const [rows, setRows] = useState([])
   const [search, setSearch] = useState('')
   const [type, setType] = useState('all')
@@ -24,7 +24,7 @@ export default function Transactions() {
 
   const fmt = v => money(v, settings.currency, settings.compact_numbers)
   const grouped = useMemo(() => rows.reduce((acc, tx) => { const key = format(new Date(tx.date), 'yyyy-MM-dd'); (acc[key] ||= []).push(tx); return acc }, {}), [rows])
-  const remove = async tx => { if (!confirm(`Delete “${tx.description}”?`)) return; await api(`/api/transactions/${tx.id}`, {method:'DELETE'}); refresh(); notify('Transaction deleted') }
+  const remove = async tx => { if (!await confirm(`Delete “${tx.description}”?`)) return; try { await api(`/api/transactions/${tx.id}`, {method:'DELETE'}); refresh(); notify('Transaction deleted') } catch (err) { notify(err.message, 'error') } }
 
   return <div className="stack gap-18">
     <section className="toolbar glass">

@@ -15,7 +15,7 @@ const imageData = (file, maxBytes, label) => new Promise((resolve, reject) => {
 })
 
 export default function Settings(){
-  const {user,settings,setSettings,appearance,setAppearance,reloadSettings,refresh,notify,lock}=useApp()
+  const {user,settings,setSettings,appearance,setAppearance,reloadSettings,refresh,notify,lock,confirm}=useApp()
   const [form,setForm]=useState(settings)
   const [cats,setCats]=useState([])
   const [catOpen,setCatOpen]=useState(false)
@@ -27,10 +27,10 @@ export default function Settings(){
   useEffect(()=>{api('/api/categories').then(setCats)},[])
   const save=async e=>{e.preventDefault();const updated=await api('/api/settings',{method:'PUT',...jsonBody(form)});setSettings(updated);notify('Settings saved')}
   const addCat=async e=>{e.preventDefault();await api('/api/categories',{method:'POST',...jsonBody(cat)});setCats(await api('/api/categories'));setCatOpen(false);setCat({name:'',kind:'expense',icon:'circle',color:'#0a4173'});refresh();notify('Category added')}
-  const removeCat=async c=>{if(!confirm(`Delete ${c.name}?`))return;try{await api(`/api/categories/${c.id}`,{method:'DELETE'});setCats(await api('/api/categories'));refresh();notify('Category deleted')}catch(err){notify(err.message,'error')}}
+  const removeCat=async c=>{if(!await confirm(`Delete ${c.name}?`))return;try{await api(`/api/categories/${c.id}`,{method:'DELETE'});setCats(await api('/api/categories'));refresh();notify('Category deleted')}catch(err){notify(err.message,'error')}}
   const exportBackup=async()=>{const data=await api('/api/backup');const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`flowbudget-backup-${new Date().toISOString().slice(0,10)}.json`;a.click();URL.revokeObjectURL(url);notify('Backup exported')}
   const restore=async e=>{const file=e.target.files?.[0]; if(!file)return; try{const data=JSON.parse(await file.text());await api('/api/backup/restore',{method:'POST',body:JSON.stringify(data)});await reloadSettings();refresh();setCats(await api('/api/categories'));notify('Backup restored')}catch(err){notify(`Restore failed: ${err.message}`,'error')} finally {e.target.value=''}}
-  const resetDemo=async()=>{if(!confirm('Reset your budget workspace? This replaces your current wallets and transactions.'))return;await api('/api/reset-demo',{method:'POST'});await reloadSettings();refresh();setCats(await api('/api/categories'));notify('Workspace reset')}
+  const resetDemo=async()=>{if(!await confirm('Reset your budget workspace? This replaces your current wallets and transactions.'))return;try{await api('/api/reset-demo',{method:'POST'});await reloadSettings();refresh();setCats(await api('/api/categories'));notify('Workspace reset')}catch(err){notify(err.message,'error')}}
 
   const updateAppearance=async patch=>{const updated=await api('/api/account/appearance',{method:'PUT',...jsonBody(patch)});setAppearance(updated);return updated}
   const pickProfile=async e=>{const file=e.target.files?.[0];try{const data=await imageData(file,1_000_000,'Profile picture');await updateAppearance({profile_image:data});notify('Profile picture updated')}catch(err){notify(err.message,'error')}finally{e.target.value=''}}

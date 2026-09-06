@@ -66,6 +66,22 @@ def test_gmail_sender_defaults_and_app_password_alias():
     assert FakeSMTP.attempts == [587]
 
 
+def test_outlook_message_has_plain_text_html_and_authenticated_sender():
+    config = email_service.get_smtp_config()
+    message = email_service._build_verification_message(config, "recipient@outlook.com", "A < B", "123456")
+    assert message.get_content_type() == "multipart/alternative"
+    assert "123456" in message.get_body(preferencelist=("plain",)).get_content()
+    assert "A &lt; B" in message.get_body(preferencelist=("html",)).get_content()
+    assert message["Date"] and message["Message-ID"]
+    assert config.username in message["From"]
+
+
+def test_gmail_rejects_mismatched_sender(monkeypatch):
+    monkeypatch.setenv("SMTP_FROM", "someone@example.com")
+    with pytest.raises(email_service.EmailConfigurationError):
+        email_service.get_smtp_config()
+
+
 def test_gmail_retries_alternate_tls_port_on_connection_failure():
     FakeSMTP.fail_first_connection = True
     email_service.send_verification_code("recipient@example.com", "Omar", "123456")

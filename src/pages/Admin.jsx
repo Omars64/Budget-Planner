@@ -8,7 +8,7 @@ import EmptyState from '../components/EmptyState'
 const fresh = () => ({ username: '', email: '', password: '', role: 'user', active: true })
 
 export default function Admin() {
-  const { user, notify } = useApp()
+  const { user, notify ,confirm} = useApp()
   const [rows, setRows] = useState([])
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState(false)
@@ -42,7 +42,7 @@ export default function Admin() {
   }
 
   const remove = async row => {
-    if (!confirm(`Delete ${row.username}? This removes their budget data too.`)) return
+    if (!await confirm(`Delete ${row.username}? This removes their budget data too.`)) return
     try {
       await api(`/api/admin/users/${row.id}`, { method: 'DELETE' })
       await load()

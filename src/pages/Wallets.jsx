@@ -8,11 +8,11 @@ import EmptyState from '../components/EmptyState'
 
 const fresh=()=>({name:'',type:'cash',initial_balance:0,icon:'wallet',color:'#0a4173',archived:false})
 export default function Wallets(){
-  const {settings,refreshKey,refresh,notify}=useApp(); const [rows,setRows]=useState([]); const [open,setOpen]=useState(false); const [editing,setEditing]=useState(null); const [form,setForm]=useState(fresh()); const [error,setError]=useState('')
+  const {settings,refreshKey,refresh,notify,confirm}=useApp(); const [rows,setRows]=useState([]); const [open,setOpen]=useState(false); const [editing,setEditing]=useState(null); const [form,setForm]=useState(fresh()); const [error,setError]=useState('')
   useEffect(()=>{api('/api/wallets').then(setRows)},[refreshKey]); const fmt=v=>money(v,settings.currency,settings.compact_numbers); const total=rows.filter(w=>!w.archived).reduce((a,w)=>a+w.balance,0)
   const show=(w=null)=>{setEditing(w);setForm(w?{...w}:fresh());setOpen(true);setError('')}
   const submit=async e=>{e.preventDefault();try{await api(editing?`/api/wallets/${editing.id}`:'/api/wallets',{method:editing?'PUT':'POST',...jsonBody({...form,initial_balance:Number(form.initial_balance)})});setOpen(false);refresh();notify(editing?'Wallet updated':'Wallet added')}catch(err){setError(err.message)}}
-  const remove=async w=>{if(!confirm(`Delete ${w.name}?`))return;try{await api(`/api/wallets/${w.id}`,{method:'DELETE'});refresh();notify('Wallet deleted')}catch(err){notify(err.message,'error')}}
+  const remove=async w=>{if(!await confirm(`Delete ${w.name}?`))return;try{await api(`/api/wallets/${w.id}`,{method:'DELETE'});refresh();notify('Wallet deleted')}catch(err){notify(err.message,'error')}}
   const archive=async w=>{await api(`/api/wallets/${w.id}`,{method:'PUT',...jsonBody({...w,archived:!w.archived,initial_balance:Number(w.initial_balance)})});refresh();notify(w.archived?'Wallet restored':'Wallet archived')}
   return <div className="stack gap-22">
     <section className="wallet-hero glass"><div><p className="eyebrow">Available money</p><h1>{fmt(total)}</h1><p className="muted">Across {rows.filter(w=>!w.archived).length} active wallets</p></div><span className="wallet-orbit"><Landmark/></span></section>

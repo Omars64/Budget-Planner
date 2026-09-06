@@ -20,7 +20,7 @@ const blankTx = walletId => ({
 })
 
 export default function SharedTransactions() {
-  const { settings, refreshKey, refresh, notify } = useApp()
+  const { settings, refreshKey, refresh, notify ,confirm} = useApp()
   const [sharedWallets, setSharedWallets] = useState([])
   const [personalWallets, setPersonalWallets] = useState([])
   const [rows, setRows] = useState([])
@@ -121,7 +121,7 @@ export default function SharedTransactions() {
   }
 
   const revoke = async item => {
-    if (!confirm(`Remove ${item.email} from this wallet?`)) return
+    if (!await confirm(`Remove ${item.email} from this wallet?`)) return
     try { await api(`/api/shared/shares/${item.id}`, { method: 'DELETE' }); await loadWallets(); refresh(); notify('Access removed') }
     catch (err) { notify(err.message, 'error') }
   }
@@ -161,7 +161,7 @@ export default function SharedTransactions() {
   }
 
   const removeTx = async tx => {
-    if (!confirm(`Delete “${tx.description}”? This affects everyone sharing the wallet.`)) return
+    if (!await confirm(`Delete “${tx.description}”? This affects everyone sharing the wallet.`)) return
     try { await api(`/api/shared/transactions/${tx.id}`, { method: 'DELETE' }); refresh(); notify('Shared transaction deleted') }
     catch (err) { notify(err.message, 'error') }
   }

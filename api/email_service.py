@@ -70,6 +70,8 @@ def get_smtp_config(require_password: bool = True) -> SMTPConfig:
         raise EmailConfigurationError("SMTP password is not configured")
     if "@" not in username or "@" not in from_email:
         raise EmailConfigurationError("SMTP sender address is invalid")
+    if host.lower() in {"smtp.gmail.com", "smtp.googlemail.com"} and from_email.lower() != username.lower():
+        raise EmailConfigurationError("Gmail SMTP_FROM must match SMTP_USER for authenticated delivery")
 
     return SMTPConfig(
         host=host,
