@@ -145,11 +145,18 @@ The generated static build is written to `dist/`.
 Copy `.env.example` if you want explicit configuration.
 
 - `DATABASE_URL` — defaults to local SQLite if omitted outside Vercel
+- `FLOWBUDGET_DATABASE_URL` / `FLOWBUDGET_POSTGRES_URL` — managed Neon integration variables; these take precedence over `DATABASE_URL`
 - `APP_SECRET` — signing secret for PIN unlock sessions; **replace before deployment**
 - `CORS_ORIGINS` — comma-separated cross-origin frontend origins for development or split deployments
 - `ADMIN_INITIAL_USERNAME` — first admin account display name, defaults to `Omar`
 - `ADMIN_INITIAL_EMAIL` — first admin account email, defaults to `omarsolanki46@gmail.com`
 - `ADMIN_INITIAL_PASSWORD` — first admin password; set this in deployment secrets before first startup
+- `SMTP_HOST`, `SMTP_PORT` — email server and port (Gmail: `smtp.gmail.com`, `587`)
+- `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` — sender login, app password, and sender address; Gmail requires an App Password for the account in `SMTP_USER`, not its regular password
+
+In Vercel, open the **budget-planner project > Settings > Environment Variables**. Apply production settings to **Production**, then redeploy for changes to take effect. Keep passwords and database connection strings out of Git. Connecting Neon with the `FLOWBUDGET` prefix supplies `FLOWBUDGET_DATABASE_URL` automatically.
+
+After deployment, `/api/health` must report `persistent_storage: true` and `database: postgresql`. `/api/health/email?probe=true` must report `ready: true` before email signup can work. `EMAIL_AUTH_FAILED` means the SMTP provider rejected the sender credentials.
 
 For hosted PostgreSQL, use a SQLAlchemy/psycopg URL such as:
 
@@ -170,7 +177,9 @@ Before a real deployment:
 5. Build with `npm run build`.
 6. Verify `/api/health` after deployment.
 
-**Do not rely on SQLite for persistent data on a serverless deployment.** Local SQLite is excellent for development, but a hosted serverless filesystem is not the correct persistence layer for personal financial records. The API now refuses to start on Vercel with SQLite unless `ALLOW_EPHEMERAL_SQLITE=true` is explicitly set for a temporary preview; use managed Postgres in production.
+**Do not rely on SQLite for persistent data on a serverless deployment.** Local SQLite is excellent for development, but a hosted serverless filesystem is not the correct persistence layer for personal financial records. The API returns HTTP 503 when storage initialization fails. It also rejects SQLite on Vercel unless `ALLOW_EPHEMERAL_SQLITE=true` is explicitly set for a temporary preview; use managed Postgres in production.
+
+For an authorized live collaboration smoke test, set `FLOWBUDGET_ADMIN_PASSWORD` in the current PowerShell 7 session and run `./scripts/verify-production.ps1`. The test creates two temporary accounts, verifies sharing and persistence beyond two minutes, and deletes its test accounts and data afterward. It does not test email delivery.
 
 The frontend uses hash routing so static-host refreshes do not require SPA rewrite rules.
 
