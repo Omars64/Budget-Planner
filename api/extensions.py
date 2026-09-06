@@ -29,6 +29,7 @@ from .index import (
     issue_token,
     materialize_recurring_for_user,
     normalize_email,
+    wallet_balance,
     seed_user_workspace,
     set_setting,
     setting,
@@ -287,7 +288,7 @@ def shared_wallets(user: User = Depends(current_user), db: Session = Depends(get
     result = []
     for wallet in wallets:
         owner = db.get(User, wallet.user_id); is_owner = wallet.user_id == user.id; incoming_share = incoming_map.get(wallet.id); shares = outgoing_map.get(wallet.id, []) if is_owner else []
-        result.append({"wallet_id": wallet.id, "name": wallet.name, "type": wallet.type, "color": wallet.color, "owner_email": owner.email if owner else "", "owner_name": owner.username if owner else "", "is_owner": is_owner, "permission": "edit" if is_owner else incoming_share.permission, "can_edit": is_owner or incoming_share.permission == "edit", "shares": [{"id": s.id, "email": s.invitee_email, "permission": s.permission, "registered": bool(s.member_user_id)} for s in shares]})
+        result.append({"wallet_id": wallet.id, "name": wallet.name, "type": wallet.type, "color": wallet.color, "balance": wallet_balance(db, wallet), "owner_email": owner.email if owner else "", "owner_name": owner.username if owner else "", "is_owner": is_owner, "permission": "edit" if is_owner else incoming_share.permission, "can_edit": is_owner or incoming_share.permission == "edit", "shares": [{"id": s.id, "email": s.invitee_email, "permission": s.permission, "registered": bool(s.member_user_id)} for s in shares]})
     return sorted(result, key=lambda item: (not item["is_owner"], item["name"].lower()))
 
 

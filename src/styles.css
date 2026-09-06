@@ -35,3 +35,5 @@ dialog.confirmation-dialog::backdrop { background: #102c4566; }
 .confirmation-dialog .button-row { justify-content: flex-end; }
 .confirmation-icon { color: #bd432d; }
 .confirmation-dialog .danger { background: #b63832; color: white; }
+.shared-wallet-meta{display:flex;align-items:center;gap:12px;margin-left:auto}.shared-wallet-meta>span:first-child{display:grid;gap:2px;text-align:right}.shared-wallet-meta small{font-size:9px;color:var(--muted);font-weight:700}.shared-wallet-meta strong{font-size:14px;color:var(--accent);white-space:nowrap}.shared-wallet-meta .permission-pill{white-space:nowrap}
+@media(max-width:620px){.shared-wallet-meta{gap:7px}.shared-wallet-meta>span:first-child{display:none}.shared-wallet-meta .permission-pill{font-size:8px;padding:5px 7px}}
