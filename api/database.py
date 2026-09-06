@@ -7,7 +7,13 @@ from sqlalchemy.pool import NullPool
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DB = Path("/tmp/flowbudget.db") if os.getenv("VERCEL") else ROOT / "flowbudget.db"
-DATABASE_URL = next((os.environ[key].strip() for key in ("DATABASE_URL", "FLOWBUDGET_URL", "POSTGRES_URL", "DATABASE_URL_UNPOOLED", "FLOWBUDGET_URL_UNPOOLED") if os.getenv(key, "").strip()), f"sqlite:///{DEFAULT_DB}")
+DATABASE_URL_KEYS = (
+    "FLOWBUDGET_DATABASE_URL", "FLOWBUDGET_POSTGRES_URL",
+    "DATABASE_URL", "FLOWBUDGET_URL", "POSTGRES_URL",
+    "FLOWBUDGET_DATABASE_URL_UNPOOLED", "DATABASE_URL_UNPOOLED",
+    "FLOWBUDGET_URL_UNPOOLED",
+)
+DATABASE_URL = next((os.environ[key].strip() for key in DATABASE_URL_KEYS if os.getenv(key, "").strip()), f"sqlite:///{DEFAULT_DB}")
 IS_SQLITE = DATABASE_URL.startswith("sqlite")
 IS_EPHEMERAL_VERCEL_SQLITE = bool(os.getenv("VERCEL")) and IS_SQLITE and os.getenv("ALLOW_EPHEMERAL_SQLITE", "").lower() not in {"1", "true", "yes"}
 if DATABASE_URL.startswith("postgres://"):
