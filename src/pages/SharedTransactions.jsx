@@ -51,11 +51,49 @@ export default function SharedTransactions() {
     finally { setLoading(false) }
   }
 
-  useEffect(() => { loadWallets().catch(err => notify(err.message, 'error')) }, [refreshKey])
   useEffect(() => {
+    const controller = new AbortController()
+    let pending = false
+    let reportedError = false
     setLoading(true)
-    const timer = setTimeout(() => loadTransactions().catch(err => notify(err.message, 'error')), 160)
-    return () => clearTimeout(timer)
+    const sync = async () => {
+      if (pending || document.visibilityState === 'hidden') return
+      pending = true
+      const qs = new URLSearchParams({ search, tx_type: type })
+      if (walletFilter) qs.set('wallet_id', walletFilter)
+      try {
+        const options = { signal: controller.signal }
+        const [wallets, personal, transactions] = await Promise.all([
+          api('/api/shared/wallets', options), api('/api/wallets', options),
+          api(`/api/shared/transactions?${qs}`, options),
+        ])
+        if (controller.signal.aborted) return
+        setSharedWallets(wallets)
+        setPersonalWallets(personal.filter(w => !w.archived))
+        setShare(current => ({ ...current, wallet_id: current.wallet_id || personal.find(w => !w.archived)?.id || '' }))
+        setRows(transactions)
+        reportedError = false
+      } catch (err) {
+        if (!controller.signal.aborted && !reportedError) {
+          notify(err.message, 'error')
+          reportedError = true
+        }
+      } finally {
+        pending = false
+        if (!controller.signal.aborted) setLoading(false)
+      }
+    }
+    const timer = setTimeout(sync, 160)
+    const interval = setInterval(sync, 5000)
+    window.addEventListener('focus', sync)
+    document.addEventListener('visibilitychange', sync)
+    return () => {
+      controller.abort()
+      clearTimeout(timer)
+      clearInterval(interval)
+      window.removeEventListener('focus', sync)
+      document.removeEventListener('visibilitychange', sync)
+    }
   }, [search, type, walletFilter, refreshKey])
 
   useEffect(() => {

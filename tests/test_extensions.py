@@ -69,6 +69,30 @@ def test_verified_signup_reentry_appearance_and_shared_wallet(monkeypatch):
         downgrade = client.post(f"/api/shared/wallets/{wallet['id']}/shares", headers=owner_headers, json={"email": signup["email"], "permission": "view"})
         assert downgrade.status_code == 201
         assert client.post("/api/shared/transactions", headers=member_headers, json={**payload, "description": "Should fail"}).status_code == 403
+        transaction_id = created.json()["id"]
+        assert client.put(f"/api/shared/transactions/{transaction_id}", headers=member_headers, json=payload).status_code == 403
+        assert client.delete(f"/api/shared/transactions/{transaction_id}", headers=member_headers).status_code == 403
+
+        assert client.delete(f"/api/shared/shares/{share.json()['id']}", headers=owner_headers).status_code == 204
+        assert not client.get("/api/shared/wallets", headers=member_headers).json()
+        assert not client.get("/api/shared/transactions", headers=member_headers).json()
+        assert client.get(f"/api/shared/wallets/{wallet['id']}/categories", headers=member_headers).status_code == 403
+
+    # A new application lifespan must retain the account and owner ledger.
+    with TestClient(app) as restarted:
+        assert restarted.post("/api/auth/login", json={"email": signup["email"], "password": signup["password"]}).status_code == 200
+        assert any(row["id"] == transaction_id for row in restarted.get("/api/transactions?search=Collaborative", headers=admin_headers(restarted)).json())
+
+
+def test_database_misconfiguration_returns_service_unavailable(monkeypatch):
+    import api.index as core
+    monkeypatch.setattr(core, "IS_EPHEMERAL_VERCEL_SQLITE", True)
+    with TestClient(app) as client:
+        for endpoint in ("/api/auth/login", "/api/auth/signup/start"):
+            response = client.post(endpoint, json={})
+            assert response.status_code == 503
+            assert response.json()["code"] == "STORAGE_UNAVAILABLE"
+            assert response.headers["cache-control"] == "no-store"
 
 
 def test_share_before_signup_links_and_admin_delete_cleans_access(monkeypatch):
@@ -115,6 +139,5 @@ def test_share_before_signup_links_and_admin_delete_cleans_access(monkeypatch):
 
         assert client.delete(f"/api/admin/users/{member_id}", headers=owner_headers).status_code == 204
         owner_shared_wallets = client.get("/api/shared/wallets", headers=owner_headers).json()
-        owner_wallet = next(w for w in owner_shared_wallets if w["wallet_id"] == wallet["id"])
-        assert all(s["email"] != invite_email for s in owner_wallet["shares"])
+        assert all(s["email"] != invite_email for w in owner_shared_wallets for s in w["shares"])
         assert client.get("/api/shared/wallets", headers=member_headers).status_code == 401

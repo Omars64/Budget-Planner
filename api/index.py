@@ -5,6 +5,7 @@ import calendar as month_calendar
 import hashlib
 import hmac
 import json
+import logging
 import os
 import secrets
 from contextlib import asynccontextmanager
@@ -14,7 +15,8 @@ from typing import Optional
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy import extract, func, or_
+from sqlalchemy import extract, func, or_, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
@@ -32,19 +34,35 @@ auth_serializer = URLSafeTimedSerializer(APP_SECRET, salt="flowbudget-auth")
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI):
-    if IS_EPHEMERAL_VERCEL_SQLITE:
-        raise RuntimeError("FlowBudget on Vercel requires a persistent DATABASE_URL. SQLite in /tmp loses users and transactions between function instances.")
-    Base.metadata.create_all(bind=engine)
-    db = SessionLocal()
+async def lifespan(application: FastAPI):
+    application.state.storage_ready = False
     try:
-        seed_database(db)
-    finally:
-        db.close()
+        if IS_EPHEMERAL_VERCEL_SQLITE:
+            raise RuntimeError("FlowBudget on Vercel requires a persistent DATABASE_URL")
+        with engine.begin() as connection:
+            # Serialize schema/bootstrap work across simultaneous serverless starts.
+            if connection.dialect.name == "postgresql":
+                connection.execute(text("SELECT pg_advisory_xact_lock(61420731)"))
+            Base.metadata.create_all(bind=connection)
+            with Session(bind=connection) as db:
+                seed_database(db, commit=False)
+                db.commit()
+        application.state.storage_ready = True
+    except Exception:
+        logging.getLogger("flowbudget").exception("Database initialization failed")
     yield
 
 
 app = FastAPI(title="FlowBudget API", version="1.0.0", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def storage_readiness(request: Request, call_next):
+    if not getattr(app.state, "storage_ready", False):
+        return JSONResponse(status_code=503, content={"detail": "The service is temporarily unavailable. Please try again shortly.", "code": "STORAGE_UNAVAILABLE"}, headers={"Retry-After": "30", "Cache-Control": "no-store"})
+    response = await call_next(request)
+    response.headers["Cache-Control"] = "no-store"
+    return response
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()],
@@ -288,7 +306,7 @@ def budget_spent(db: Session, budget: Budget) -> float:
     return round(float(q.scalar() or 0), 3)
 
 
-def seed_user_workspace(db: Session, user_id: int):
+def seed_user_workspace(db: Session, user_id: int, commit: bool = True):
     for key, value in {
         "currency": "KWD",
         "display_name": "FlowBudget",
@@ -301,16 +319,19 @@ def seed_user_workspace(db: Session, user_id: int):
     if db.query(Category).filter(Category.user_id == user_id).count() == 0:
         db.add_all([Category(user_id=user_id, name=n, kind="expense", icon=i, color=c) for n, i, c in EXPENSE_CATEGORIES])
         db.add_all([Category(user_id=user_id, name=n, kind="income", icon=i, color=c) for n, i, c in INCOME_CATEGORIES])
-    db.commit()
+    if commit:
+        db.commit()
 
 
 @app.get("/api/health")
-def health():
+def health(db: Session = Depends(get_db)):
+    db.execute(text("SELECT 1"))
     return {
         "ok": True,
         "service": "FlowBudget",
         "time": datetime.now().astimezone().isoformat(),
         "persistent_storage": not IS_EPHEMERAL_VERCEL_SQLITE,
+        "database": engine.dialect.name,
     }
 
 
@@ -805,6 +826,12 @@ def reset_demo(user: User = Depends(current_user), db: Session = Depends(get_db)
         seed_user_workspace(db, user.id)
     if pin_hash: set_setting(db, user.id, "pin_hash", pin_hash); db.commit()
     return {"ok": True}
+
+
+@app.exception_handler(OperationalError)
+async def database_unavailable(_: Request, exc: OperationalError):
+    logging.getLogger("flowbudget").error("Database connection failed: %s", type(exc).__name__)
+    return JSONResponse(status_code=503, content={"detail": "The service is temporarily unavailable. Please try again shortly."}, headers={"Retry-After": "30"})
 
 
 @app.exception_handler(Exception)

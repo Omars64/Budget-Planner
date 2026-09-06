@@ -15,7 +15,9 @@ export async function api(path, options = {}) {
   let data = null
   try { data = await response.json() } catch { data = null }
   if (!response.ok) {
-    const message = data?.detail || `Request failed (${response.status})`
+    const message = data?.detail || (response.status >= 500
+      ? 'The service is temporarily unavailable. Please try again shortly.'
+      : `Request failed (${response.status})`)
     const error = new Error(Array.isArray(message) ? message.map(x => x.msg).join(', ') : message)
     error.status = response.status
     throw error

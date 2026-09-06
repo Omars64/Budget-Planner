@@ -240,7 +240,7 @@ def signup_start(payload: SignupStart, db: Session = Depends(get_db)):
 
 @router.post("/api/auth/signup/verify")
 def signup_verify(payload: SignupVerify, db: Session = Depends(get_db)):
-    email = challenge_email(payload.challenge); pending = db.query(PendingSignup).filter(PendingSignup.email == email).first()
+    email = challenge_email(payload.challenge); pending = db.query(PendingSignup).filter(PendingSignup.email == email).with_for_update().first()
     if not pending:
         if db.query(User).filter(User.email == email).first(): raise HTTPException(409, "This account has already been verified. Sign in instead.")
         raise HTTPException(400, "No pending sign up was found. Start sign up again.")
@@ -254,9 +254,9 @@ def signup_verify(payload: SignupVerify, db: Session = Depends(get_db)):
     if db.query(User).filter(User.email == email).first():
         db.delete(pending); db.commit(); raise HTTPException(409, "This account already exists. Sign in instead.")
     user = User(username=pending.username, email=email, password_hash=pending.password_hash, role="user", active=True)
-    db.add(user); db.flush(); seed_user_workspace(db, user.id); db.delete(pending); db.commit(); db.refresh(user)
+    db.add(user); db.flush(); seed_user_workspace(db, user.id, commit=False); db.delete(pending)
     for share in db.query(WalletShare).filter(WalletShare.invitee_email == email, WalletShare.member_user_id.is_(None)).all(): share.member_user_id = user.id
-    db.commit()
+    db.commit(); db.refresh(user)
     return {"token": issue_token(user), "user": user_payload(user)}
 
 

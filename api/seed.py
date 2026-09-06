@@ -36,9 +36,6 @@ def ensure_admin_user(db: Session) -> User:
     password = os.getenv("ADMIN_INITIAL_PASSWORD") or secrets.token_urlsafe(24)
     admin = db.query(User).filter(User.email == email).first()
     if admin:
-        admin.username = username
-        admin.role = "admin"
-        admin.active = True
         return admin
     admin = User(username=username, email=email, role="admin", active=True, password_hash=hash_password(password))
     db.add(admin)
@@ -57,13 +54,14 @@ def add_default_settings(db: Session, user_id: int):
             db.add(AppSetting(user_id=user_id, key=key, value=value))
 
 
-def seed_database(db: Session, include_demo: bool = True):
+def seed_database(db: Session, include_demo: bool = True, commit: bool = True):
     admin = ensure_admin_user(db)
     add_default_settings(db, admin.id)
     db.flush()
 
     if db.query(Wallet).filter(Wallet.user_id == admin.id).count() > 0:
-        db.commit()
+        if commit:
+            db.commit()
         return
 
     wallets = [
@@ -97,4 +95,5 @@ def seed_database(db: Session, include_demo: bool = True):
         db.add(Goal(user_id=admin.id, name="Emergency cushion", target_amount=2000, current_amount=760, deadline=date.today() + timedelta(days=365), icon="shield-check", color="#2f6690"))
         db.add(Debt(user_id=admin.id, name="Laptop installment", kind="owed", principal=600, remaining=285, interest_rate=0, due_date=date.today() + timedelta(days=95), minimum_payment=50, notes="0% installment plan"))
 
-    db.commit()
+    if commit:
+        db.commit()
