@@ -317,6 +317,7 @@ def seed_user_workspace(db: Session, user_id: int, commit: bool = True):
         "display_name": "FlowBudget",
         "week_starts_on": "sunday",
         "compact_numbers": "false",
+        "accent_color": "#0a4173",
     }.items():
         set_setting(db, user_id, key, value)
     if not db.query(Wallet).filter(Wallet.user_id == user_id, Wallet.name.ilike("main wallet")).first():
@@ -517,6 +518,7 @@ def get_settings(user: User = Depends(current_user), db: Session = Depends(get_d
         'phone': setting(db, user.id, 'phone', ''),
         'font_family': setting(db, user.id, 'font_family', 'system'),
         'text_color': setting(db, user.id, 'text_color', 'ink'),
+        'accent_color': setting(db, user.id, 'accent_color', '#0a4173'),
         'reminders_enabled': setting(db, user.id, 'reminders_enabled', 'false') == 'true',
         'reminder_time': setting(db, user.id, 'reminder_time', '20:00'),
         "currency": setting(db, user.id, "currency", "KWD"),
@@ -707,6 +709,13 @@ def contribute_goal(item_id: int, payload: ContributionIn, user: User = Depends(
     if not row: raise HTTPException(404, "Goal not found")
     row.current_amount = min(row.target_amount, row.current_amount + payload.amount); db.commit(); return {"current_amount": float(row.current_amount)}
 
+@app.put("/api/goals/{item_id}")
+def update_goal(item_id: int, payload: GoalIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    row = db.query(Goal).filter(Goal.id == item_id, Goal.user_id == user.id).first()
+    if not row: raise HTTPException(404, "Goal not found")
+    for key, value in payload.model_dump().items(): setattr(row, key, value)
+    db.commit(); return {"id": row.id}
+
 
 @app.delete("/api/goals/{item_id}", status_code=204)
 def delete_goal(item_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
@@ -731,6 +740,13 @@ def pay_debt(item_id: int, payload: ContributionIn, user: User = Depends(current
     row = db.query(Debt).filter(Debt.id == item_id, Debt.user_id == user.id).first()
     if not row: raise HTTPException(404, "Debt not found")
     row.remaining = max(0, row.remaining - payload.amount); db.commit(); return {"remaining": float(row.remaining)}
+
+@app.put("/api/debts/{item_id}")
+def update_debt(item_id: int, payload: DebtIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    row = db.query(Debt).filter(Debt.id == item_id, Debt.user_id == user.id).first()
+    if not row: raise HTTPException(404, "Debt not found")
+    for key, value in payload.model_dump().items(): setattr(row, key, value)
+    db.commit(); return {"id": row.id}
 
 
 @app.delete("/api/debts/{item_id}", status_code=204)

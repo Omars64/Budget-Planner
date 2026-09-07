@@ -15,12 +15,14 @@ export default function Transactions() {
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [wallets, setWallets] = useState([])
 
   useEffect(() => {
     const qs = new URLSearchParams({ search, tx_type: type })
     const timer = setTimeout(() => api(`/api/transactions?${qs}`).then(setRows).finally(() => setLoading(false)), 180)
     return () => clearTimeout(timer)
   }, [search, type, refreshKey])
+  useEffect(() => { api('/api/wallets').then(setWallets).catch(() => setWallets([])) }, [refreshKey])
 
   const fmt = v => money(v, settings.currency, settings.compact_numbers)
   const grouped = useMemo(() => rows.reduce((acc, tx) => { const key = format(new Date(tx.date), 'yyyy-MM-dd'); (acc[key] ||= []).push(tx); return acc }, {}), [rows])
@@ -31,6 +33,10 @@ export default function Transactions() {
       <div className="search-box"><Search size={18}/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search transactions or notes" /></div>
       <div className="segment-control compact-control"><button className={type==='all'?'active':''} onClick={() => setType('all')}>All</button><button className={type==='expense'?'active':''} onClick={() => setType('expense')}>Expenses</button><button className={type==='income'?'active':''} onClick={() => setType('income')}>Income</button><button className={type==='transfer'?'active':''} onClick={() => setType('transfer')}>Transfers</button></div>
       <button className="button primary desktop-only" onClick={() => {setEditing(null);setModal(true)}}><Plus size={18}/>New</button>
+    </section>
+
+    <section className="transaction-wallets" aria-label="Current wallet balances">
+      {wallets.filter(wallet => !wallet.archived).map(wallet => <div className="transaction-wallet-balance glass" key={wallet.id}><span>{wallet.name}</span><strong>{fmt(wallet.balance)}</strong></div>)}
     </section>
 
     <section className="panel glass">

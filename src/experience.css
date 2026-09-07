@@ -8,10 +8,15 @@ body.has-wallpaper .glass, body.has-wallpaper .workspace { background: rgba(255,
 body.has-wallpaper { --muted: #465964; }
 .default-avatar { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%; background: #e6edf0; color: #53788a; flex-shrink: 0; }
 .mobile-transaction-action { display: none; }
+.transaction-wallets { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
+.transaction-wallet-balance { padding:12px 14px; border-radius:14px; display:flex; justify-content:space-between; gap:10px; align-items:center; }
+.transaction-wallet-balance span { font-size:10px; font-weight:750; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.transaction-wallet-balance strong { font-size:13px; color:var(--accent); white-space:nowrap; }
 .bank-message { padding: 16px 0; border-bottom: 1px solid var(--line); }
 .bank-message p, .bank-message-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
 .request-progress { position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%); z-index: 250; display: flex; align-items: center; gap: 10px; background: #fff; color: #172c38; border: 1px solid #cbd7db; border-radius: 8px; padding: 12px 18px; box-shadow: 0 4px 20px #0002; white-space: nowrap; }
 .request-spinner { animation: request-spin 1s linear infinite; }
 @keyframes request-spin { to { transform: rotate(360deg); } }
 @media(max-width:820px) { .top-actions .add-button { display:none; } .mobile-transaction-action { display:flex; justify-content:center; width:calc(100% - 32px); margin:0 16px 18px; min-height:50px; font-size:16px; } }
+@media(max-width:620px) { .transaction-wallets { grid-template-columns:1fr 1fr; } .transaction-wallet-balance { display:grid; gap:4px; } }
 @media(prefers-reduced-motion:reduce) { .request-spinner { animation:none; } }

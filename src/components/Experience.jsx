@@ -33,8 +33,13 @@ export default function Experience() {
     const colours = { ink: '#172c38', charcoal: '#242424', forest: '#193c32' }
     document.documentElement.style.setProperty('--app-font', fonts[settings.font_family] || fonts.system)
     document.documentElement.style.setProperty('--text', colours[settings.text_color] || colours.ink)
-    return () => { document.documentElement.style.removeProperty('--app-font'); document.documentElement.style.removeProperty('--text') }
-  }, [settings.font_family, settings.text_color])
+    const accent = /^#[0-9a-f]{6}$/i.test(settings.accent_color || '') ? settings.accent_color : '#0a4173'
+    const rgb = accent.match(/[0-9a-f]{2}/gi).map(value => parseInt(value, 16)).join(', ')
+    document.documentElement.style.setProperty('--accent', accent)
+    document.documentElement.style.setProperty('--accent-rgb', rgb)
+    document.documentElement.style.setProperty('--accent-soft', `rgba(${rgb}, .10)`)
+    return () => { ['--app-font', '--text', '--accent', '--accent-rgb', '--accent-soft'].forEach(key => document.documentElement.style.removeProperty(key)) }
+  }, [settings.font_family, settings.text_color, settings.accent_color])
   useEffect(() => {
     if (!settings.reminders_enabled) return
     const check = () => {
