@@ -27,6 +27,29 @@ def test_passkey_registration_login_replay_and_revocation():
         credential = {'id':enc(credential_id),'rawId':enc(credential_id),'type':'public-key','response':{'clientDataJSON':enc(client_data),'attestationObject':enc(cbor2.dumps({'fmt':'none','attStmt':{},'authData':auth_data}))}}
         registered = client.post('/api/passkeys/register/verify', headers=headers, json={'challenge_id':options['challenge_id'],'credential':credential})
         assert registered.status_code == 200, registered.text
+        # A second device must not replace the first device's credential.
+        second_id = register_second_device(client, headers)
+        exclusions = client.post('/api/passkeys/register/options', headers=headers, json={'password':'FlowBudgetAdmin!ChangeMe2026'}).json()['options']['excludeCredentials']
+        assert {item['id'] for item in exclusions} == {enc(credential_id), second_id}
+        # Existing server registrations migrate without requiring re-enrollment.
+        from api.database import SessionLocal
+        from api.models import AppSetting
+        from api.passkeys import Passkey, migrate_passkeys
+        with SessionLocal() as db:
+            row = db.get(Passkey, enc(credential_id))
+            db.add(AppSetting(user_id=row.user_id, key='passkey', value=json.dumps({'id':row.id, 'key':row.public_key, 'count':row.sign_count})))
+            db.delete(row)
+            db.commit()
+            migrate_passkeys(db)
+            migrate_passkeys(db)
+            db.commit()
+            assert db.get(Passkey, enc(credential_id)) is not None
+        # Workbook restores must never erase or import account credentials.
+        restored = client.post('/api/backup/restore', headers=headers, json={'version':1, 'settings':{'passkey':'untrusted'}})
+        assert restored.status_code == 200, restored.text
+        with SessionLocal() as db:
+            assert db.query(Passkey).count() == 2
+            assert db.query(AppSetting).filter_by(key='passkey').count() == 0
         options = client.post('/api/passkeys/login/options').json()
         client_data = json.dumps({'type':'webauthn.get','challenge':options['options']['challenge'],'origin':'https://budget-planner-ecru-seven.vercel.app'}).encode()
         auth_data = rp_hash + bytes([5]) + (1).to_bytes(4,'big')
@@ -42,3 +65,21 @@ def test_passkey_registration_login_replay_and_revocation():
         assert client.post('/api/passkeys/login/verify',json={'challenge_id':options['challenge_id'],'credential':credential}).status_code == 401
         assert client.delete('/api/passkeys',headers=headers).status_code == 204
         assert client.get('/api/passkeys',headers=headers).json() == {'enabled':False}
+        options = client.post('/api/passkeys/login/options').json()
+        rejected = client.post('/api/passkeys/login/verify', json={'challenge_id':options['challenge_id'], 'credential':credential})
+        assert rejected.status_code == 401
+        assert 'Settings > Biometric sign-in' in rejected.json()['detail']
+
+
+def register_second_device(client, headers):
+    options = client.post('/api/passkeys/register/options', headers=headers, json={'password':'FlowBudgetAdmin!ChangeMe2026'}).json()
+    key = ec.generate_private_key(ec.SECP256R1())
+    public = key.public_key().public_numbers()
+    cose = cbor2.dumps({1:2, 3:-7, -1:1, -2:public.x.to_bytes(32,'big'), -3:public.y.to_bytes(32,'big')})
+    credential_id = secrets.token_bytes(32)
+    client_data = json.dumps({'type':'webauthn.create', 'challenge':options['options']['challenge'], 'origin':'https://budget-planner-ecru-seven.vercel.app'}).encode()
+    auth_data = hashlib.sha256(b'budget-planner-ecru-seven.vercel.app').digest() + bytes([0x45]) + bytes(4) + bytes(16) + len(credential_id).to_bytes(2,'big') + credential_id + cose
+    credential = {'id':enc(credential_id), 'rawId':enc(credential_id), 'type':'public-key', 'response':{'clientDataJSON':enc(client_data), 'attestationObject':enc(cbor2.dumps({'fmt':'none', 'attStmt':{}, 'authData':auth_data}))}}
+    result = client.post('/api/passkeys/register/verify', headers=headers, json={'challenge_id':options['challenge_id'], 'credential':credential})
+    assert result.status_code == 200, result.text
+    return enc(credential_id)

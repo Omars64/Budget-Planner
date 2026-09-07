@@ -40,6 +40,7 @@ auth_serializer = URLSafeTimedSerializer(APP_SECRET, salt="flowbudget-auth")
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
+    from .passkeys import migrate_passkeys
     application.state.storage_ready = False
     try:
         if IS_EPHEMERAL_VERCEL_SQLITE:
@@ -51,6 +52,7 @@ async def lifespan(application: FastAPI):
             Base.metadata.create_all(bind=connection)
             with Session(bind=connection) as db:
                 seed_database(db, commit=False)
+                migrate_passkeys(db)
                 db.commit()
         application.state.storage_ready = True
     except Exception:
@@ -856,7 +858,7 @@ def export_backup(user: User = Depends(current_user), db: Session = Depends(get_
         "budgets": [{**{c.name: getattr(b, c.name) for c in Budget.__table__.columns if c.name not in {"created_at", "user_id"}}, "start_date": b.start_date.isoformat()} for b in db.query(Budget).filter(Budget.user_id == user.id).all()],
         "goals": [{**{c.name: getattr(g, c.name) for c in Goal.__table__.columns if c.name not in {"created_at", "user_id"}}, "deadline": g.deadline.isoformat() if g.deadline else None} for g in db.query(Goal).filter(Goal.user_id == user.id).all()],
         "debts": [{**{c.name: getattr(d, c.name) for c in Debt.__table__.columns if c.name not in {"created_at", "user_id"}}, "due_date": d.due_date.isoformat() if d.due_date else None} for d in db.query(Debt).filter(Debt.user_id == user.id).all()],
-        "settings": {s.key: s.value for s in db.query(AppSetting).filter(AppSetting.user_id == user.id).all() if s.key != "pin_hash"},
+        "settings": {s.key: s.value for s in db.query(AppSetting).filter(AppSetting.user_id == user.id).all() if s.key not in {"pin_hash", "passkey"}},
         "wallet_shares": [{"wallet_id": s.wallet_id, "email": s.invitee_email, "permission": s.permission} for s in db.query(WalletShare).filter_by(owner_id=user.id).all()],
         "note_folders": [{"id": f.id, "name": f.name} for f in db.query(NoteFolder).filter_by(user_id=user.id).all()],
         "notes": [{"id": n.id, "title": n.title, "content": n.content, "folder_id": n.folder_id, "pinned": n.pinned} for n in db.query(Note).filter_by(user_id=user.id).all()],
@@ -931,7 +933,7 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
         d = {k: v for k, v in dict(d).items() if k not in {"id", "user_id"}}
         d["due_date"] = date.fromisoformat(d["due_date"]) if d.get("due_date") else None; db.add(Debt(user_id=user.id, **d))
     for k, v in data.get("settings", {}).items():
-        if k not in {"pin_hash", "workspace_initialized"}: db.add(AppSetting(user_id=user.id, key=k, value=str(v)))
+        if k not in {"pin_hash", "passkey", "workspace_initialized"}: db.add(AppSetting(user_id=user.id, key=k, value=str(v)))
     db.add(AppSetting(user_id=user.id, key="workspace_initialized", value="true"))
     for share in data.get("wallet_shares", []):
         email = normalize_email(share["email"])

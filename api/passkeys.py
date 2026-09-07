@@ -7,16 +7,38 @@ from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import Column, String, DateTime
+from sqlalchemy import Column, String, DateTime, Integer, ForeignKey, Text
 from sqlalchemy.orm import Session
 from webauthn import generate_registration_options, generate_authentication_options, verify_registration_response, verify_authentication_response, options_to_json
 from webauthn.helpers import base64url_to_bytes, bytes_to_base64url
 from webauthn.helpers.structs import AuthenticatorSelectionCriteria, ResidentKeyRequirement, UserVerificationRequirement, PublicKeyCredentialDescriptor
 from .database import Base, get_db
-from .index import current_user, issue_token, user_payload, verify_password, set_setting
+from .index import current_user, issue_token, user_payload, verify_password
 from .models import AppSetting, User, utc_now
 
 router = APIRouter()
+
+class Passkey(Base):
+    __tablename__ = 'account_passkeys'
+    id = Column(String(1400), primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    public_key = Column(Text, nullable=False)
+    sign_count = Column(Integer, nullable=False, default=0)
+
+def migrate_passkeys(db):
+    # Move credentials out of preferences before any workbook restore can erase them.
+    for row in db.query(AppSetting).filter_by(key='passkey').all():
+        try:
+            data = json.loads(row.value)
+            credential_id = bytes_to_base64url(base64url_to_bytes(data['id']))
+            base64url_to_bytes(data['key'])
+            count = int(data['count'])
+        except (ValueError, TypeError, KeyError):
+            continue
+        if db.get(Passkey, credential_id) is None:
+            db.add(Passkey(id=credential_id, user_id=row.user_id, public_key=data['key'], sign_count=count))
+        db.delete(row)
+    db.flush()
 
 class PasskeyChallenge(Base):
     __tablename__ = 'passkey_challenges'
@@ -57,12 +79,13 @@ def consume(db, key, purpose):
 
 @router.get('/api/passkeys')
 def status(user: User = Depends(current_user), db: Session = Depends(get_db)):
-    return {'enabled': db.get(AppSetting, (user.id, 'passkey')) is not None}
+    return {'enabled': db.query(Passkey).filter_by(user_id=user.id).first() is not None}
 
 @router.post('/api/passkeys/register/options')
 def register_options(payload: Password, user: User = Depends(current_user), db: Session = Depends(get_db)):
     if not verify_password(payload.password, user.password_hash): raise HTTPException(401, 'Incorrect password')
     options = generate_registration_options(rp_id=rp_id(), rp_name='FlowBudget', user_id=str(user.id).encode(), user_name=user.email,
+        exclude_credentials=[PublicKeyCredentialDescriptor(id=base64url_to_bytes(row.id)) for row in db.query(Passkey).filter_by(user_id=user.id).all()],
         authenticator_selection=AuthenticatorSelectionCriteria(resident_key=ResidentKeyRequirement.REQUIRED, user_verification=UserVerificationRequirement.REQUIRED))
     return challenge(db, options, f'register:{user.id}')
 
@@ -73,7 +96,10 @@ def register_verify(payload: Response, user: User = Depends(current_user), db: S
         verified = verify_registration_response(credential=payload.credential, expected_challenge=expected, expected_rp_id=rp_id(), expected_origin=origin(), require_user_verification=True)
     except Exception:
         raise HTTPException(400, 'Passkey could not be verified. Please try again.')
-    set_setting(db, user.id, 'passkey', json.dumps({'id': bytes_to_base64url(verified.credential_id), 'key': bytes_to_base64url(verified.credential_public_key), 'count': verified.sign_count}))
+    credential_id = bytes_to_base64url(verified.credential_id)
+    if db.get(Passkey, credential_id) is not None:
+        raise HTTPException(409, 'This passkey is already registered. Choose another authenticator.')
+    db.add(Passkey(id=credential_id, user_id=user.id, public_key=bytes_to_base64url(verified.credential_public_key), sign_count=verified.sign_count))
     db.commit()
     return {'enabled': True}
 
@@ -85,22 +111,24 @@ def login_options(db: Session = Depends(get_db)):
 def login_verify(payload: Response, db: Session = Depends(get_db)):
     expected = consume(db, payload.challenge_id, 'login')
     # Lock the credential while advancing its authenticator counter.
-    candidates = db.query(AppSetting).filter_by(key='passkey').with_for_update().all()
-    row = next((r for r in candidates if json.loads(r.value)['id'] == payload.credential.get('id')), None)
-    if not row: raise HTTPException(401, 'Passkey not recognized. Sign in with your password.')
+    try:
+        credential_id = bytes_to_base64url(base64url_to_bytes(payload.credential['id']))
+    except (KeyError, ValueError, TypeError):
+        raise HTTPException(401, 'Invalid passkey response.')
+    row = db.query(Passkey).filter_by(id=credential_id).with_for_update().first()
+    if not row: raise HTTPException(401, 'This device passkey is no longer registered to FlowBudget. Sign in with your password, then register this device in Settings > Biometric sign-in.')
     user = db.get(User, row.user_id)
     if not user or not user.active: raise HTTPException(401, 'Account unavailable')
-    data = json.loads(row.value)
     try:
-        result = verify_authentication_response(credential=payload.credential, expected_challenge=expected, expected_rp_id=rp_id(), expected_origin=origin(), credential_public_key=base64url_to_bytes(data['key']), credential_current_sign_count=data['count'], require_user_verification=True)
+        result = verify_authentication_response(credential=payload.credential, expected_challenge=expected, expected_rp_id=rp_id(), expected_origin=origin(), credential_public_key=base64url_to_bytes(row.public_key), credential_current_sign_count=row.sign_count, require_user_verification=True)
     except Exception:
         raise HTTPException(401, 'Passkey verification failed. Please try again.')
-    data['count'] = result.new_sign_count
-    row.value = json.dumps(data)
+    row.sign_count = result.new_sign_count
     db.commit()
     return {'token': issue_token(user), 'user': user_payload(user)}
 
 @router.delete('/api/passkeys', status_code=204)
 def revoke(user: User = Depends(current_user), db: Session = Depends(get_db)):
     db.query(AppSetting).filter_by(user_id=user.id, key='passkey').delete()
+    db.query(Passkey).filter_by(user_id=user.id).delete()
     db.commit()
