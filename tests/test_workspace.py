@@ -72,6 +72,7 @@ def test_wallet_delete_recovery_and_explicit_workspace_clear():
         user = client.post('/api/admin/users', headers=admin, json={'username': 'Safety user', 'email': 'safety-user@example.com', 'password': 'StrongPass123!'}).json()
         member = login(client, user['email'])
         wallet = client.get('/api/wallets', headers=member).json()[0]
+        category_names = {row['name'] for row in client.get('/api/categories', headers=member).json()}
         category = client.get('/api/categories?kind=expense', headers=member).json()[0]
         tx = {'type': 'expense', 'amount': 4, 'description': 'Wallet deletion guard', 'notes': '', 'date': '2026-09-03T12:00:00', 'wallet_id': wallet['id'], 'transfer_wallet_id': None, 'category_id': category['id'], 'recurring_frequency': 'none', 'recurring_until': None}
         assert client.post('/api/transactions', headers=member, json=tx).status_code == 201
@@ -84,5 +85,8 @@ def test_wallet_delete_recovery_and_explicit_workspace_clear():
         cleared = client.post('/api/workspace/clear', headers=member, json={'confirmation': 'CLEAR', 'scope': 'workspace'})
         assert cleared.status_code == 200 and cleared.json()['recovery_id']
         assert client.get('/api/notes', headers=member).json() == []
+        wallets_after = client.get('/api/wallets', headers=member).json()
+        assert len(wallets_after) == 1 and wallets_after[0]['name'] == 'Main Wallet' and wallets_after[0]['balance'] == 0
+        assert {row['name'] for row in client.get('/api/categories', headers=member).json()} == category_names
         assert client.get(f"/api/recovery/{cleared.json()['recovery_id']}", headers=member).json()['notes'][0]['id'] == note['id']
         assert client.delete(f"/api/admin/users/{user['id']}", headers=admin).status_code == 204

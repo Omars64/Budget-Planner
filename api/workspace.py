@@ -65,7 +65,7 @@ def download_recovery(point_id: int, user=Depends(current_user), db: Session = D
 @router.post("/api/workspace/clear")
 def clear_workspace(payload: ClearWorkspaceIn, user=Depends(current_user), db: Session = Depends(get_db)):
     point = save_recovery(db, user, user, f"Cleared {payload.scope}")
-    clear_budget(db, user.id)
+    clear_budget(db, user.id, preserve_main_wallet=True, preserve_categories=True)
     if payload.scope == "workspace": clear_notes(db, user.id)
     set_setting(db, user.id, "workspace_initialized", "true")
     db.commit()
