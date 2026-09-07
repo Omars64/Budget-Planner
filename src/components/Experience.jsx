@@ -2,10 +2,18 @@ import { useEffect, useState } from 'react'
 import { LoaderCircle } from 'lucide-react'
 import { useApp } from '../App'
 import ResizablePanels from './ResizablePanels'
+import { isNativeApp } from '../lib/deviceNotifications'
+import { syncBankSms } from '../lib/bankSms'
 
 export default function Experience() {
   const { settings, user, notify } = useApp()
   const [pending, setPending] = useState(0)
+  useEffect(() => {
+    const sync = () => { void syncBankSms(user.id).catch(e => notify(e.message, 'error')) }
+    sync()
+    window.addEventListener('focus', sync)
+    return () => window.removeEventListener('focus', sync)
+  }, [user.id, notify])
   useEffect(() => {
     let active = 0
     const progress = e => { active = e.detail; setPending(active) }
@@ -41,7 +49,7 @@ export default function Experience() {
     return () => { ['--app-font', '--text', '--accent', '--accent-rgb', '--accent-soft'].forEach(key => document.documentElement.style.removeProperty(key)) }
   }, [settings.font_family, settings.text_color, settings.accent_color])
   useEffect(() => {
-    if (!settings.reminders_enabled) return
+    if (!settings.reminders_enabled || isNativeApp()) return
     const check = () => {
       const now = new Date()
       const day = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`

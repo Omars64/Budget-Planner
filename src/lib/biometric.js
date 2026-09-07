@@ -1,18 +1,36 @@
-const credentialKey = 'flowbudget_biometric_credential'
-const tokenKey = 'flowbudget_biometric_session'
-const encode = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-const decode = value => Uint8Array.from(atob(value.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - value.length % 4) % 4)), char => char.charCodeAt(0))
-export const biometricSupported = () => typeof window !== 'undefined' && !!window.PublicKeyCredential && !!navigator.credentials
-export const biometricEnabled = () => Boolean(localStorage.getItem(credentialKey) && localStorage.getItem(tokenKey))
-export async function setupBiometric(email, token) {
-  if (!biometricSupported()) throw new Error('Biometric sign-in is not supported by this browser or device.')
-  const credential = await navigator.credentials.create({ publicKey: { challenge: crypto.getRandomValues(new Uint8Array(32)), rp: { name: 'FlowBudget' }, user: { id: crypto.getRandomValues(new Uint8Array(16)), name: email, displayName: email }, pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }], authenticatorSelection: { residentKey: 'preferred', userVerification: 'required' }, timeout: 60000 } })
-  if (!credential) throw new Error('Biometric setup was cancelled.')
-  localStorage.setItem(credentialKey, encode(credential.rawId)); localStorage.setItem(tokenKey, token)
+import { api, jsonBody } from './api'
+import { Capacitor } from '@capacitor/core'
+
+// Remove the legacy session-token cache; passkeys now issue fresh server sessions.
+try { localStorage.removeItem('flowbudget_biometric_session'); localStorage.removeItem('flowbudget_biometric_credential') } catch { /* Storage may be disabled. */ }
+const encode = value => btoa(String.fromCharCode(...new Uint8Array(value))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+const decode = value => Uint8Array.from(atob(value.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4-value.length%4)%4)), c => c.charCodeAt(0))
+export const biometricSupported = () => !Capacitor.isNativePlatform() && window.isSecureContext && !!window.PublicKeyCredential && !!navigator.credentials
+function serialize(c) {
+  const response = { clientDataJSON: encode(c.response.clientDataJSON) }
+  for (const key of ['attestationObject', 'authenticatorData', 'signature', 'userHandle']) {
+    if (c.response[key]) response[key] = encode(c.response[key])
+  }
+  if (c.response.getTransports) response.transports = c.response.getTransports()
+  return { id: c.id, rawId: encode(c.rawId), type: c.type, response, clientExtensionResults: c.getClientExtensionResults() }
+}
+export async function setupBiometric(email, password) {
+  if (!biometricSupported()) throw new Error('Passkeys require a supported browser and HTTPS.')
+  const request = await api('/api/passkeys/register/options', { method:'POST', ...jsonBody({password}) })
+  const options = request.options
+  options.challenge = decode(options.challenge)
+  options.user.id = decode(options.user.id)
+  options.excludeCredentials = (options.excludeCredentials || []).map(c => ({...c, id:decode(c.id)}))
+  const credential = await navigator.credentials.create({publicKey:options})
+  if (!credential) throw new Error('Passkey setup cancelled.')
+  return api('/api/passkeys/register/verify', {method:'POST', ...jsonBody({challenge_id:request.challenge_id, credential:serialize(credential)})})
 }
 export async function unlockBiometric() {
-  const id = localStorage.getItem(credentialKey); const token = localStorage.getItem(tokenKey)
-  if (!id || !token || !biometricSupported()) return ''
-  try { const result = await navigator.credentials.get({ publicKey: { challenge: crypto.getRandomValues(new Uint8Array(32)), allowCredentials: [{ id: decode(id), type: 'public-key' }], userVerification: 'required', timeout: 60000 } }); return result ? token : '' } catch { return '' }
+  if (!biometricSupported()) throw new Error('Passkeys are unavailable. Use your password.')
+  const request = await api('/api/passkeys/login/options', {method:'POST'})
+  const options = {...request.options, challenge:decode(request.options.challenge)}
+  const credential = await navigator.credentials.get({publicKey:options})
+  if (!credential) throw new Error('Passkey sign-in cancelled.')
+  return api('/api/passkeys/login/verify', {method:'POST', ...jsonBody({challenge_id:request.challenge_id, credential:serialize(credential)})})
 }
-export const disableBiometric = () => { localStorage.removeItem(credentialKey); localStorage.removeItem(tokenKey) }
+export const disableBiometric = () => api('/api/passkeys', {method:'DELETE'})

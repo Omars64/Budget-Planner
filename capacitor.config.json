@@ -1,0 +1,6 @@
+{
+  "appId": "com.flowbudget.app",
+  "appName": "FlowBudget",
+  "webDir": "dist",
+  "plugins": { "LocalNotifications": { "presentationOptions": ["badge", "sound", "banner", "list"] } }
+}

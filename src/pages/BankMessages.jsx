@@ -3,6 +3,7 @@ import { Download, KeyRound, Plus, Trash2 } from 'lucide-react'
 import { api, jsonBody } from '../lib/api'
 import { useApp } from '../App'
 import Modal from '../components/Modal'
+import BankSmsSetup from '../components/BankSmsSetup'
 
 export default function BankMessages() {
   const { notify, confirm, refresh } = useApp()
@@ -45,6 +46,7 @@ export default function BankMessages() {
     await load(); setSelected(null); refresh(); notify('Expense recorded')
   }) }
   return <div className="stack gap-18">
+    <BankSmsSetup/>
     <div className="section-row"><h3>Bank messages</h3><button className="button primary" onClick={() => { setError(''); setPaste(true) }}><Plus size={18}/>Add message</button></div>
     <p className="muted">NBK, KFH, Gulf Bank and Commercial Bank of Kuwait. Forwarded messages need review before an expense is recorded. Direct bank sync is not connected.</p>
     {error && <div className="form-error" role="alert">{error}</div>}

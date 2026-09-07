@@ -20,13 +20,22 @@ const BankMessages = lazy(() => import('./pages/BankMessages'))
 import BrandLogo from './components/BrandLogo'
 import { useConfirmation } from './components/Confirmation'
 import Experience from './components/Experience'
-import { biometricEnabled, unlockBiometric } from './lib/biometric'
+import { biometricSupported, unlockBiometric } from './lib/biometric'
+import { cancelReminder } from './lib/deviceNotifications'
+import { BankSms, smsAvailable } from './lib/bankSms'
 
 const AppContext = createContext(null)
 export const useApp = () => useContext(AppContext)
 
 function LoginScreen({ onLogin }) {
   const [mode, setMode] = useState('login')
+  const [signInMethod, setSignInMethod] = useState('password')
+  const passkeyLogin = async () => {
+    setBusy(true); setError('')
+    try { const result = await unlockBiometric(); auth.token = result.token; await onLogin(result.user) }
+    catch (err) { setError(err.name === 'NotAllowedError' ? 'Passkey cancelled or unavailable. You can use your password.' : err.message) }
+    finally { setBusy(false) }
+  }
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [signup, setSignup] = useState({ username: '', email: '', password: '', phone: '' })
@@ -89,12 +98,13 @@ function LoginScreen({ onLogin }) {
         <p className="eyebrow">Welcome back</p>
         <h1>Sign in to FlowBudget</h1>
         <p className="muted">Your budget workspace is private to your account.</p>
-        <form onSubmit={login} className="stack gap-12">
+        <div className="segment-control signin-method" aria-label="Sign-in method"><button type="button" disabled={busy} className={signInMethod === 'password' ? 'active' : ''} onClick={() => setSignInMethod('password')}>Password</button><button type="button" disabled={busy || !biometricSupported()} className={signInMethod === 'passkey' ? 'active' : ''} onClick={() => setSignInMethod('passkey')}>Biometric / passkey</button></div>
+        {signInMethod === 'passkey' ? <div className="stack gap-12">{error && <div className="form-error">{error}</div>}<button className="button primary full" disabled={busy} onClick={passkeyLogin}>{busy ? 'Verifying...' : 'Sign in with passkey'}</button></div> : <form onSubmit={login} className="stack gap-12">
           <div className="pin-field auth-field"><Mail size={18} /><input required autoFocus type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email address" aria-label="Email" /></div>
           <div className="pin-field auth-field"><LockKeyhole size={18} /><input required type="password" minLength="8" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" aria-label="Password" /></div>
           {error && <div className="form-error">{error}</div>}
           <button className="button primary full" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
-        </form>
+        </form>}
         <button className="auth-switch" type="button" onClick={() => { setError(''); setMode('signup') }}>New to FlowBudget? <strong>Create an account</strong></button>
       </>}
 
@@ -103,7 +113,6 @@ function LoginScreen({ onLogin }) {
         <h1>Start your workspace</h1>
         <p className="muted">We verify your email before creating the account.</p>
         <form onSubmit={requestCode} className="stack gap-12">
-          <label className="field"><span>Mobile number (optional)</span><input type="tel" autoComplete="tel" pattern="\+[1-9][0-9]{6,14}" title="Include country code, for example +96512345678" placeholder="+96512345678" value={signup.phone} onChange={e => setSignup({ ...signup, phone: e.target.value })}/></label>
           <div className="pin-field auth-field"><UserRound size={18} /><input required autoFocus value={signup.username} onChange={e => setSignup({ ...signup, username: e.target.value })} placeholder="Username" aria-label="Username" minLength="2" maxLength="80" /></div>
           <div className="pin-field auth-field"><Mail size={18} /><input required type="email" value={signup.email} onChange={e => setSignup({ ...signup, email: e.target.value })} placeholder="Email address" aria-label="Email" /></div>
           <div className="pin-field auth-field"><LockKeyhole size={18} /><input required type="password" value={signup.password} onChange={e => setSignup({ ...signup, password: e.target.value })} placeholder="Password · 8+ characters" aria-label="Password" minLength="8" maxLength="128" /></div>
@@ -183,7 +192,6 @@ export default function App() {
 
   useEffect(() => {
     const resume = async () => {
-      if (!auth.token && biometricEnabled()) { const token = await unlockBiometric(); if (token) auth.token = token }
       if (!auth.token) { setSession({ loading: false, user: null }); return }
       api('/api/auth/me').then(async user => {
       const settingsOk = await loadSettings()
@@ -195,6 +203,8 @@ export default function App() {
   }, [loadSettings, loadAppearance])
 
   const signOut = useCallback(() => {
+    if (smsAvailable()) void BankSms.configure({enabled:false}).catch(console.error)
+    void cancelReminder().catch(console.error)
     auth.clear()
     setAppearance({ profile_image: '', wallpaper_image: '' })
     setSession({ loading: false, user: null })

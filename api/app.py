@@ -6,6 +6,7 @@ from .index import app
 from . import extensions
 from . import workspace
 from . import bank_messages
+from . import passkeys
 from .email_service import send_verification_code, smtp_status
 
 # Route signup verification through the hardened email transport. Keeping this
@@ -14,6 +15,7 @@ extensions.send_code = send_verification_code
 app.include_router(extensions.router)
 app.include_router(workspace.router)
 app.include_router(bank_messages.router)
+app.include_router(passkeys.router)
 
 
 @app.get("/api/health/email")

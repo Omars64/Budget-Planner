@@ -49,7 +49,7 @@ async function send(path, options = {}) {
   if (options.body && !(options.body instanceof FormData)) headers.set('Content-Type', 'application/json')
   if (auth.token) headers.set('Authorization', `Bearer ${auth.token}`)
   let response
-  try { response = await fetch(path, { ...options, headers }) }
+  try { response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}${path}`, { ...options, headers }) }
   catch { throw new Error('Could not reach FlowBudget. Check your connection and retry; transaction retries are protected against duplicates.') }
   if (response.status === 204) { responseCache.clear(); return null }
   let data = null
