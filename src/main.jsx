@@ -5,6 +5,7 @@ import App from './App'
 import './styles.css'
 import './enhancements.css'
 import './experience.css'
+import './password-input.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

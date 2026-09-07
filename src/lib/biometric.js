@@ -12,7 +12,9 @@ function serialize(c) {
     if (c.response[key]) response[key] = encode(c.response[key])
   }
   if (c.response.getTransports) response.transports = c.response.getTransports()
-  return { id: c.id, rawId: encode(c.rawId), type: c.type, response, clientExtensionResults: c.getClientExtensionResults() }
+  // rawId is the stable binary credential identifier; keep id for WebAuthn compatibility.
+  const rawId = encode(c.rawId)
+  return { id: rawId, rawId, type: c.type, response, clientExtensionResults: c.getClientExtensionResults() }
 }
 export async function setupBiometric(email, password) {
   if (!biometricSupported()) throw new Error('Passkeys require a supported browser and HTTPS.')

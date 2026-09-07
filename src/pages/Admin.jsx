@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Palette, Pencil, Plus, Search, ShieldCheck, Trash2, UserRoundCheck, UserRoundX } from 'lucide-react'
 import { api, jsonBody } from '../lib/api'
+import PasswordInput from '../components/PasswordInput'
 import { useApp } from '../App'
 import Modal from '../components/Modal'
 import EmptyState from '../components/EmptyState'
@@ -110,7 +111,7 @@ export default function Admin() {
         <label className="field"><span>Email</span><input required type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})}/></label>
         <div className="form-grid two">
           <label className="field"><span>Role</span><select value={form.role} onChange={e => setForm({...form, role: e.target.value})}><option value="user">User</option><option value="admin">Admin</option></select></label>
-          <label className="field"><span>Password</span><input required={!editing} type="password" minLength="8" value={form.password} onChange={e => setForm({...form, password: e.target.value})}/></label>
+          <label className="field"><span>Password</span><PasswordInput required={!editing} minLength="8" value={form.password} onChange={e => setForm({...form, password: e.target.value})}/></label>
         </div>
         <label className="check-row"><input type="checkbox" checked={form.active} onChange={e => setForm({...form, active: e.target.checked})}/><span>Account is active</span></label>
         {error && <div className="form-error">{error}</div>}

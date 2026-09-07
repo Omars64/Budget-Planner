@@ -18,6 +18,7 @@ const Notes = lazy(() => import('./pages/Notes'))
 const Feedback = lazy(() => import('./pages/Feedback'))
 const BankMessages = lazy(() => import('./pages/BankMessages'))
 import BrandLogo from './components/BrandLogo'
+import PasswordInput from './components/PasswordInput'
 import { useConfirmation } from './components/Confirmation'
 import Experience from './components/Experience'
 import { biometricSupported, unlockBiometric } from './lib/biometric'
@@ -101,7 +102,7 @@ function LoginScreen({ onLogin }) {
         <div className="segment-control signin-method" aria-label="Sign-in method"><button type="button" disabled={busy} className={signInMethod === 'password' ? 'active' : ''} onClick={() => setSignInMethod('password')}>Password</button><button type="button" disabled={busy || !biometricSupported()} className={signInMethod === 'passkey' ? 'active' : ''} onClick={() => setSignInMethod('passkey')}>Biometric / passkey</button></div>
         {signInMethod === 'passkey' ? <div className="stack gap-12">{error && <div className="form-error">{error}</div>}<button className="button primary full" disabled={busy} onClick={passkeyLogin}>{busy ? 'Verifying...' : 'Sign in with passkey'}</button></div> : <form onSubmit={login} className="stack gap-12">
           <div className="pin-field auth-field"><Mail size={18} /><input required autoFocus type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email address" aria-label="Email" /></div>
-          <div className="pin-field auth-field"><LockKeyhole size={18} /><input required type="password" minLength="8" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" aria-label="Password" /></div>
+          <div className="pin-field auth-field"><LockKeyhole size={18} /><PasswordInput required minLength="8" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" aria-label="Password" /></div>
           {error && <div className="form-error">{error}</div>}
           <button className="button primary full" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
         </form>}
@@ -115,7 +116,7 @@ function LoginScreen({ onLogin }) {
         <form onSubmit={requestCode} className="stack gap-12">
           <div className="pin-field auth-field"><UserRound size={18} /><input required autoFocus value={signup.username} onChange={e => setSignup({ ...signup, username: e.target.value })} placeholder="Username" aria-label="Username" minLength="2" maxLength="80" /></div>
           <div className="pin-field auth-field"><Mail size={18} /><input required type="email" value={signup.email} onChange={e => setSignup({ ...signup, email: e.target.value })} placeholder="Email address" aria-label="Email" /></div>
-          <div className="pin-field auth-field"><LockKeyhole size={18} /><input required type="password" value={signup.password} onChange={e => setSignup({ ...signup, password: e.target.value })} placeholder="Password · 8+ characters" aria-label="Password" minLength="8" maxLength="128" /></div>
+          <div className="pin-field auth-field"><LockKeyhole size={18} /><PasswordInput required value={signup.password} onChange={e => setSignup({ ...signup, password: e.target.value })} placeholder="Password · 8+ characters" aria-label="Password" minLength="8" maxLength="128" /></div>
           {error && <div className="form-error">{error}</div>}
           <button className="button primary full" disabled={busy}>{busy ? 'Sending code…' : 'Continue'}</button>
         </form>

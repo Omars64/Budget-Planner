@@ -60,6 +60,13 @@ def origin():
 def rp_id():
     return urlparse(origin()).hostname
 
+def canonical_credential_id(payload):
+    """Use rawId as the canonical credential identifier across browsers."""
+    raw_id = payload.get('rawId') or payload.get('id')
+    if not isinstance(raw_id, str) or not raw_id:
+        raise ValueError('missing credential id')
+    return bytes_to_base64url(base64url_to_bytes(raw_id))
+
 def challenge(db, options, purpose):
     db.query(PasskeyChallenge).filter(PasskeyChallenge.expires < utc_now()).delete()
     key = secrets.token_urlsafe(32)
@@ -112,7 +119,7 @@ def login_verify(payload: Response, db: Session = Depends(get_db)):
     expected = consume(db, payload.challenge_id, 'login')
     # Lock the credential while advancing its authenticator counter.
     try:
-        credential_id = bytes_to_base64url(base64url_to_bytes(payload.credential['id']))
+        credential_id = canonical_credential_id(payload.credential)
     except (KeyError, ValueError, TypeError):
         raise HTTPException(401, 'Invalid passkey response.')
     row = db.query(Passkey).filter_by(id=credential_id).with_for_update().first()
