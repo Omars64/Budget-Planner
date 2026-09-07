@@ -29,6 +29,9 @@ from .schemas import (
 from .seed import EXPENSE_CATEGORIES, INCOME_CATEGORIES, ensure_default_categories, seed_database
 from .models import RecoveryPoint, NoteRevision
 from .data_safety import save_recovery, clear_budget, clear_notes
+from .idempotency import reserve
+from .models import RequestReceipt
+from .models import BankMessage, MessageKey
 
 APP_SECRET = os.getenv("APP_SECRET", "flowbudget-dev-secret-change-me")
 serializer = URLSafeTimedSerializer(APP_SECRET, salt="flowbudget-lock")
@@ -423,6 +426,9 @@ def admin_delete_user(user_id: int, admin: User = Depends(admin_user), db: Sessi
     db.query(NoteFolder).filter_by(user_id=user_id).delete()
     db.query(Feedback).filter_by(user_id=user_id).delete()
     db.query(RecoveryPoint).filter_by(user_id=user_id).delete()
+    db.query(RequestReceipt).filter_by(user_id=user_id).delete()
+    db.query(BankMessage).filter_by(user_id=user_id).delete()
+    db.query(MessageKey).filter_by(user_id=user_id).delete()
     for model in [Transaction, Budget, Goal, Debt, Category, Wallet]:
         db.query(model).filter(model.user_id == user_id).delete()
     db.query(AppSetting).filter(AppSetting.user_id == user_id).delete()
@@ -508,6 +514,11 @@ def security_disable(user: User = Depends(authorize), db: Session = Depends(get_
 @app.get("/api/settings")
 def get_settings(user: User = Depends(current_user), db: Session = Depends(get_db)):
     return {
+        'phone': setting(db, user.id, 'phone', ''),
+        'font_family': setting(db, user.id, 'font_family', 'system'),
+        'text_color': setting(db, user.id, 'text_color', 'ink'),
+        'reminders_enabled': setting(db, user.id, 'reminders_enabled', 'false') == 'true',
+        'reminder_time': setting(db, user.id, 'reminder_time', '20:00'),
         "currency": setting(db, user.id, "currency", "KWD"),
         "display_name": setting(db, user.id, "display_name", "FlowBudget"),
         "week_starts_on": setting(db, user.id, "week_starts_on", "sunday"),
@@ -616,9 +627,15 @@ def validate_transaction_references(db: Session, user_id: int, payload: Transact
 
 
 @app.post("/api/transactions", status_code=201)
-def create_transaction(payload: TransactionIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def create_transaction(payload: TransactionIn, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    receipt, previous = reserve(db, user.id, 'transaction', request.headers.get('Idempotency-Key'), payload)
+    if previous is not None: return previous
     validate_transaction_references(db, user.id, payload)
-    row = Transaction(user_id=user.id, **payload.model_dump()); db.add(row); db.commit(); db.refresh(row); return tx_payload(row)
+    row = Transaction(user_id=user.id, **payload.model_dump()); db.add(row); db.flush()
+    result = tx_payload(row)
+    if receipt: receipt.response = json.dumps(result)
+    db.commit()
+    return result
 
 
 @app.put("/api/transactions/{item_id}")

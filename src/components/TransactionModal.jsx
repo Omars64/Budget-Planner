@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, CalendarClock, Repeat2 } from 'lucide-react'
 import Modal from './Modal'
 import { api, jsonBody } from '../lib/api'
@@ -11,6 +11,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
   const [categories, setCategories] = useState([])
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const submitting = useRef(false)
 
   useEffect(() => {
     if (!open) return
@@ -30,18 +31,23 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
   const set = (k,v) => setForm(f => ({ ...f, [k]: v }))
 
   const submit = async e => {
-    e.preventDefault(); setBusy(true); setError('')
+    e.preventDefault()
+    if (submitting.current) return
+    if (!form.description.trim() || !form.wallet_id || !(Number(form.amount) > 0) || !form.date) {
+      setError('Enter a description, an amount greater than zero, a date, and a wallet.'); return
+    }
+    submitting.current = true; setBusy(true); setError('')
+    try {
     const payload = {
       ...form, amount: Number(form.amount), wallet_id: Number(form.wallet_id),
       transfer_wallet_id: form.type === 'transfer' ? Number(form.transfer_wallet_id) : null,
       category_id: form.type === 'transfer' || !form.category_id ? null : Number(form.category_id),
       date: new Date(form.date).toISOString(), recurring_until: form.recurring_until || null,
     }
-    try {
       await api(editing ? `/api/transactions/${editing.id}` : '/api/transactions', { method: editing ? 'PUT' : 'POST', ...jsonBody(payload) })
       onSaved?.()
     } catch (err) { setError(err.message) }
-    finally { setBusy(false) }
+    finally { submitting.current = false; setBusy(false) }
   }
 
   return <Modal open={open} onClose={onClose} title={editing ? 'Edit transaction' : 'Add transaction'} subtitle="Keep each movement of money in the right place." size="large">

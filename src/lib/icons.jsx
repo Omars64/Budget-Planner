@@ -1,4 +1,6 @@
-import * as Icons from 'lucide-react'
+import { Wallet, Landmark, CreditCard, Utensils, Car, ShoppingBag, House, Gamepad2, HeartPulse, ReceiptText, Plane, BriefcaseBusiness, Laptop, Gift, CircleDollarSign, Target, ShieldCheck, Circle } from 'lucide-react'
+
+const Icons = { Wallet, Landmark, CreditCard, Utensils, Car, ShoppingBag, House, Gamepad2, HeartPulse, ReceiptText, Plane, BriefcaseBusiness, Laptop, Gift, CircleDollarSign, Target, ShieldCheck, Circle }
 
 const aliases = {
   wallet: 'Wallet', landmark: 'Landmark', 'credit-card': 'CreditCard', utensils: 'Utensils', car: 'Car',

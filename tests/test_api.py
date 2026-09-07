@@ -163,3 +163,27 @@ def test_validation_guards_and_boundaries():
         assert client.delete(f"/api/wallets/{wallets[0]['id']}", headers=headers).status_code == 409
         feb = client.get('/api/dashboard?month=2026-02', headers=headers).json()
         assert len(feb['cashflow']) == 28
+
+
+def test_transaction_retry_and_preferences():
+    with TestClient(app) as client:
+        headers = auth_headers(client)
+        wallet = client.get('/api/wallets', headers=headers).json()[0]
+        body = {'type': 'expense', 'amount': 1, 'description': 'Idempotency regression', 'date': '2026-09-07T12:00:00', 'wallet_id': wallet['id']}
+        keyed = {**headers, 'Idempotency-Key': 'retry-regression'}
+        first = client.post('/api/transactions', headers=keyed, json=body)
+        second = client.post('/api/transactions', headers=keyed, json=body)
+        assert first.status_code == second.status_code == 201
+        assert first.json()['id'] == second.json()['id']
+        assert client.post('/api/transactions', headers=keyed, json={**body, 'amount': 2}).status_code == 409
+        assert len(client.get('/api/transactions?search=Idempotency%20regression', headers=headers).json()) == 1
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            results = list(pool.map(lambda _: client.post('/api/transactions', headers={**headers, 'Idempotency-Key':'concurrent-retry'}, json={**body,'description':'Concurrent receipt'}), range(4)))
+        assert all(result.status_code == 201 for result in results)
+        assert len({result.json()['id'] for result in results}) == 1
+        settings = client.get('/api/settings', headers=headers).json()
+        updated = {**settings, 'phone': '+96512345678', 'font_family': 'georgia', 'text_color': 'charcoal', 'reminders_enabled': True}
+        assert client.put('/api/settings', headers=headers, json=updated).status_code == 200
+        assert client.get('/api/settings', headers=headers).json()['phone'] == updated['phone']
+        assert client.put('/api/settings', headers=headers, json={**updated, 'phone': '123'}).status_code == 422

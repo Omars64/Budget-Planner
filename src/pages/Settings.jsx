@@ -1,18 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
-import { Camera, Download, Image, Plus, RefreshCcw, Save, ShieldCheck, Trash2, Upload, UserRound, X } from 'lucide-react'
+import { Camera, Download, Image, Mountain, Plus, RefreshCcw, Save, ShieldCheck, Trash2, Upload, UserRound, X } from 'lucide-react'
 import { api, jsonBody } from '../lib/api'
 import { useApp } from '../App'
 import Modal from '../components/Modal'
 
-const imageData = (file, maxBytes, label) => new Promise((resolve, reject) => {
-  if (!file) return reject(new Error(`Choose a ${label.toLowerCase()} first`))
-  if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) return reject(new Error(`${label} must be PNG, JPEG, or WebP`))
-  if (file.size > maxBytes) return reject(new Error(`${label} is too large`))
-  const reader = new FileReader()
-  reader.onerror = () => reject(new Error(`Could not read the ${label.toLowerCase()}`))
-  reader.onload = () => resolve(String(reader.result || ''))
-  reader.readAsDataURL(file)
-})
+const imageData = async (file, maxBytes, label) => {
+  if (!file) throw new Error(`Choose a ${label.toLowerCase()} first`)
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) throw new Error(`${label} must be PNG, JPEG, or WebP`)
+  if (file.size > maxBytes) throw new Error(`${label} is too large`)
+  const bitmap = await createImageBitmap(file)
+  try {
+    const maxSide = label === 'Wallpaper' ? 1920 : 256
+    const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale))
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale))
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+    return canvas.toDataURL('image/webp', .85)
+  } finally { bitmap.close() }
+}
 
 export default function Settings(){
   const {user,settings,setSettings,appearance,setAppearance,reloadSettings,refresh,notify,lock,confirm}=useApp()
@@ -43,9 +49,17 @@ export default function Settings(){
   const clearAppearance=async key=>{try{await updateAppearance({[key]:''});notify(key==='profile_image'?'Profile picture removed':'Wallpaper removed')}catch(err){notify(err.message,'error')}}
 
   return <div className="settings-grid">
+    <section className="panel glass"><h3>Personal preferences</h3><form onSubmit={save} className="stack gap-16">
+      <label className="field"><span>Mobile number (with country code)</span><input type="tel" autoComplete="tel" pattern="\+[1-9][0-9]{6,14}" title="Use an international number, such as +96512345678" placeholder="+96512345678" value={form.phone || ''} onChange={e => setForm({...form, phone:e.target.value})}/></label>
+      <label className="field"><span>Font</span><select aria-label="Font" value={form.font_family || 'system'} onChange={e => setForm({...form, font_family:e.target.value})}><option value="system">System</option><option value="arial">Arial</option><option value="georgia">Georgia</option><option value="verdana">Verdana</option></select></label>
+      <label className="field"><span>Text colour</span><select aria-label="Text colour" value={form.text_color || 'ink'} onChange={e => setForm({...form, text_color:e.target.value})}><option value="ink">Ink</option><option value="charcoal">Charcoal</option><option value="forest">Forest</option></select></label>
+      <label className="check-row"><input type="checkbox" checked={!!form.reminders_enabled} onChange={e => setForm({...form, reminders_enabled:e.target.checked})}/><span>Daily transaction reminder</span></label>
+      {form.reminders_enabled && <><label className="field"><span>Reminder time (this device's time)</span><input required type="time" value={form.reminder_time || '20:00'} onChange={e => setForm({...form, reminder_time:e.target.value})}/></label><p className="muted">Reminders appear while FlowBudget is open. Browser notifications depend on device permissions.</p><button type="button" className="button ghost" onClick={async () => { if (!('Notification' in window)) return notify('This browser does not support notifications.', 'error'); try { const permission = await Notification.requestPermission(); notify(permission === 'granted' ? 'Browser notifications enabled' : 'In-app reminders remain available') } catch { notify('Notifications are unavailable in this browser.', 'error') } }}>Enable browser notifications</button></>}
+      <button className="button primary"><Save/>Save preferences</button>
+    </form></section>
     <section className="panel glass"><div className="panel-head"><div><p className="eyebrow">Preferences</p><h3>Display & locale</h3></div></div><form onSubmit={save} className="stack gap-16"><label className="field"><span>Budget name</span><input value={form.display_name||''} onChange={e=>setForm({...form,display_name:e.target.value})}/></label><div className="form-grid two"><label className="field"><span>Currency</span><input value={form.currency||'KWD'} maxLength="6" onChange={e=>setForm({...form,currency:e.target.value.toUpperCase()})}/></label><label className="field"><span>Week starts on</span><select value={form.week_starts_on||'sunday'} onChange={e=>setForm({...form,week_starts_on:e.target.value})}><option value="sunday">Sunday</option><option value="monday">Monday</option></select></label></div><label className="check-row"><input type="checkbox" checked={!!form.compact_numbers} onChange={e=>setForm({...form,compact_numbers:e.target.checked})}/><span>Use compact large numbers where possible</span></label><button className="button primary self-start"><Save/>Save preferences</button></form></section>
 
-    <section className="panel glass"><div className="panel-head"><div><p className="eyebrow">Account</p><h3>Profile & session</h3></div><ShieldCheck className="muted-icon"/></div><div className="security-card"><div className="profile-account-row">{appearance.profile_image?<img className="settings-avatar" src={appearance.profile_image} alt="Profile"/>:<span className="settings-avatar fallback"><UserRound/></span>}<div><strong>{user?.username}</strong><p className="muted">{user?.email} · {user?.role === 'admin' ? 'Administrator' : 'User'} access</p></div></div><div className="button-row"><button className="button ghost small" onClick={()=>profileRef.current?.click()}><Camera/>Change photo</button>{appearance.profile_image&&<button className="button ghost small" onClick={()=>clearAppearance('profile_image')}><X/>Remove</button>}<button className="button ghost small" onClick={lock}>Sign out</button></div><input ref={profileRef} hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={pickProfile}/></div></section>
+    <section className="panel glass"><div className="panel-head"><div><p className="eyebrow">Account</p><h3>Profile & session</h3></div><ShieldCheck className="muted-icon"/></div><div className="security-card"><div className="profile-account-row">{appearance.profile_image?<img className="settings-avatar" src={appearance.profile_image} alt="Profile"/>:<span className="settings-avatar fallback"><Mountain/></span>}<div><strong>{user?.username}</strong><p className="muted">{user?.email} · {user?.role === 'admin' ? 'Administrator' : 'User'} access</p></div></div><div className="button-row"><button className="button ghost small" onClick={()=>profileRef.current?.click()}><Camera/>Change photo</button>{appearance.profile_image&&<button className="button ghost small" onClick={()=>clearAppearance('profile_image')}><X/>Remove</button>}<button className="button ghost small" onClick={lock}>Sign out</button></div><input ref={profileRef} hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={pickProfile}/></div></section>
 
     <section className="panel glass span-2-settings appearance-panel"><div className="panel-head"><div><p className="eyebrow">Personalization</p><h3>Workspace wallpaper</h3></div><Image className="muted-icon"/></div><div className="wallpaper-settings"><div className={`wallpaper-preview ${appearance.wallpaper_image?'has-image':''}`} style={appearance.wallpaper_image?{backgroundImage:`url(${JSON.stringify(appearance.wallpaper_image)})`}:{}}>{!appearance.wallpaper_image&&<><Image/><span>No wallpaper selected</span></>}</div><div className="stack gap-10"><p className="muted">Your wallpaper is private to your account. FlowBudget’s glass panels stay translucent above it.</p><div className="button-row"><button className="button primary small" onClick={()=>wallpaperRef.current?.click()}><Upload/>Choose wallpaper</button>{appearance.wallpaper_image&&<button className="button ghost small" onClick={()=>clearAppearance('wallpaper_image')}><Trash2/>Remove wallpaper</button>}</div><small className="appearance-hint">PNG, JPEG, or WebP · maximum 2.5 MB</small></div><input ref={wallpaperRef} hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={pickWallpaper}/></div></section>
 

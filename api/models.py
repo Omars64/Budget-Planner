@@ -198,3 +198,30 @@ class NoteRevision(Base):
     content = Column(Text, nullable=False)
     version = Column(Integer, nullable=False)
     created_at = Column(DateTime, nullable=False, default=utc_now)
+
+
+class RequestReceipt(Base):
+    __tablename__ = 'request_receipts'
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
+    scope = Column(String(40), primary_key=True)
+    key = Column(String(80), primary_key=True)
+    digest = Column(String(64), nullable=False)
+    response = Column(Text, nullable=False, default='null')
+
+
+class BankMessage(Base):
+    __tablename__ = 'bank_messages'
+    __table_args__ = (UniqueConstraint('user_id', 'reference', name='uq_bank_message_reference'),)
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    reference = Column(String(160), nullable=False)
+    bank = Column(String(20), nullable=False)
+    message = Column(Text, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=utc_now)
+    recorded = Column(Boolean, nullable=False, default=False)
+
+
+class MessageKey(Base):
+    __tablename__ = 'message_keys'
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
+    digest = Column(String(64), nullable=False, unique=True)

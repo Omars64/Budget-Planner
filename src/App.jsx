@@ -1,23 +1,25 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowLeft, BadgeCheck, LockKeyhole, Mail, RefreshCw, Sparkles, UserRound } from 'lucide-react'
 import { api, auth, jsonBody } from './lib/api'
 import AppShell from './components/AppShell'
-import Overview from './pages/Overview'
-import Transactions from './pages/Transactions'
-import SharedTransactions from './pages/SharedTransactions'
-import CalendarPage from './pages/CalendarPage'
-import Analytics from './pages/Analytics'
-import Budgets from './pages/Budgets'
-import GoalsDebts from './pages/GoalsDebts'
-import Wallets from './pages/Wallets'
-import Settings from './pages/Settings'
-import Admin from './pages/Admin'
-import Notes from './pages/Notes'
-import Feedback from './pages/Feedback'
+const Overview = lazy(() => import('./pages/Overview'))
+const Transactions = lazy(() => import('./pages/Transactions'))
+const SharedTransactions = lazy(() => import('./pages/SharedTransactions'))
+const CalendarPage = lazy(() => import('./pages/CalendarPage'))
+const Analytics = lazy(() => import('./pages/Analytics'))
+const Budgets = lazy(() => import('./pages/Budgets'))
+const GoalsDebts = lazy(() => import('./pages/GoalsDebts'))
+const Wallets = lazy(() => import('./pages/Wallets'))
+const Settings = lazy(() => import('./pages/Settings'))
+const Admin = lazy(() => import('./pages/Admin'))
+const Notes = lazy(() => import('./pages/Notes'))
+const Feedback = lazy(() => import('./pages/Feedback'))
+const BankMessages = lazy(() => import('./pages/BankMessages'))
 import BrandLogo from './components/BrandLogo'
 import { useConfirmation } from './components/Confirmation'
+import Experience from './components/Experience'
 
 const AppContext = createContext(null)
 export const useApp = () => useContext(AppContext)
@@ -26,7 +28,7 @@ function LoginScreen({ onLogin }) {
   const [mode, setMode] = useState('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [signup, setSignup] = useState({ username: '', email: '', password: '' })
+  const [signup, setSignup] = useState({ username: '', email: '', password: '', phone: '' })
   const [challenge, setChallenge] = useState('')
   const [verificationEmail, setVerificationEmail] = useState('')
   const [code, setCode] = useState('')
@@ -78,7 +80,7 @@ function LoginScreen({ onLogin }) {
     finally { setBusy(false) }
   }
 
-  return <div className="lock-screen auth-screen">
+  return <div className="lock-screen auth-screen" onInvalid={e => setError(e.target.validationMessage)}>
     <motion.div className="lock-card auth-card glass" initial={{ opacity: 0, y: 20, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }}>
       <BrandLogo className="large" />
 
@@ -87,10 +89,10 @@ function LoginScreen({ onLogin }) {
         <h1>Sign in to FlowBudget</h1>
         <p className="muted">Your budget workspace is private to your account.</p>
         <form onSubmit={login} className="stack gap-12">
-          <div className="pin-field auth-field"><Mail size={18} /><input autoFocus type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email address" aria-label="Email" /></div>
-          <div className="pin-field auth-field"><LockKeyhole size={18} /><input type="password" minLength="8" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" aria-label="Password" /></div>
+          <div className="pin-field auth-field"><Mail size={18} /><input required autoFocus type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email address" aria-label="Email" /></div>
+          <div className="pin-field auth-field"><LockKeyhole size={18} /><input required type="password" minLength="8" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" aria-label="Password" /></div>
           {error && <div className="form-error">{error}</div>}
-          <button className="button primary full" disabled={busy || !email || password.length < 8}>{busy ? 'Signing in…' : 'Sign in'}</button>
+          <button className="button primary full" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
         </form>
         <button className="auth-switch" type="button" onClick={() => { setError(''); setMode('signup') }}>New to FlowBudget? <strong>Create an account</strong></button>
       </>}
@@ -100,11 +102,12 @@ function LoginScreen({ onLogin }) {
         <h1>Start your workspace</h1>
         <p className="muted">We verify your email before creating the account.</p>
         <form onSubmit={requestCode} className="stack gap-12">
-          <div className="pin-field auth-field"><UserRound size={18} /><input autoFocus value={signup.username} onChange={e => setSignup({ ...signup, username: e.target.value })} placeholder="Username" aria-label="Username" minLength="2" maxLength="80" /></div>
-          <div className="pin-field auth-field"><Mail size={18} /><input type="email" value={signup.email} onChange={e => setSignup({ ...signup, email: e.target.value })} placeholder="Email address" aria-label="Email" /></div>
-          <div className="pin-field auth-field"><LockKeyhole size={18} /><input type="password" value={signup.password} onChange={e => setSignup({ ...signup, password: e.target.value })} placeholder="Password · 8+ characters" aria-label="Password" minLength="8" maxLength="128" /></div>
+          <label className="field"><span>Mobile number (optional)</span><input type="tel" autoComplete="tel" pattern="\+[1-9][0-9]{6,14}" title="Include country code, for example +96512345678" placeholder="+96512345678" value={signup.phone} onChange={e => setSignup({ ...signup, phone: e.target.value })}/></label>
+          <div className="pin-field auth-field"><UserRound size={18} /><input required autoFocus value={signup.username} onChange={e => setSignup({ ...signup, username: e.target.value })} placeholder="Username" aria-label="Username" minLength="2" maxLength="80" /></div>
+          <div className="pin-field auth-field"><Mail size={18} /><input required type="email" value={signup.email} onChange={e => setSignup({ ...signup, email: e.target.value })} placeholder="Email address" aria-label="Email" /></div>
+          <div className="pin-field auth-field"><LockKeyhole size={18} /><input required type="password" value={signup.password} onChange={e => setSignup({ ...signup, password: e.target.value })} placeholder="Password · 8+ characters" aria-label="Password" minLength="8" maxLength="128" /></div>
           {error && <div className="form-error">{error}</div>}
-          <button className="button primary full" disabled={busy || signup.username.trim().length < 2 || !signup.email || signup.password.length < 8}>{busy ? 'Sending code…' : 'Continue'}</button>
+          <button className="button primary full" disabled={busy}>{busy ? 'Sending code…' : 'Continue'}</button>
         </form>
         <button className="auth-switch" type="button" onClick={() => { setError(''); setMode('login') }}>Already have an account? <strong>Sign in</strong></button>
       </>}
@@ -180,8 +183,9 @@ export default function App() {
   useEffect(() => {
     if (!auth.token) { setSession({ loading: false, user: null }); return }
     api('/api/auth/me').then(async user => {
-      const [settingsOk] = await Promise.all([loadSettings(), loadAppearance()])
+      const settingsOk = await loadSettings()
       setSession({ loading: false, user: settingsOk ? user : null })
+      if (settingsOk) void loadAppearance()
     }).catch(() => { auth.clear(); setSession({ loading: false, user: null }) })
   }, [loadSettings, loadAppearance])
 
@@ -192,8 +196,9 @@ export default function App() {
   }, [])
 
   const completeLogin = useCallback(async user => {
-    await Promise.all([loadSettings(), loadAppearance()])
+    await loadSettings()
     setSession({ loading: false, user })
+    void loadAppearance()
   }, [loadSettings, loadAppearance])
 
   const value = useMemo(() => ({
@@ -205,8 +210,10 @@ export default function App() {
   if (!session.user) return <LoginScreen onLogin={completeLogin} />
 
   return <AppContext.Provider value={value}>
+    <Experience />
     <div className="ambient" aria-hidden="true"><i/><i/><i/></div>
     <AppShell>
+      <Suspense fallback={<div role="status">Loading page...</div>}>
       <Routes>
         <Route path="/" element={<Overview />} />
         <Route path="/transactions" element={<Transactions />} />
@@ -219,9 +226,11 @@ export default function App() {
         <Route path="/notes" element={<Notes />} />
         <Route path="/feedback" element={<Feedback />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/bank-messages" element={<BankMessages />} />
         <Route path="/admin" element={session.user?.role === 'admin' ? <Admin /> : <Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </Suspense>
     </AppShell>
     {confirmation}
     <AnimatePresence>{toast && <motion.div role={toast.type === 'error' ? 'alert' : 'status'} className={`toast ${toast.type}`} initial={{ opacity: 0, y: 18, scale: .96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12 }}>{toast.message}</motion.div>}</AnimatePresence>

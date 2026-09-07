@@ -153,6 +153,11 @@ class PinPayload(BaseModel):
 
 
 class SettingsPayload(BaseModel):
+    phone: str = Field(default='', pattern=r'^$|^\+[1-9]\d{6,14}$')
+    font_family: Literal['system', 'arial', 'georgia', 'verdana'] = 'system'
+    text_color: Literal['ink', 'charcoal', 'forest'] = 'ink'
+    reminders_enabled: bool = False
+    reminder_time: str = Field(default='20:00', pattern=r'^([01]\d|2[0-3]):[0-5]\d$')
     currency: str = Field(default="KWD", min_length=3, max_length=6)
     display_name: str = Field(default="My Budget", min_length=1, max_length=80)
     week_starts_on: Literal["sunday", "monday"] = "sunday"

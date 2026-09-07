@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import html
+import json
 import os
 import re
 import secrets
@@ -13,7 +14,8 @@ from email.message import EmailMessage
 from email.utils import format_datetime, make_msgid
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from .idempotency import reserve
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import or_, func
@@ -44,6 +46,7 @@ IMAGE_RE = re.compile(r"^data:image/(png|jpeg|webp);base64,([A-Za-z0-9+/=\r\n]+)
 
 
 class SignupStart(BaseModel):
+    phone: str = Field(default='', pattern=r'^$|^\+[1-9]\d{6,14}$')
     username: str = Field(min_length=2, max_length=80)
     email: str = Field(min_length=5, max_length=160)
     password: str = Field(min_length=8, max_length=128)
@@ -87,8 +90,8 @@ def code_hash(email: str, code: str) -> str:
     return hashlib.sha256(f"{APP_SECRET}:{email}:{code}".encode()).hexdigest()
 
 
-def challenge(email: str) -> str:
-    return signup_serializer.dumps({"email": email})
+def challenge(email: str, phone: str = '') -> str:
+    return signup_serializer.dumps({"email": email, "phone": phone})
 
 
 def challenge_email(token: str) -> str:
@@ -226,7 +229,7 @@ def signup_start(payload: SignupStart, db: Session = Depends(get_db)):
     if pending and pending.expires_at > now and (now - pending.last_sent_at) < timedelta(seconds=45):
         pending.username = username; pending.password_hash = password_hash; pending.updated_at = now; db.commit()
         retry = max(1, 45 - int((now - pending.last_sent_at).total_seconds()))
-        return {"challenge": challenge(email), "email": email, "sent": False, "message": "A verification code was already sent recently. You can use that code, or request another shortly.", "retry_after": retry}
+        return {"challenge": challenge(email, payload.phone), "email": email, "sent": False, "message": "A verification code was already sent recently. You can use that code, or request another shortly.", "retry_after": retry}
     code = f"{secrets.randbelow(1_000_000):06d}"
     try: send_code(email, username, code)
     except Exception as exc:
@@ -237,7 +240,7 @@ def signup_start(payload: SignupStart, db: Session = Depends(get_db)):
     else:
         db.add(PendingSignup(username=username, email=email, password_hash=password_hash, code_hash=code_hash(email, code), expires_at=now + timedelta(minutes=10), last_sent_at=now, attempts=0))
     db.commit()
-    return {"challenge": challenge(email), "email": email, "sent": True, "message": "We sent a 6-digit verification code to your email.", "retry_after": 45}
+    return {"challenge": challenge(email, payload.phone), "email": email, "sent": True, "message": "We sent a 6-digit verification code to your email.", "retry_after": 45}
 
 
 @router.post("/api/auth/signup/verify")
@@ -257,6 +260,7 @@ def signup_verify(payload: SignupVerify, db: Session = Depends(get_db)):
         db.delete(pending); db.commit(); raise HTTPException(409, "This account already exists. Sign in instead.")
     user = User(username=pending.username, email=email, password_hash=pending.password_hash, role="user", active=True)
     db.add(user); db.flush(); seed_user_workspace(db, user.id, commit=False); db.delete(pending)
+    set_setting(db, user.id, 'phone', signup_serializer.loads(payload.challenge, max_age=1800).get('phone', ''))
     for share in db.query(WalletShare).filter(WalletShare.invitee_email == email, WalletShare.member_user_id.is_(None)).all(): share.member_user_id = user.id
     db.commit(); db.refresh(user)
     return {"token": issue_token(user), "user": user_payload(user)}
@@ -344,9 +348,15 @@ def shared_transactions(search: str = "", tx_type: str = "all", wallet_id: Optio
 
 
 @router.post("/api/shared/transactions", status_code=201)
-def create_shared_transaction(payload: SharedTransactionIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    source = validate_shared_tx(db, user, payload); row = Transaction(user_id=source.user_id, **payload.model_dump()); db.add(row); db.commit(); db.refresh(row)
-    return shared_tx_payload(db, user, row, shared_wallet_ids(db, user))
+def create_shared_transaction(payload: SharedTransactionIn, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    source = validate_shared_tx(db, user, payload)
+    receipt, previous = reserve(db, user.id, 'shared-transaction', request.headers.get('Idempotency-Key'), payload)
+    if previous is not None: return previous
+    row = Transaction(user_id=source.user_id, **payload.model_dump()); db.add(row); db.flush()
+    result = shared_tx_payload(db, user, row, shared_wallet_ids(db, user))
+    if receipt: receipt.response = json.dumps(result)
+    db.commit()
+    return result
 
 
 @router.put("/api/shared/transactions/{transaction_id}")

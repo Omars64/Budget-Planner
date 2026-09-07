@@ -1,6 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { BarChart3, CalendarDays, Gauge, LayoutDashboard, LogOut, Menu, PiggyBank, Plus, ReceiptText, Settings, Share2, ShieldCheck, Sparkles, Target, WalletCards, X } from 'lucide-react'
+import { BarChart3, CalendarDays, Gauge, LayoutDashboard, LogOut, Menu, Mountain, Plus, ReceiptText, Settings, Share2, ShieldCheck, Sparkles, Target, WalletCards, X } from 'lucide-react'
 import { useState } from 'react'
 import { useApp } from '../App'
 import TransactionModal from './TransactionModal'
@@ -18,6 +18,7 @@ const nav = [
   ['/wallets', 'Wallets', WalletCards],
   ['/notes', 'Notes', NotebookPen],
   ['/feedback', 'Feedback', MessageSquare],
+  ['/bank-messages', 'Bank messages', ReceiptText],
   ['/settings', 'Settings', Settings],
 ]
 
@@ -44,7 +45,7 @@ export default function AppShell({ children }) {
         </NavLink>)}
       </nav>
       <div className="sidebar-foot glass-subtle">
-        {appearance.profile_image ? <img className="sidebar-avatar" src={appearance.profile_image} alt="Profile"/> : <PiggyBank size={22}/>}<div><strong>{user?.username || 'FlowBudget'}</strong><small>{user?.role === 'admin' ? 'Admin account' : 'Personal workspace'}</small></div>
+        {appearance.profile_image ? <img className="sidebar-avatar" src={appearance.profile_image} alt="Profile"/> : <span className="default-avatar"><Mountain size={24}/></span>}<div><strong>{user?.username || 'FlowBudget'}</strong><small>{user?.role === 'admin' ? 'Admin account' : 'Personal workspace'}</small></div>
       </div>
     </aside>
     {menu && <div className="sidebar-scrim" onClick={() => setMenu(false)} />}
@@ -57,6 +58,7 @@ export default function AppShell({ children }) {
         </div>
         <div className="button-row top-actions"><button className="button ghost signout-button" title="Sign out" aria-label="Sign out" onClick={lock}><LogOut size={17}/><span>Sign out</span></button><button className="button primary add-button" onClick={() => setTxModal(true)}><Plus size={18}/><span>Add transaction</span></button></div>
       </header>
+      <button className="button primary mobile-transaction-action" onClick={() => setTxModal(true)}><Plus size={22}/>Add transaction</button>
       <motion.div className="page-wrap" key={location.pathname} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .28 }}>{children}</motion.div>
     </main>
 
