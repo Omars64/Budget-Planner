@@ -351,6 +351,18 @@ def login(payload: LoginPayload, db: Session = Depends(get_db)):
 def me(user: User = Depends(current_user)):
     return user_payload(user)
 
+@app.delete("/api/account", status_code=204)
+def delete_account(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Permanently remove the signed-in user's account and private workspace."""
+    email = normalize_email(user.email)
+    db.query(WalletShare).filter(or_(WalletShare.owner_id == user.id, WalletShare.member_user_id == user.id, WalletShare.invitee_email == email)).delete(synchronize_session=False)
+    note_ids = db.query(Note.id).filter(Note.user_id == user.id)
+    db.query(NoteRevision).filter(NoteRevision.note_id.in_(note_ids)).delete(synchronize_session=False)
+    db.query(NoteShare).filter(or_(NoteShare.member_id == user.id, NoteShare.note_id.in_(note_ids))).delete(synchronize_session=False)
+    for model in [Transaction, Budget, Goal, Debt, Category, Wallet, Note, NoteFolder, Feedback, RecoveryPoint, RequestReceipt, BankMessage, MessageKey, AppSetting, PendingSignup]:
+        db.query(model).filter(model.user_id == user.id).delete(synchronize_session=False) if hasattr(model, 'user_id') else None
+    db.delete(user); db.commit()
+
 
 @app.get("/api/admin/users")
 def admin_users(_: User = Depends(admin_user), db: Session = Depends(get_db)):

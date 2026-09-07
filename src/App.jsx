@@ -233,6 +233,6 @@ export default function App() {
       </Suspense>
     </AppShell>
     {confirmation}
-    <AnimatePresence>{toast && <motion.div role={toast.type === 'error' ? 'alert' : 'status'} className={`toast ${toast.type}`} initial={{ opacity: 0, y: 18, scale: .96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12 }}>{toast.message}</motion.div>}</AnimatePresence>
+    <AnimatePresence>{toast && <motion.div role={toast.type === 'error' ? 'alert' : 'status'} className={`toast ${toast.type}`} initial={{ opacity: 0, y: -18, scale: .96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -12 }}>{toast.message}</motion.div>}</AnimatePresence>
   </AppContext.Provider>
 }
