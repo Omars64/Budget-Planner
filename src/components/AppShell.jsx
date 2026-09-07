@@ -47,11 +47,12 @@ export default function AppShell({ children }) {
       <div className="sidebar-foot glass-subtle">
         {appearance.profile_image ? <img className="sidebar-avatar" src={appearance.profile_image} alt="Profile"/> : <span className="default-avatar"><Mountain size={24}/></span>}<div><strong>{user?.username || 'FlowBudget'}</strong><small>{user?.role === 'admin' ? 'Admin account' : 'Personal workspace'}</small></div>
       </div>
+      <button className="button ghost sidebar-signout" onClick={lock}><LogOut size={17}/><span>Sign out</span></button>
     </aside>
     {menu && <div className="sidebar-scrim" onClick={() => setMenu(false)} />}
 
     <main className="main-area">
-      <header className="topbar">
+      <header className="topbar" role="banner">
         <div className="topbar-left">
           <button className="icon-button mobile-only" onClick={() => setMenu(true)} aria-label="Open menu"><Menu size={20}/></button>
           <div><p className="eyebrow">{settings.display_name}</p><h2>{title}</h2></div>
