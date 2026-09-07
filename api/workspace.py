@@ -8,8 +8,11 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from .database import get_db
-from .index import current_user, admin_user, normalize_email
+from .index import current_user, admin_user, normalize_email, set_setting
 from .models import Note, NoteFolder, NoteShare, Feedback, User, utc_now
+from .models import RecoveryPoint, NoteRevision
+from .data_safety import save_recovery, clear_budget, clear_notes
+import json
 
 router = APIRouter()
 
@@ -40,6 +43,33 @@ class FeedbackIn(BaseModel):
 class FeedbackUpdate(BaseModel):
     status: Literal["new", "reviewing", "resolved"]
     reply: str = Field(default="", max_length=10000)
+
+
+class ClearWorkspaceIn(BaseModel):
+    confirmation: Literal["CLEAR"]
+    scope: Literal["budget", "workspace"] = "budget"
+
+
+@router.get("/api/recovery")
+def recovery(user=Depends(current_user), db: Session = Depends(get_db)):
+    return [{"id": r.id, "reason": r.reason, "created_at": r.created_at.isoformat() + "Z"} for r in db.query(RecoveryPoint).filter_by(user_id=user.id).order_by(RecoveryPoint.id.desc()).all()]
+
+
+@router.get("/api/recovery/{point_id}")
+def download_recovery(point_id: int, user=Depends(current_user), db: Session = Depends(get_db)):
+    row = db.query(RecoveryPoint).filter_by(id=point_id, user_id=user.id).first()
+    if not row: raise HTTPException(404, "Recovery copy not found")
+    return json.loads(row.payload)
+
+
+@router.post("/api/workspace/clear")
+def clear_workspace(payload: ClearWorkspaceIn, user=Depends(current_user), db: Session = Depends(get_db)):
+    point = save_recovery(db, user, user, f"Cleared {payload.scope}")
+    clear_budget(db, user.id)
+    if payload.scope == "workspace": clear_notes(db, user.id)
+    set_setting(db, user.id, "workspace_initialized", "true")
+    db.commit()
+    return {"ok": True, "recovery_id": point.id}
 
 
 def nonblank(value):
@@ -121,6 +151,7 @@ def update_note(note_id: int, payload: NoteIn, user=Depends(current_user), db: S
     row = note_access(db, user, note_id, edit=True)
     if row.version != payload.version:
         raise HTTPException(409, "This note changed since you opened it. Copy your draft, then reload the latest version.")
+    db.add(NoteRevision(note_id=row.id, title=row.title, content=row.content, version=row.version))
     if row.user_id == user.id:
         if payload.folder_id and not db.query(NoteFolder).filter_by(id=payload.folder_id, user_id=user.id).first():
             raise HTTPException(404, "Folder not found")
@@ -134,8 +165,16 @@ def update_note(note_id: int, payload: NoteIn, user=Depends(current_user), db: S
 @router.delete("/api/notes/{note_id}", status_code=204)
 def delete_note(note_id: int, user=Depends(current_user), db: Session = Depends(get_db)):
     row = note_access(db, user, note_id, owner=True)
+    save_recovery(db, user, user, f"Deleted note: {row.title}")
+    db.query(NoteRevision).filter_by(note_id=note_id).delete()
     db.query(NoteShare).filter_by(note_id=note_id).delete()
     db.delete(row); db.commit()
+
+
+@router.get("/api/notes/{note_id}/history")
+def note_history(note_id: int, user=Depends(current_user), db: Session = Depends(get_db)):
+    note_access(db, user, note_id, owner=True)
+    return [{"id": r.id, "title": r.title, "content": r.content, "version": r.version, "created_at": r.created_at.isoformat() + "Z"} for r in db.query(NoteRevision).filter_by(note_id=note_id).order_by(NoteRevision.id.desc()).all()]
 
 
 @router.post("/api/notes/{note_id}/shares", status_code=201)
@@ -175,6 +214,7 @@ def feedback(user=Depends(current_user), db: Session = Depends(get_db)):
 
 @router.post("/api/feedback", status_code=201)
 def send_feedback(payload: FeedbackIn, user=Depends(current_user), db: Session = Depends(get_db)):
+    if user.role == "admin": raise HTTPException(403, "Administrators manage feedback through the inbox")
     # Lock the account so simultaneous submissions cannot bypass the rate limit.
     db.query(User).filter_by(id=user.id).with_for_update().first()
     recent = db.query(Feedback).filter(Feedback.user_id == user.id, Feedback.created_at > utc_now() - timedelta(minutes=1)).count()

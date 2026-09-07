@@ -59,7 +59,11 @@ def seed_database(db: Session, include_demo: bool = True, commit: bool = True):
     add_default_settings(db, admin.id)
     db.flush()
 
-    if db.query(Wallet).filter(Wallet.user_id == admin.id).count() > 0:
+    initialized = db.get(AppSetting, {"user_id": admin.id, "key": "workspace_initialized"})
+    has_wallets = db.query(Wallet).filter(Wallet.user_id == admin.id).count() > 0
+    if not initialized:
+        db.add(AppSetting(user_id=admin.id, key="workspace_initialized", value="true"))
+    if initialized or has_wallets:
         if commit:
             db.commit()
         return

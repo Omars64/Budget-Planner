@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, Eye, MailPlus, Pencil, Plus, Search, Share2, Trash2, Users } from 'lucide-react'
 import { format } from 'date-fns'
-import { api, jsonBody, money } from '../lib/api'
+import { api, jsonBody, money, readCached } from '../lib/api'
 import { useApp } from '../App'
 import EmptyState from '../components/EmptyState'
 import Modal from '../components/Modal'
@@ -21,13 +21,15 @@ const blankTx = walletId => ({
 
 export default function SharedTransactions() {
   const { settings, refreshKey, refresh, notify ,confirm} = useApp()
-  const [sharedWallets, setSharedWallets] = useState([])
-  const [personalWallets, setPersonalWallets] = useState([])
-  const [rows, setRows] = useState([])
+  const [sharedWallets, setSharedWallets] = useState(() => readCached('/api/shared/wallets') || [])
+  const [personalWallets, setPersonalWallets] = useState(() => (readCached('/api/wallets') || []).filter(w => !w.archived))
+  const [rows, setRows] = useState(() => readCached('/api/shared/transactions?search=&tx_type=all') || [])
   const [search, setSearch] = useState('')
   const [type, setType] = useState('all')
   const [walletFilter, setWalletFilter] = useState('')
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(() => !readCached('/api/shared/transactions?search=&tx_type=all'))
+  const [syncError, setSyncError] = useState('')
+  const [inviteOpen, setInviteOpen] = useState(false)
   const [share, setShare] = useState({ wallet_id: '', email: '', permission: 'view' })
   const [sharing, setSharing] = useState(false)
   const [modal, setModal] = useState(false)
@@ -55,7 +57,6 @@ export default function SharedTransactions() {
     const controller = new AbortController()
     let pending = false
     let reportedError = false
-    setLoading(true)
     const sync = async () => {
       if (pending || document.visibilityState === 'hidden') return
       pending = true
@@ -63,19 +64,18 @@ export default function SharedTransactions() {
       if (walletFilter) qs.set('wallet_id', walletFilter)
       try {
         const options = { signal: controller.signal }
-        const [wallets, personal, transactions] = await Promise.all([
-          api('/api/shared/wallets', options), api('/api/wallets', options),
-          api(`/api/shared/transactions?${qs}`, options),
+        const results = await Promise.allSettled([
+          api('/api/shared/wallets', options).then(wallets => { if (!controller.signal.aborted) setSharedWallets(wallets) }),
+          api('/api/wallets', options).then(personal => { if (!controller.signal.aborted) { setPersonalWallets(personal.filter(w => !w.archived)); setShare(current => ({ ...current, wallet_id: current.wallet_id || personal.find(w => !w.archived)?.id || '' })) } }),
+          api(`/api/shared/transactions?${qs}`, options).then(transactions => { if (!controller.signal.aborted) { setRows(transactions); setLoading(false); setSyncError('') } }),
         ])
-        if (controller.signal.aborted) return
-        setSharedWallets(wallets)
-        setPersonalWallets(personal.filter(w => !w.archived))
-        setShare(current => ({ ...current, wallet_id: current.wallet_id || personal.find(w => !w.archived)?.id || '' }))
-        setRows(transactions)
+        const failed = results.find(result => result.status === 'rejected')
+        if (failed) throw failed.reason
         reportedError = false
       } catch (err) {
         if (!controller.signal.aborted && !reportedError) {
-          notify(err.message, 'error')
+          setSyncError('Could not refresh shared activity. Your saved data has not been removed. ' + err.message)
+          if (err.status === 401 || err.status === 403) { setRows([]); setSharedWallets([]) }
           reportedError = true
         }
       } finally {
@@ -83,7 +83,7 @@ export default function SharedTransactions() {
         if (!controller.signal.aborted) setLoading(false)
       }
     }
-    const timer = setTimeout(sync, 160)
+    const timer = setTimeout(sync, search ? 180 : 0)
     const interval = setInterval(sync, 5000)
     window.addEventListener('focus', sync)
     document.addEventListener('visibilitychange', sync)
@@ -127,7 +127,7 @@ export default function SharedTransactions() {
   }
 
   const openNew = () => {
-    const walletId = editableWallets[0]?.wallet_id || ''
+    const walletId = editableWallets.find(w => String(w.wallet_id) === walletFilter)?.wallet_id || editableWallets[0]?.wallet_id || ''
     setEditing(null); setDraft(blankTx(walletId)); setModal(true)
   }
 
@@ -167,13 +167,11 @@ export default function SharedTransactions() {
   }
 
   return <div className="stack gap-18">
-    <section className="shared-intro glass">
-      <div><p className="eyebrow">Collaborative ledger</p><h2>Shared Transactions</h2><p className="muted">Share selected wallets by email. View-only members can follow activity; editors can add, change, and remove transactions.</p></div>
-      <span className="shared-intro-icon"><Share2/></span>
-    </section>
+    {syncError && <div className="form-error" role="alert">{syncError}<button className="button ghost small" onClick={refresh}>Retry</button></div>}
+    <div className="section-row"><h3>Wallets & balances</h3><button className="button ghost" onClick={() => setInviteOpen(true)}><MailPlus size={17}/>Share a wallet</button></div>
 
     <section className="shared-grid">
-      <div className="panel glass">
+      <Modal open={inviteOpen} onClose={() => setInviteOpen(false)} title="Share a wallet">
         <div className="panel-head"><div><p className="eyebrow">Share a wallet</p><h3>Invite by email</h3></div><MailPlus className="muted-icon"/></div>
         <form className="stack gap-12" onSubmit={submitShare}>
           <label className="field"><span>Wallet</span><select required value={share.wallet_id} onChange={e => setShare({ ...share, wallet_id: e.target.value })}><option value="">Choose a wallet</option>{personalWallets.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}</select></label>
@@ -181,11 +179,11 @@ export default function SharedTransactions() {
           <label className="field"><span>Permission</span><select value={share.permission} onChange={e => setShare({ ...share, permission: e.target.value })}><option value="view">Can view</option><option value="edit">Can edit</option></select></label>
           <button className="button primary self-start" disabled={sharing || !share.wallet_id || !share.email}>{sharing ? 'Sharing…' : 'Share wallet'}</button>
         </form>
-      </div>
+      </Modal>
 
       <div className="panel glass">
         <div className="panel-head"><div><p className="eyebrow">Access</p><h3>Shared wallets</h3></div><Users className="muted-icon"/></div>
-        {!sharedWallets.length ? <EmptyState title="Nothing shared yet" text="Invite someone above, or ask another FlowBudget user to share a wallet with your email."/> : <div className="shared-wallet-list">
+        {!sharedWallets.length ? (loading ? <div className="list-skeleton"><i/><i/></div> : <EmptyState title={syncError ? 'Connection interrupted' : 'Nothing shared yet'} text={syncError ? 'Retry to load your wallets.' : 'Share a wallet or ask its owner for access.'}/>) : <div className="shared-wallet-list">
           {sharedWallets.map(wallet => <div className="shared-wallet-card" key={wallet.wallet_id}>
             <div className="shared-wallet-title"><i style={{ background: wallet.color }}/><div><strong>{wallet.name}</strong><small>{wallet.is_owner ? 'You own this wallet' : `Owned by ${wallet.owner_name || wallet.owner_email}`}</small></div><div className="shared-wallet-meta"><span><small>Remaining</small><strong>{fmt(wallet.balance)}</strong></span><span className={`permission-pill ${wallet.can_edit ? 'edit' : 'view'}`}>{wallet.can_edit ? 'Can edit' : 'View only'}</span></div></div>
             {wallet.is_owner && wallet.shares?.length > 0 && <div className="share-members">{wallet.shares.map(member => <div key={member.id}><span><strong>{member.email}</strong><small>{member.permission === 'edit' ? 'Can edit' : 'Can view'} · {member.registered ? 'Active user' : 'Pending signup'}</small></span><button className="row-icon danger" onClick={() => revoke(member)} aria-label={`Remove ${member.email}`}><Trash2/></button></div>)}</div>}
@@ -203,7 +201,7 @@ export default function SharedTransactions() {
 
     <section className="panel glass">
       <div className="panel-head"><div><p className="eyebrow">Shared ledger</p><h3>{rows.length} transaction{rows.length === 1 ? '' : 's'}</h3></div><Share2 size={18} className="muted-icon"/></div>
-      {loading ? <div className="list-skeleton"><i/><i/><i/></div> : !rows.length ? <EmptyState title="No shared transactions" text="Shared-wallet activity will appear here."/> : <div className="date-groups">
+      {loading && !rows.length ? <div className="list-skeleton"><i/><i/><i/></div> : !rows.length ? <EmptyState title={syncError ? 'Activity unavailable' : 'No shared transactions'} text={syncError ? 'Try again when your connection recovers.' : 'Shared-wallet activity will appear here.'}/> : <div className="date-groups">
         {Object.entries(grouped).map(([day, txs]) => <div className="date-group" key={day}>
           <div className="date-label"><strong>{format(new Date(day+'T12:00:00'), 'EEEE')}</strong><span>{format(new Date(day+'T12:00:00'), 'dd MMM yyyy')}</span></div>
           <AnimatePresence>{txs.map(tx => <motion.div className="transaction-row roomy shared-transaction-row" key={tx.id} layout initial={{opacity:0,y:6}} animate={{opacity:1,y:0}} exit={{opacity:0,x:20}}>

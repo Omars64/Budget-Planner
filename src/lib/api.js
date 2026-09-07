@@ -1,9 +1,15 @@
 const tokenKey = 'flowbudget_token'
+const responseCache = new Map()
+export const readCached = path => {
+  const value = responseCache.get(path)
+  return value?.token === auth.token && Date.now() - value.time < 60000 ? value.data : undefined
+}
 
 export const auth = {
   get token() { return sessionStorage.getItem(tokenKey) || '' },
   set token(value) { value ? sessionStorage.setItem(tokenKey, value) : sessionStorage.removeItem(tokenKey) },
   clear() {
+    responseCache.clear()
     sessionStorage.removeItem(tokenKey)
     Object.keys(sessionStorage).filter(key => key.startsWith('flowbudget_note_draft_')).forEach(key => sessionStorage.removeItem(key))
   },
@@ -25,6 +31,9 @@ export async function api(path, options = {}) {
     error.status = response.status
     throw error
   }
+  if (!options.method || options.method === 'GET') {
+    if (path.startsWith('/api/shared/') || path === '/api/wallets') responseCache.set(path, { token: auth.token, time: Date.now(), data })
+  } else responseCache.clear()
   return data
 }
 

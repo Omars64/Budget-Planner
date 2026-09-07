@@ -178,3 +178,23 @@ class Feedback(Base):
     status = Column(String(20), nullable=False, default="new")
     reply = Column(Text, nullable=False, default="")
     created_at = Column(DateTime, nullable=False, default=utc_now)
+
+
+class RecoveryPoint(Base):
+    __tablename__ = "recovery_points"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    actor_id = Column(Integer, nullable=False)
+    reason = Column(String(200), nullable=False)
+    payload = Column(Text, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=utc_now)
+
+
+class NoteRevision(Base):
+    __tablename__ = "note_revisions"
+    id = Column(Integer, primary_key=True)
+    note_id = Column(Integer, ForeignKey("notes.id"), nullable=False, index=True)
+    title = Column(String(160), nullable=False)
+    content = Column(Text, nullable=False)
+    version = Column(Integer, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=utc_now)

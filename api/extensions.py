@@ -16,8 +16,9 @@ from typing import Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from pydantic import BaseModel, Field, model_validator
-from sqlalchemy import or_
-from sqlalchemy.orm import Session
+from sqlalchemy import or_, func
+from sqlalchemy.orm import Session, joinedload
+from .data_safety import save_recovery
 
 from .database import get_db
 from .models import Category, PendingSignup, Transaction, User, Wallet, WalletShare
@@ -183,12 +184,12 @@ def can_edit_wallet(db: Session, user: User, wallet_id: Optional[int]) -> bool:
     return bool(db.query(WalletShare).filter(WalletShare.wallet_id == wallet_id, WalletShare.permission == "edit", or_(WalletShare.member_user_id == user.id, WalletShare.invitee_email == normalize_email(user.email))).first())
 
 
-def shared_tx_payload(db: Session, user: User, tx: Transaction, visible_ids: set[int]) -> dict:
+def shared_tx_payload(db: Session, user: User, tx: Transaction, visible_ids: set[int], context=None) -> dict:
     names = []
     if tx.wallet_id in visible_ids and tx.wallet: names.append(tx.wallet.name)
     if tx.transfer_wallet_id in visible_ids and tx.transfer_wallet: names.append(tx.transfer_wallet.name)
-    owner = db.get(User, tx.user_id)
-    editable = can_edit_wallet(db, user, tx.wallet_id) and (tx.type != "transfer" or can_edit_wallet(db, user, tx.transfer_wallet_id))
+    owner = context[0].get(tx.user_id) if context else db.get(User, tx.user_id)
+    editable = (tx.wallet_id in context[1] and (tx.type != "transfer" or tx.transfer_wallet_id in context[1])) if context else can_edit_wallet(db, user, tx.wallet_id) and (tx.type != "transfer" or can_edit_wallet(db, user, tx.transfer_wallet_id))
     return {
         "id": tx.id, "type": tx.type, "amount": float(tx.amount), "description": tx.description, "notes": tx.notes or "", "date": tx.date.isoformat(),
         "wallet_id": tx.wallet_id, "transfer_wallet_id": tx.transfer_wallet_id, "category_id": tx.category_id,
@@ -278,17 +279,18 @@ def update_appearance(payload: AppearanceIn, user: User = Depends(current_user),
 def shared_wallets(user: User = Depends(current_user), db: Session = Depends(get_db)):
     email = normalize_email(user.email)
     incoming = db.query(WalletShare).filter(or_(WalletShare.member_user_id == user.id, WalletShare.invitee_email == email)).all()
-    for share in incoming:
-        if share.member_user_id is None: share.member_user_id = user.id
-    db.commit()
     incoming_map = {s.wallet_id: s for s in incoming}
     outgoing = db.query(WalletShare).filter(WalletShare.owner_id == user.id).all(); outgoing_map = {}
     for s in outgoing: outgoing_map.setdefault(s.wallet_id, []).append(s)
     ids = set(incoming_map) | set(outgoing_map); wallets = db.query(Wallet).filter(Wallet.id.in_(ids)).all() if ids else []
+    owners = {o.id: o for o in db.query(User).filter(User.id.in_({w.user_id for w in wallets})).all()} if wallets else {}
+    totals = {(wallet_id, kind): amount for wallet_id, kind, amount in db.query(Transaction.wallet_id, Transaction.type, func.sum(Transaction.amount)).filter(Transaction.wallet_id.in_(ids)).group_by(Transaction.wallet_id, Transaction.type).all()} if ids else {}
+    incoming_totals = dict(db.query(Transaction.transfer_wallet_id, func.sum(Transaction.amount)).filter(Transaction.type == "transfer", Transaction.transfer_wallet_id.in_(ids)).group_by(Transaction.transfer_wallet_id).all()) if ids else {}
     result = []
     for wallet in wallets:
-        owner = db.get(User, wallet.user_id); is_owner = wallet.user_id == user.id; incoming_share = incoming_map.get(wallet.id); shares = outgoing_map.get(wallet.id, []) if is_owner else []
-        result.append({"wallet_id": wallet.id, "name": wallet.name, "type": wallet.type, "color": wallet.color, "balance": wallet_balance(db, wallet), "owner_email": owner.email if owner else "", "owner_name": owner.username if owner else "", "is_owner": is_owner, "permission": "edit" if is_owner else incoming_share.permission, "can_edit": is_owner or incoming_share.permission == "edit", "shares": [{"id": s.id, "email": s.invitee_email, "permission": s.permission, "registered": bool(s.member_user_id)} for s in shares]})
+        owner = owners.get(wallet.user_id); is_owner = wallet.user_id == user.id; incoming_share = incoming_map.get(wallet.id); shares = outgoing_map.get(wallet.id, []) if is_owner else []
+        balance = float(wallet.initial_balance) + float(totals.get((wallet.id, "income"), 0)) - float(totals.get((wallet.id, "expense"), 0)) - float(totals.get((wallet.id, "transfer"), 0)) + float(incoming_totals.get(wallet.id, 0))
+        result.append({"wallet_id": wallet.id, "name": wallet.name, "type": wallet.type, "color": wallet.color, "balance": round(balance, 3), "owner_email": owner.email if owner else "", "owner_name": owner.username if owner else "", "is_owner": is_owner, "permission": "edit" if is_owner else incoming_share.permission, "can_edit": is_owner or incoming_share.permission == "edit", "shares": [{"id": s.id, "email": s.invitee_email, "permission": s.permission, "registered": bool(s.member_user_id)} for s in shares]})
     return sorted(result, key=lambda item: (not item["is_owner"], item["name"].lower()))
 
 
@@ -329,12 +331,16 @@ def shared_transactions(search: str = "", tx_type: str = "all", wallet_id: Optio
         if wallet_id not in ids: raise HTTPException(403, "This wallet is not shared with you")
         ids = {wallet_id}
     for owner_id in {w.user_id for w in db.query(Wallet).filter(Wallet.id.in_(ids)).all()}: materialize_recurring_for_user(db, owner_id)
-    q = db.query(Transaction).filter(or_(Transaction.wallet_id.in_(ids), Transaction.transfer_wallet_id.in_(ids)))
+    q = db.query(Transaction).options(joinedload(Transaction.wallet), joinedload(Transaction.transfer_wallet), joinedload(Transaction.category)).filter(or_(Transaction.wallet_id.in_(ids), Transaction.transfer_wallet_id.in_(ids)))
     if search: q = q.filter(or_(Transaction.description.ilike(f"%{search}%"), Transaction.notes.ilike(f"%{search}%")))
     if tx_type != "all":
         if tx_type not in {"income", "expense", "transfer"}: raise HTTPException(422, "Invalid transaction type")
         q = q.filter(Transaction.type == tx_type)
-    return [shared_tx_payload(db, user, tx, ids) for tx in q.order_by(Transaction.date.desc(), Transaction.id.desc()).limit(limit).all()]
+    rows = q.order_by(Transaction.date.desc(), Transaction.id.desc()).limit(limit).all()
+    owners = {u.id: u for u in db.query(User).filter(User.id.in_({t.user_id for t in rows})).all()}
+    editable = {r[0] for r in db.query(Wallet.id).filter_by(user_id=user.id).all()}
+    editable.update(r[0] for r in db.query(WalletShare.wallet_id).filter(WalletShare.permission == "edit", or_(WalletShare.member_user_id == user.id, WalletShare.invitee_email == normalize_email(user.email))).all())
+    return [shared_tx_payload(db, user, tx, ids, (owners, editable)) for tx in rows]
 
 
 @router.post("/api/shared/transactions", status_code=201)
@@ -358,4 +364,6 @@ def delete_shared_transaction(transaction_id: int, user: User = Depends(current_
     row = db.get(Transaction, transaction_id)
     if not row: raise HTTPException(404, "Transaction not found")
     if not can_edit_wallet(db, user, row.wallet_id) or (row.type == "transfer" and not can_edit_wallet(db, user, row.transfer_wallet_id)): raise HTTPException(403, "You do not have edit access to this transaction")
+    save_recovery(db, db.get(User, row.user_id), user, f"Deleted shared transaction: {row.description}")
+    db.query(Transaction).filter(Transaction.recurring_parent_id == row.id).update({Transaction.recurring_parent_id: None}, synchronize_session=False)
     db.delete(row); db.commit(); return Response(status_code=status.HTTP_204_NO_CONTENT)

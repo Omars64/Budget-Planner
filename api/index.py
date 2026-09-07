@@ -27,6 +27,8 @@ from .schemas import (
     SettingsPayload, TransactionIn, UserCreate, UserUpdate, WalletIn,
 )
 from .seed import EXPENSE_CATEGORIES, INCOME_CATEGORIES, seed_database
+from .models import RecoveryPoint, NoteRevision
+from .data_safety import save_recovery, clear_budget, clear_notes
 
 APP_SECRET = os.getenv("APP_SECRET", "flowbudget-dev-secret-change-me")
 serializer = URLSafeTimedSerializer(APP_SECRET, salt="flowbudget-lock")
@@ -239,18 +241,14 @@ def materialize_recurring_for_user(db: Session, user_id: int) -> int:
         Transaction.user_id == user_id,
         Transaction.recurring_frequency != "none",
         Transaction.recurring_parent_id.is_(None),
-    ).all()
+    ).with_for_update().all()
     for template in templates:
+        existing_dates = {r[0] for r in db.query(Transaction.date).filter(Transaction.user_id == user_id, Transaction.recurring_parent_id == template.id).all()}
         occurrence = next_occurrence(template.date, template.recurring_frequency)
         until = template.recurring_until
         safety = 0
         while occurrence <= now and (not until or occurrence.date() <= until) and safety < 1000:
-            exists = db.query(Transaction.id).filter(
-                Transaction.user_id == user_id,
-                Transaction.recurring_parent_id == template.id,
-                Transaction.date == occurrence,
-            ).first()
-            if not exists:
+            if occurrence not in existing_dates:
                 db.add(Transaction(
                     user_id=user_id, type=template.type, amount=template.amount, description=template.description,
                     notes=template.notes, date=occurrence, wallet_id=template.wallet_id,
@@ -421,10 +419,12 @@ def admin_delete_user(user_id: int, admin: User = Depends(admin_user), db: Sessi
     db.query(WalletShare).filter(WalletShare.invitee_email == normalize_email(row.email)).delete(synchronize_session=False)
     db.query(PendingSignup).filter(PendingSignup.email == normalize_email(row.email)).delete(synchronize_session=False)
     note_ids = db.query(Note.id).filter(Note.user_id == user_id)
+    db.query(NoteRevision).filter(NoteRevision.note_id.in_(note_ids)).delete(synchronize_session=False)
     db.query(NoteShare).filter(or_(NoteShare.member_id == user_id, NoteShare.note_id.in_(note_ids))).delete(synchronize_session=False)
     db.query(Note).filter_by(user_id=user_id).delete()
     db.query(NoteFolder).filter_by(user_id=user_id).delete()
     db.query(Feedback).filter_by(user_id=user_id).delete()
+    db.query(RecoveryPoint).filter_by(user_id=user_id).delete()
     for model in [Transaction, Budget, Goal, Debt, Category, Wallet]:
         db.query(model).filter(model.user_id == user_id).delete()
     db.query(AppSetting).filter(AppSetting.user_id == user_id).delete()
@@ -510,11 +510,17 @@ def update_wallet(item_id: int, payload: WalletIn, user: User = Depends(current_
 
 
 @app.delete("/api/wallets/{item_id}", status_code=204)
-def delete_wallet(item_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def delete_wallet(item_id: int, delete_transactions: bool = False, user: User = Depends(current_user), db: Session = Depends(get_db)):
     row = db.query(Wallet).filter(Wallet.id == item_id, Wallet.user_id == user.id).first()
     if not row: raise HTTPException(404, "Wallet not found")
     used = db.query(Transaction).filter(Transaction.user_id == user.id, or_(Transaction.wallet_id == item_id, Transaction.transfer_wallet_id == item_id)).first()
-    if used: raise HTTPException(409, "Wallet has transactions. Archive it instead of deleting it.")
+    if used and not delete_transactions: raise HTTPException(409, "Confirm deletion of this wallet and its linked transactions")
+    save_recovery(db, user, user, f"Deleted wallet: {row.name}")
+    set_setting(db, user.id, "workspace_initialized", "true")
+    linked = db.query(Transaction.id).filter(Transaction.user_id == user.id, or_(Transaction.wallet_id == item_id, Transaction.transfer_wallet_id == item_id))
+    db.query(Transaction).filter(Transaction.user_id == user.id, Transaction.recurring_parent_id.in_(linked)).update({Transaction.recurring_parent_id: None}, synchronize_session=False)
+    db.query(Transaction).filter(Transaction.user_id == user.id, or_(Transaction.wallet_id == item_id, Transaction.transfer_wallet_id == item_id)).delete(synchronize_session=False)
+    db.query(WalletShare).filter_by(wallet_id=item_id).delete()
     db.delete(row); db.commit()
 
 
@@ -591,6 +597,7 @@ def update_transaction(item_id: int, payload: TransactionIn, user: User = Depend
 def delete_transaction(item_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
     row = db.query(Transaction).filter(Transaction.id == item_id, Transaction.user_id == user.id).first()
     if not row: raise HTTPException(404, "Transaction not found")
+    save_recovery(db, user, user, f"Deleted transaction: {row.description}")
     db.query(Transaction).filter(Transaction.user_id == user.id, Transaction.recurring_parent_id == item_id).delete()
     db.delete(row); db.commit()
 
@@ -761,6 +768,9 @@ def export_backup(user: User = Depends(current_user), db: Session = Depends(get_
         "goals": [{**{c.name: getattr(g, c.name) for c in Goal.__table__.columns if c.name not in {"created_at", "user_id"}}, "deadline": g.deadline.isoformat() if g.deadline else None} for g in db.query(Goal).filter(Goal.user_id == user.id).all()],
         "debts": [{**{c.name: getattr(d, c.name) for c in Debt.__table__.columns if c.name not in {"created_at", "user_id"}}, "due_date": d.due_date.isoformat() if d.due_date else None} for d in db.query(Debt).filter(Debt.user_id == user.id).all()],
         "settings": {s.key: s.value for s in db.query(AppSetting).filter(AppSetting.user_id == user.id).all() if s.key != "pin_hash"},
+        "wallet_shares": [{"wallet_id": s.wallet_id, "email": s.invitee_email, "permission": s.permission} for s in db.query(WalletShare).filter_by(owner_id=user.id).all()],
+        "note_folders": [{"id": f.id, "name": f.name} for f in db.query(NoteFolder).filter_by(user_id=user.id).all()],
+        "notes": [{"id": n.id, "title": n.title, "content": n.content, "folder_id": n.folder_id, "pinned": n.pinned} for n in db.query(Note).filter_by(user_id=user.id).all()],
     }
     return payload
 
@@ -769,9 +779,23 @@ def export_backup(user: User = Depends(current_user), db: Session = Depends(get_
 async def restore_backup(request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
     data = await request.json()
     if data.get("version") != 1: raise HTTPException(400, "Unsupported backup version")
+    # Reject foreign IDs before replacing any account data.
+    try:
+        wallet_ids = {w["id"] for w in data.get("wallets", [])}
+        category_ids = {c["id"] for c in data.get("categories", [])}
+        for tx in data.get("transactions", []):
+            if tx["wallet_id"] not in wallet_ids or (tx.get("transfer_wallet_id") and tx["transfer_wallet_id"] not in wallet_ids) or (tx.get("category_id") and tx["category_id"] not in category_ids):
+                raise ValueError("Invalid transaction reference")
+        for budget in data.get("budgets", []):
+            if budget.get("category_id") and budget["category_id"] not in category_ids: raise ValueError("Invalid category reference")
+        for share in data.get("wallet_shares", []):
+            if share["wallet_id"] not in wallet_ids or share["permission"] not in {"view", "edit"}: raise ValueError("Invalid share")
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(400, "Backup contains invalid references")
+    save_recovery(db, user, user, "Before backup restore")
     # Preserve PIN while replacing budget data.
     pin_hash = setting(db, user.id, "pin_hash")
-    for model in [Transaction, Budget, Goal, Debt, Category, Wallet]: db.query(model).filter(model.user_id == user.id).delete()
+    clear_budget(db, user.id)
     for s in db.query(AppSetting).filter(AppSetting.user_id == user.id).all(): db.delete(s)
     db.flush()
     wallet_map = {}
@@ -817,7 +841,20 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
     for d in data.get("debts", []):
         d = {k: v for k, v in dict(d).items() if k not in {"id", "user_id"}}
         d["due_date"] = date.fromisoformat(d["due_date"]) if d.get("due_date") else None; db.add(Debt(user_id=user.id, **d))
-    for k, v in data.get("settings", {}).items(): db.add(AppSetting(user_id=user.id, key=k, value=str(v)))
+    for k, v in data.get("settings", {}).items():
+        if k not in {"pin_hash", "workspace_initialized"}: db.add(AppSetting(user_id=user.id, key=k, value=str(v)))
+    db.add(AppSetting(user_id=user.id, key="workspace_initialized", value="true"))
+    for share in data.get("wallet_shares", []):
+        email = normalize_email(share["email"])
+        member = db.query(User).filter_by(email=email, active=True).first()
+        db.add(WalletShare(wallet_id=wallet_map[share["wallet_id"]], owner_id=user.id, invitee_email=email, member_user_id=member.id if member else None, permission=share["permission"]))
+    if "notes" in data:
+        clear_notes(db, user.id)
+        folder_map = {}
+        for folder in data.get("note_folders", []):
+            row = NoteFolder(user_id=user.id, name=folder["name"]); db.add(row); db.flush(); folder_map[folder["id"]] = row.id
+        for note in data["notes"]:
+            db.add(Note(user_id=user.id, title=note["title"], content=note.get("content", ""), folder_id=folder_map.get(note.get("folder_id")), pinned=bool(note.get("pinned"))))
     if pin_hash: db.add(AppSetting(user_id=user.id, key="pin_hash", value=pin_hash))
     db.commit()
     return {"ok": True}
@@ -825,16 +862,7 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
 
 @app.post("/api/reset-demo")
 def reset_demo(user: User = Depends(current_user), db: Session = Depends(get_db)):
-    pin_hash = setting(db, user.id, "pin_hash")
-    for model in [Transaction, Budget, Goal, Debt, Category, Wallet]: db.query(model).filter(model.user_id == user.id).delete()
-    db.query(AppSetting).filter(AppSetting.user_id == user.id).delete()
-    db.commit()
-    if user.role == "admin":
-        seed_database(db, include_demo=True)
-    else:
-        seed_user_workspace(db, user.id)
-    if pin_hash: set_setting(db, user.id, "pin_hash", pin_hash); db.commit()
-    return {"ok": True}
+    raise HTTPException(410, "Demo reset has been replaced by Clear my workspace in Settings")
 
 
 @app.exception_handler(OperationalError)

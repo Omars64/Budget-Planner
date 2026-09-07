@@ -64,3 +64,25 @@ def test_feedback_privacy_reply_rate_limit_and_password_session_invalidation():
         assert client.put(f"/api/admin/users/{user['id']}", headers=admin, json={**user, 'password': 'NewStrongPass123!'}).status_code == 200
         assert client.get('/api/auth/me', headers=member).status_code == 401
         assert client.delete(f"/api/admin/users/{user['id']}", headers=admin).status_code == 204
+
+
+def test_wallet_delete_recovery_and_explicit_workspace_clear():
+    with TestClient(app) as client:
+        admin = login(client, 'omarsolanki46@gmail.com', 'FlowBudgetAdmin!ChangeMe2026')
+        user = client.post('/api/admin/users', headers=admin, json={'username': 'Safety user', 'email': 'safety-user@example.com', 'password': 'StrongPass123!'}).json()
+        member = login(client, user['email'])
+        wallet = client.get('/api/wallets', headers=member).json()[0]
+        category = client.get('/api/categories?kind=expense', headers=member).json()[0]
+        tx = {'type': 'expense', 'amount': 4, 'description': 'Wallet deletion guard', 'notes': '', 'date': '2026-09-03T12:00:00', 'wallet_id': wallet['id'], 'transfer_wallet_id': None, 'category_id': category['id'], 'recurring_frequency': 'none', 'recurring_until': None}
+        assert client.post('/api/transactions', headers=member, json=tx).status_code == 201
+        assert client.delete(f"/api/wallets/{wallet['id']}", headers=member).status_code == 409
+        assert client.delete(f"/api/wallets/{wallet['id']}?delete_transactions=true", headers=member).status_code == 204
+        assert all(row['id'] != wallet['id'] for row in client.get('/api/wallets', headers=member).json())
+        assert any('Deleted wallet' in item['reason'] for item in client.get('/api/recovery', headers=member).json())
+
+        note = client.post('/api/notes', headers=member, json={'title': 'Clear me', 'content': 'Temporary'}).json()
+        cleared = client.post('/api/workspace/clear', headers=member, json={'confirmation': 'CLEAR', 'scope': 'workspace'})
+        assert cleared.status_code == 200 and cleared.json()['recovery_id']
+        assert client.get('/api/notes', headers=member).json() == []
+        assert client.get(f"/api/recovery/{cleared.json()['recovery_id']}", headers=member).json()['notes'][0]['id'] == note['id']
+        assert client.delete(f"/api/admin/users/{user['id']}", headers=admin).status_code == 204

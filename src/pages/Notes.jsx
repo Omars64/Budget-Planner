@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Download, Folder, FolderPlus, FileText, Pin, Plus, Save, Search, Share2, Trash2, Pencil, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Download, Folder, FolderPlus, FileText, History, Pin, Plus, Save, Search, Share2, Trash2, Pencil, RefreshCw } from 'lucide-react'
 import { api, jsonBody } from '../lib/api'
 import { useApp } from '../App'
 import Modal from '../components/Modal'
@@ -22,6 +22,8 @@ export default function Notes() {
   const [error, setError] = useState('')
   const [folderEdit, setFolderEdit] = useState(null)
   const [sharing, setSharing] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [history, setHistory] = useState([])
   const [invite, setInvite] = useState({ email: '', permission: 'view' })
 
   useEffect(() => {
@@ -92,6 +94,10 @@ export default function Notes() {
     try { await api(`/api/notes/${draft.id}/shares/${item.id}`, { method: 'DELETE' }); setDraft((await load()).find(n => n.id === draft.id)) }
     catch (err) { notify(err.message, 'error') }
   }
+  const showHistory = async () => {
+    try { setHistory(await api(`/api/notes/${draft.id}/history`)); setHistoryOpen(true) }
+    catch (err) { notify(err.message, 'error') }
+  }
   const download = () => {
     const url = URL.createObjectURL(new Blob([`${draft.title}\n\n${draft.content}`], { type: 'text/plain' }))
     const link = document.createElement('a'); link.href = url; link.download = 'FlowBudget-note.txt'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000)
@@ -113,6 +119,7 @@ export default function Notes() {
         <div className="reader-toolbar"><button className="icon-button" title="Back to notes" aria-label="Back to notes" onClick={() => select(null)}><ArrowLeft size={18}/></button><span className="save-state">{dirty ? 'Unsaved changes' : draft.id ? 'Saved' : 'New note'}{!draft.can_edit && ' · View only'}</span><div className="button-row">
           <button className="icon-button" title="Download note" aria-label="Download note" onClick={download}><Download size={17}/></button>
           {draft.is_owner && <button className={`icon-button ${draft.pinned ? 'is-pinned' : ''}`} title="Pin note" aria-label="Pin note" aria-pressed={draft.pinned} onClick={() => change({ pinned: !draft.pinned })}><Pin size={17}/></button>}
+          {draft.id && draft.is_owner && <button className="icon-button" title="Version history" aria-label="Version history" onClick={showHistory}><History size={17}/></button>}
           {draft.id && draft.is_owner && <><button className="icon-button" title="Share note" aria-label="Share note" disabled={dirty} onClick={() => setSharing(true)}><Share2 size={17}/></button><button className="icon-button" title="Delete note" aria-label="Delete note" disabled={busy} onClick={remove}><Trash2 size={17}/></button></>}
           {draft.can_edit && <button className="button primary" disabled={busy || !draft.title.trim() || (!dirty && draft.id)} onClick={save}><Save size={16}/>{busy ? 'Saving...' : 'Save'}</button>}
         </div></div>
@@ -125,5 +132,6 @@ export default function Notes() {
     </section>
     <Modal open={!!folderEdit} onClose={() => setFolderEdit(null)} title={folderEdit?.id ? 'Rename folder' : 'New folder'}><form className="stack gap-16" onSubmit={saveFolder}><label className="field"><span>Folder name</span><input required maxLength={80} value={folderEdit?.name || ''} onChange={e => setFolderEdit(f => ({ ...f, name: e.target.value }))}/></label><button className="button primary" disabled={busy || !folderEdit?.name.trim()}>Save folder</button></form></Modal>
     <Modal open={sharing} onClose={() => setSharing(false)} title="Share note"><form onSubmit={share} className="stack gap-16"><label className="field"><span>Account email</span><input required type="email" value={invite.email} onChange={e => setInvite({ ...invite, email: e.target.value })}/></label><label className="field"><span>Permission</span><select value={invite.permission} onChange={e => setInvite({ ...invite, permission: e.target.value })}><option value="view">Can view</option><option value="edit">Can edit</option></select></label><button disabled={busy} className="button primary">Share note</button></form><div className="note-shares">{draft?.shares?.map(s => <div key={s.id}><span>{s.email}<small>{s.permission === 'edit' ? 'Can edit' : 'Can view'}</small></span><button className="icon-button" title="Remove access" aria-label={`Remove ${s.email}`} onClick={() => unshare(s)}><Trash2 size={16}/></button></div>)}</div></Modal>
+    <Modal open={historyOpen} onClose={() => setHistoryOpen(false)} title="Version history"><div className="note-history">{!history.length ? <p className="muted">No earlier versions yet.</p> : history.map(item => <article key={item.id}><div><strong>Version {item.version}</strong><small>{new Date(item.created_at).toLocaleString()}</small></div><p>{item.content || 'Empty note'}</p></article>)}</div></Modal>
   </div>
 }

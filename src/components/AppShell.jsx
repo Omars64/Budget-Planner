@@ -46,7 +46,6 @@ export default function AppShell({ children }) {
       <div className="sidebar-foot glass-subtle">
         {appearance.profile_image ? <img className="sidebar-avatar" src={appearance.profile_image} alt="Profile"/> : <PiggyBank size={22}/>}<div><strong>{user?.username || 'FlowBudget'}</strong><small>{user?.role === 'admin' ? 'Admin account' : 'Personal workspace'}</small></div>
       </div>
-      <button className="button ghost sidebar-signout" onClick={lock}><LogOut size={17}/>Sign out</button>
     </aside>
     {menu && <div className="sidebar-scrim" onClick={() => setMenu(false)} />}
 
