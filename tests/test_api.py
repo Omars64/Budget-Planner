@@ -31,6 +31,11 @@ def test_auth_admin_user_management_and_isolation():
         user_id = r.json()['id']
         users = client.get('/api/admin/users', headers=admin).json()
         assert any(u['email'] == 'sara@example.com' for u in users)
+        user_categories = client.get(f'/api/admin/users/{user_id}/categories', headers=admin)
+        assert user_categories.status_code == 200 and any(c['name'] == 'Food & Dining' for c in user_categories.json())
+        added_category = client.post(f'/api/admin/users/{user_id}/categories', headers=admin, json={'name': 'Admin managed', 'kind': 'expense'}).json()
+        assert client.put(f"/api/admin/users/{user_id}/categories/{added_category['id']}", headers=admin, json={'name': 'Admin managed updated', 'kind': 'expense', 'icon': 'tag', 'color': '#123456'}).status_code == 200
+        assert client.delete(f"/api/admin/users/{user_id}/categories/{added_category['id']}", headers=admin).status_code == 204
 
         user_headers = auth_headers(client, 'sara@example.com', 'StrongPass123')
         assert client.get('/api/admin/users', headers=user_headers).status_code == 403

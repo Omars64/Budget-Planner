@@ -431,6 +431,45 @@ def admin_delete_user(user_id: int, admin: User = Depends(admin_user), db: Sessi
     db.delete(row); db.commit()
 
 
+@app.get("/api/admin/users/{user_id}/categories")
+def admin_user_categories(user_id: int, _: User = Depends(admin_user), db: Session = Depends(get_db)):
+    if not db.get(User, user_id):
+        raise HTTPException(404, "User not found")
+    return db.query(Category).filter(Category.user_id == user_id).order_by(Category.kind, Category.name).all()
+
+
+@app.post("/api/admin/users/{user_id}/categories", status_code=201)
+def admin_create_category(user_id: int, payload: CategoryIn, _: User = Depends(admin_user), db: Session = Depends(get_db)):
+    if not db.get(User, user_id):
+        raise HTTPException(404, "User not found")
+    row = Category(user_id=user_id, **payload.model_dump())
+    db.add(row); db.commit(); db.refresh(row)
+    return row
+
+
+@app.put("/api/admin/users/{user_id}/categories/{category_id}")
+def admin_update_category(user_id: int, category_id: int, payload: CategoryIn, _: User = Depends(admin_user), db: Session = Depends(get_db)):
+    row = db.query(Category).filter(Category.id == category_id, Category.user_id == user_id).first()
+    if not row:
+        raise HTTPException(404, "Category not found")
+    for key, value in payload.model_dump().items():
+        setattr(row, key, value)
+    db.commit(); db.refresh(row)
+    return row
+
+
+@app.delete("/api/admin/users/{user_id}/categories/{category_id}", status_code=204)
+def admin_delete_category(user_id: int, category_id: int, _: User = Depends(admin_user), db: Session = Depends(get_db)):
+    row = db.query(Category).filter(Category.id == category_id, Category.user_id == user_id).first()
+    if not row:
+        raise HTTPException(404, "Category not found")
+    if db.query(Transaction).filter(Transaction.user_id == user_id, Transaction.category_id == category_id).first():
+        raise HTTPException(409, "Category is in use by a transaction")
+    if db.query(Budget).filter(Budget.user_id == user_id, Budget.category_id == category_id).first():
+        raise HTTPException(409, "Category is in use by a budget")
+    db.delete(row); db.commit()
+
+
 @app.get("/api/security/status")
 def security_status(user: User = Depends(current_user), db: Session = Depends(get_db)):
     return {"enabled": pin_enabled(db, user.id)}
