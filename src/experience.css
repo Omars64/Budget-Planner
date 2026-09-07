@@ -19,8 +19,10 @@ body.has-wallpaper { --muted: #465964; }
 @keyframes request-spin { to { transform: rotate(360deg); } }
 @media(max-width:820px) { .top-actions .add-button { display:none; } .mobile-transaction-action { display:flex; justify-content:center; width:calc(100% - 32px); margin:0 16px 18px; min-height:50px; font-size:16px; } }
 @media(max-width:620px) { .transaction-wallets { grid-template-columns:1fr 1fr; } .transaction-wallet-balance { display:grid; gap:4px; } }
-.sidebar-signout { width:100%; justify-content:flex-start; margin-top:8px; flex-shrink:0; }
-.topbar { position:sticky; top:0; z-index:20; min-width:0; background:rgba(247,250,251,.92); border-bottom:1px solid var(--line); }
+.sidebar-signout { width:100%; justify-content:flex-start; margin-top:auto; flex-shrink:0; }
+.sidebar-foot { margin-top:8px; }
+.topbar { position:sticky; top:0; z-index:20; min-width:0; padding:0 12px; border-radius:0 0 24px 24px; background:rgba(247,250,251,.92); border:1px solid var(--line); border-top:0; box-shadow:0 10px 28px rgba(10,65,115,.07); }
+.panel { border-radius:26px; }
 .topbar-left, .top-actions { min-width:0; }
 @media(max-width:820px) { .topbar { height:62px; padding:0 2px; } .sidebar-signout { display:flex; } }
 @media(prefers-reduced-motion:reduce) { .request-spinner { animation:none; } }

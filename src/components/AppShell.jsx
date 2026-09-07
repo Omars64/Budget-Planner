@@ -44,10 +44,10 @@ export default function AppShell({ children }) {
           <Icon size={19}/><span>{label}</span>{label === 'Budgets' && <i className="nav-pulse"/>}
         </NavLink>)}
       </nav>
+      <button className="button ghost sidebar-signout" onClick={lock}><LogOut size={17}/><span>Sign out</span></button>
       <div className="sidebar-foot glass-subtle">
         {appearance.profile_image ? <img className="sidebar-avatar" src={appearance.profile_image} alt="Profile"/> : <span className="default-avatar"><Mountain size={24}/></span>}<div><strong>{user?.username || 'FlowBudget'}</strong><small>{user?.role === 'admin' ? 'Admin account' : 'Personal workspace'}</small></div>
       </div>
-      <button className="button ghost sidebar-signout" onClick={lock}><LogOut size={17}/><span>Sign out</span></button>
     </aside>
     {menu && <div className="sidebar-scrim" onClick={() => setMenu(false)} />}
 
