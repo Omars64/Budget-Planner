@@ -54,9 +54,23 @@ def add_default_settings(db: Session, user_id: int):
             db.add(AppSetting(user_id=user_id, key=key, value=value))
 
 
+def ensure_default_categories(db: Session, user_id: int):
+    """Restore missing built-in categories without touching custom categories."""
+    existing = {(row.name, row.kind) for row in db.query(Category).filter(Category.user_id == user_id).all()}
+    defaults = [(name, "expense", icon, color) for name, icon, color in EXPENSE_CATEGORIES]
+    defaults += [(name, "income", icon, color) for name, icon, color in INCOME_CATEGORIES]
+    for name, kind, icon, color in defaults:
+        if (name, kind) not in existing:
+            db.add(Category(user_id=user_id, name=name, kind=kind, icon=icon, color=color))
+
+
 def seed_database(db: Session, include_demo: bool = True, commit: bool = True):
     admin = ensure_admin_user(db)
     add_default_settings(db, admin.id)
+    category_migration = db.get(AppSetting, {"user_id": admin.id, "key": "default_categories_restored"})
+    if not category_migration:
+        ensure_default_categories(db, admin.id)
+        db.add(AppSetting(user_id=admin.id, key="default_categories_restored", value="true"))
     db.flush()
 
     initialized = db.get(AppSetting, {"user_id": admin.id, "key": "workspace_initialized"})
@@ -74,9 +88,7 @@ def seed_database(db: Session, include_demo: bool = True, commit: bool = True):
         Wallet(user_id=admin.id, name="Travel Card", type="card", initial_balance=210.0, icon="credit-card", color="#517fa4"),
     ]
     db.add_all(wallets)
-    categories = [Category(user_id=admin.id, name=n, kind="expense", icon=i, color=c) for n, i, c in EXPENSE_CATEGORIES]
-    categories += [Category(user_id=admin.id, name=n, kind="income", icon=i, color=c) for n, i, c in INCOME_CATEGORIES]
-    db.add_all(categories)
+    categories = db.query(Category).filter(Category.user_id == admin.id).all()
     db.flush()
 
     if include_demo:

@@ -26,7 +26,7 @@ from .schemas import (
     BudgetIn, CategoryIn, ContributionIn, DebtIn, GoalIn, LoginPayload, PinPayload,
     SettingsPayload, TransactionIn, UserCreate, UserUpdate, WalletIn,
 )
-from .seed import EXPENSE_CATEGORIES, INCOME_CATEGORIES, seed_database
+from .seed import EXPENSE_CATEGORIES, INCOME_CATEGORIES, ensure_default_categories, seed_database
 from .models import RecoveryPoint, NoteRevision
 from .data_safety import save_recovery, clear_budget, clear_notes
 
@@ -318,9 +318,7 @@ def seed_user_workspace(db: Session, user_id: int, commit: bool = True):
         set_setting(db, user_id, key, value)
     if not db.query(Wallet).filter(Wallet.user_id == user_id, Wallet.name.ilike("main wallet")).first():
         db.add(Wallet(user_id=user_id, name="Main Wallet", type="cash", initial_balance=0, icon="wallet", color="#0a4173"))
-    if db.query(Category).filter(Category.user_id == user_id).count() == 0:
-        db.add_all([Category(user_id=user_id, name=n, kind="expense", icon=i, color=c) for n, i, c in EXPENSE_CATEGORIES])
-        db.add_all([Category(user_id=user_id, name=n, kind="income", icon=i, color=c) for n, i, c in INCOME_CATEGORIES])
+    ensure_default_categories(db, user_id)
     if commit:
         db.commit()
 

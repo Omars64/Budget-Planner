@@ -37,6 +37,20 @@ def test_auth_admin_user_management_and_isolation():
         assert client.put(f"/api/admin/users/{user_id}/categories/{added_category['id']}", headers=admin, json={'name': 'Admin managed updated', 'kind': 'expense', 'icon': 'tag', 'color': '#123456'}).status_code == 200
         assert client.delete(f"/api/admin/users/{user_id}/categories/{added_category['id']}", headers=admin).status_code == 204
 
+        admin_categories = client.get(f"/api/admin/users/{me['id']}/categories", headers=admin).json()
+        missing = next(category for category in admin_categories if category['name'] == 'Other Income')
+        assert client.delete(f"/api/admin/users/{me['id']}/categories/{missing['id']}", headers=admin).status_code == 204
+        from api.database import SessionLocal
+        from api.models import AppSetting
+        from api.seed import seed_database
+        with SessionLocal() as db:
+            marker = db.get(AppSetting, {"user_id": me['id'], "key": "default_categories_restored"})
+            if marker:
+                db.delete(marker)
+            db.commit()
+            seed_database(db, include_demo=False)
+        assert any(category['name'] == 'Other Income' for category in client.get(f"/api/admin/users/{me['id']}/categories", headers=admin).json())
+
         user_headers = auth_headers(client, 'sara@example.com', 'StrongPass123')
         assert client.get('/api/admin/users', headers=user_headers).status_code == 403
         admin_wallets = client.get('/api/wallets', headers=admin).json()
