@@ -597,6 +597,13 @@ def categories(kind: Optional[str] = None, user: User = Depends(current_user), d
 def create_category(payload: CategoryIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
     row = Category(user_id=user.id, **payload.model_dump()); db.add(row); db.commit(); db.refresh(row); return row
 
+@app.put("/api/categories/{item_id}")
+def update_category(item_id: int, payload: CategoryIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    row = db.query(Category).filter(Category.id == item_id, Category.user_id == user.id).first()
+    if not row: raise HTTPException(404, "Category not found")
+    for key, value in payload.model_dump().items(): setattr(row, key, value)
+    db.commit(); db.refresh(row); return row
+
 
 @app.delete("/api/categories/{item_id}", status_code=204)
 def delete_category(item_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):

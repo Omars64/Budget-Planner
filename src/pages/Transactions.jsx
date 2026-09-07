@@ -32,7 +32,6 @@ export default function Transactions() {
     <section className="toolbar glass">
       <div className="search-box"><Search size={18}/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search transactions or notes" /></div>
       <div className="segment-control compact-control"><button className={type==='all'?'active':''} onClick={() => setType('all')}>All</button><button className={type==='expense'?'active':''} onClick={() => setType('expense')}>Expenses</button><button className={type==='income'?'active':''} onClick={() => setType('income')}>Income</button><button className={type==='transfer'?'active':''} onClick={() => setType('transfer')}>Transfers</button></div>
-      <button className="button primary desktop-only" onClick={() => {setEditing(null);setModal(true)}}><Plus size={18}/>New</button>
     </section>
 
     <section className="transaction-wallets" aria-label="Current wallet balances">

@@ -20,6 +20,7 @@ const BankMessages = lazy(() => import('./pages/BankMessages'))
 import BrandLogo from './components/BrandLogo'
 import { useConfirmation } from './components/Confirmation'
 import Experience from './components/Experience'
+import { biometricEnabled, unlockBiometric } from './lib/biometric'
 
 const AppContext = createContext(null)
 export const useApp = () => useContext(AppContext)
@@ -181,12 +182,16 @@ export default function App() {
   }, [appearance.wallpaper_image])
 
   useEffect(() => {
-    if (!auth.token) { setSession({ loading: false, user: null }); return }
-    api('/api/auth/me').then(async user => {
+    const resume = async () => {
+      if (!auth.token && biometricEnabled()) { const token = await unlockBiometric(); if (token) auth.token = token }
+      if (!auth.token) { setSession({ loading: false, user: null }); return }
+      api('/api/auth/me').then(async user => {
       const settingsOk = await loadSettings()
       setSession({ loading: false, user: settingsOk ? user : null })
       if (settingsOk) void loadAppearance()
-    }).catch(() => { auth.clear(); setSession({ loading: false, user: null }) })
+      }).catch(() => { auth.clear(); localStorage.removeItem('flowbudget_biometric_session'); setSession({ loading: false, user: null }) })
+    }
+    void resume()
   }, [loadSettings, loadAppearance])
 
   const signOut = useCallback(() => {
