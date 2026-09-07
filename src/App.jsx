@@ -14,6 +14,9 @@ import GoalsDebts from './pages/GoalsDebts'
 import Wallets from './pages/Wallets'
 import Settings from './pages/Settings'
 import Admin from './pages/Admin'
+import Notes from './pages/Notes'
+import Feedback from './pages/Feedback'
+import BrandLogo from './components/BrandLogo'
 import { useConfirmation } from './components/Confirmation'
 
 const AppContext = createContext(null)
@@ -77,7 +80,7 @@ function LoginScreen({ onLogin }) {
 
   return <div className="lock-screen auth-screen">
     <motion.div className="lock-card auth-card glass" initial={{ opacity: 0, y: 20, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }}>
-      <div className="brand-mark large"><Sparkles size={24} /></div>
+      <BrandLogo className="large" />
 
       {mode === 'login' && <>
         <p className="eyebrow">Welcome back</p>
@@ -198,7 +201,7 @@ export default function App() {
     refreshKey, refresh, notify, confirm, reloadSettings: loadSettings, reloadAppearance: loadAppearance, lock: signOut,
   }), [session.user, settings, appearance, refreshKey, refresh, notify, confirm, loadSettings, loadAppearance, signOut])
 
-  if (session.loading) return <div className="app-loading"><div className="brand-mark pulse"><Sparkles /></div></div>
+  if (session.loading) return <div className="app-loading"><BrandLogo className="pulse" /></div>
   if (!session.user) return <LoginScreen onLogin={completeLogin} />
 
   return <AppContext.Provider value={value}>
@@ -213,6 +216,8 @@ export default function App() {
         <Route path="/budgets" element={<Budgets />} />
         <Route path="/goals" element={<GoalsDebts />} />
         <Route path="/wallets" element={<Wallets />} />
+        <Route path="/notes" element={<Notes />} />
+        <Route path="/feedback" element={<Feedback />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/admin" element={session.user?.role === 'admin' ? <Admin /> : <Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />

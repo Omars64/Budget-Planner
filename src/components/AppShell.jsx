@@ -4,6 +4,8 @@ import { BarChart3, CalendarDays, Gauge, LayoutDashboard, LogOut, Menu, PiggyBan
 import { useState } from 'react'
 import { useApp } from '../App'
 import TransactionModal from './TransactionModal'
+import BrandLogo from './BrandLogo'
+import { NotebookPen, MessageSquare } from 'lucide-react'
 
 const nav = [
   ['/', 'Overview', LayoutDashboard],
@@ -14,6 +16,8 @@ const nav = [
   ['/budgets', 'Budgets', Gauge],
   ['/goals', 'Goals & debts', Target],
   ['/wallets', 'Wallets', WalletCards],
+  ['/notes', 'Notes', NotebookPen],
+  ['/feedback', 'Feedback', MessageSquare],
   ['/settings', 'Settings', Settings],
 ]
 
@@ -29,7 +33,7 @@ export default function AppShell({ children }) {
     <aside className={`sidebar glass ${menu ? 'open' : ''}`}>
       <div className="sidebar-head">
         <div className="brand">
-          <span className="brand-mark"><Sparkles size={18}/></span>
+          <BrandLogo />
           <div><strong>FlowBudget</strong><small>Personal finance</small></div>
         </div>
         <button className="icon-button mobile-only" onClick={() => setMenu(false)} aria-label="Close menu"><X size={19}/></button>
@@ -42,6 +46,7 @@ export default function AppShell({ children }) {
       <div className="sidebar-foot glass-subtle">
         {appearance.profile_image ? <img className="sidebar-avatar" src={appearance.profile_image} alt="Profile"/> : <PiggyBank size={22}/>}<div><strong>{user?.username || 'FlowBudget'}</strong><small>{user?.role === 'admin' ? 'Admin account' : 'Personal workspace'}</small></div>
       </div>
+      <button className="button ghost sidebar-signout" onClick={lock}><LogOut size={17}/>Sign out</button>
     </aside>
     {menu && <div className="sidebar-scrim" onClick={() => setMenu(false)} />}
 
@@ -51,7 +56,7 @@ export default function AppShell({ children }) {
           <button className="icon-button mobile-only" onClick={() => setMenu(true)} aria-label="Open menu"><Menu size={20}/></button>
           <div><p className="eyebrow">{settings.display_name}</p><h2>{title}</h2></div>
         </div>
-        <div className="button-row top-actions"><button className="button ghost desktop-only" onClick={lock}><LogOut size={17}/><span>Sign out</span></button><button className="button primary add-button" onClick={() => setTxModal(true)}><Plus size={18}/><span>Add transaction</span></button></div>
+        <div className="button-row top-actions"><button className="button ghost signout-button" title="Sign out" aria-label="Sign out" onClick={lock}><LogOut size={17}/><span>Sign out</span></button><button className="button primary add-button" onClick={() => setTxModal(true)}><Plus size={18}/><span>Add transaction</span></button></div>
       </header>
       <motion.div className="page-wrap" key={location.pathname} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .28 }}>{children}</motion.div>
     </main>

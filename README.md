@@ -28,6 +28,15 @@ The visual system is deliberately transparent/glass-like and uses **`#0a4173` as
 - Currency, week-start and number-format settings
 - Seeded demo dataset for immediate exploration
 - Responsive mobile / tablet / desktop layouts
+- Notes with folders, search, pinned notes, text export, and tab-session draft recovery
+- Shared notes for registered accounts, with owner-controlled view/edit permissions and version conflict detection
+- User feedback with categories and an admin inbox, reading pane, statuses, and replies visible to the sender
+- Mobile sign-out and shared-wallet remaining balances
+- Password changes invalidate existing account sessions
+
+Notes and feedback use the same database as account and budget data. Their tables are created during the existing database startup transaction. Only note owners can delete or share notes; editors can update content. Folder deletion retains the notes. Account deletion removes that account's notes, shares, and feedback. Note drafts remain only in the current browser tab session and are cleared on sign-out.
+
+The local browser verification script `scripts/verify-workspace.cjs` uses an isolated local API/database and requires `FLOWBUDGET_TEST_PASSWORD`. It exercises note sharing, feedback replies, mobile balances, logout, and logo rendering. It refuses remote URLs; screenshots are saved to the ignored `.verification/` directory.
 
 ## Technology
 

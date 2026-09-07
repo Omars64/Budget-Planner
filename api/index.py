@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from .database import Base, IS_EPHEMERAL_VERCEL_SQLITE, SessionLocal, engine, get_db
-from .models import AppSetting, Budget, Category, Debt, Goal, PendingSignup, Transaction, User, Wallet, WalletShare
+from .models import AppSetting, Budget, Category, Debt, Goal, PendingSignup, Transaction, User, Wallet, WalletShare, Note, NoteFolder, NoteShare, Feedback
 from .schemas import (
     BudgetIn, CategoryIn, ContributionIn, DebtIn, GoalIn, LoginPayload, PinPayload,
     SettingsPayload, TransactionIn, UserCreate, UserUpdate, WalletIn,
@@ -62,6 +62,8 @@ async def storage_readiness(request: Request, call_next):
         return JSONResponse(status_code=503, content={"detail": "The service is temporarily unavailable. Please try again shortly.", "code": "STORAGE_UNAVAILABLE"}, headers={"Retry-After": "30", "Cache-Control": "no-store"})
     response = await call_next(request)
     response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "same-origin"
     return response
 app.add_middleware(
     CORSMiddleware,
@@ -105,7 +107,7 @@ def user_payload(user: User):
 
 
 def issue_token(user: User) -> str:
-    return auth_serializer.dumps({"user_id": user.id, "role": user.role})
+    return auth_serializer.dumps({"user_id": user.id, "role": user.role, "credential": hashlib.sha256(user.password_hash.encode()).hexdigest()})
 
 
 def current_user(request: Request, db: Session = Depends(get_db)) -> User:
@@ -120,6 +122,8 @@ def current_user(request: Request, db: Session = Depends(get_db)) -> User:
     user = db.get(User, data.get("user_id"))
     if not user or not user.active:
         raise HTTPException(status_code=401, detail="Account is inactive")
+    if not hmac.compare_digest(data.get("credential", ""), hashlib.sha256(user.password_hash.encode()).hexdigest()):
+        raise HTTPException(status_code=401, detail="Please sign in again")
     return user
 
 
@@ -416,6 +420,11 @@ def admin_delete_user(user_id: int, admin: User = Depends(admin_user), db: Sessi
     db.query(WalletShare).filter(WalletShare.member_user_id == user_id).delete(synchronize_session=False)
     db.query(WalletShare).filter(WalletShare.invitee_email == normalize_email(row.email)).delete(synchronize_session=False)
     db.query(PendingSignup).filter(PendingSignup.email == normalize_email(row.email)).delete(synchronize_session=False)
+    note_ids = db.query(Note.id).filter(Note.user_id == user_id)
+    db.query(NoteShare).filter(or_(NoteShare.member_id == user_id, NoteShare.note_id.in_(note_ids))).delete(synchronize_session=False)
+    db.query(Note).filter_by(user_id=user_id).delete()
+    db.query(NoteFolder).filter_by(user_id=user_id).delete()
+    db.query(Feedback).filter_by(user_id=user_id).delete()
     for model in [Transaction, Budget, Goal, Debt, Category, Wallet]:
         db.query(model).filter(model.user_id == user_id).delete()
     db.query(AppSetting).filter(AppSetting.user_id == user_id).delete()

@@ -4,12 +4,14 @@ from fastapi import Query
 
 from .index import app
 from . import extensions
+from . import workspace
 from .email_service import send_verification_code, smtp_status
 
 # Route signup verification through the hardened email transport. Keeping this
 # assignment here avoids duplicating the signup/database logic in extensions.py.
 extensions.send_code = send_verification_code
 app.include_router(extensions.router)
+app.include_router(workspace.router)
 
 
 @app.get("/api/health/email")

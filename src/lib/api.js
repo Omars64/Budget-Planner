@@ -3,7 +3,10 @@ const tokenKey = 'flowbudget_token'
 export const auth = {
   get token() { return sessionStorage.getItem(tokenKey) || '' },
   set token(value) { value ? sessionStorage.setItem(tokenKey, value) : sessionStorage.removeItem(tokenKey) },
-  clear() { sessionStorage.removeItem(tokenKey) },
+  clear() {
+    sessionStorage.removeItem(tokenKey)
+    Object.keys(sessionStorage).filter(key => key.startsWith('flowbudget_note_draft_')).forEach(key => sessionStorage.removeItem(key))
+  },
 }
 
 export async function api(path, options = {}) {

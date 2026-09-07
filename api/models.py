@@ -1,7 +1,11 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 from .database import Base
+
+
+def utc_now():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class Wallet(Base):
@@ -134,3 +138,43 @@ class WalletShare(Base):
     member_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     permission = Column(String(12), nullable=False, default="view")
     created_at = Column(DateTime, nullable=False, default=datetime.now)
+
+
+class NoteFolder(Base):
+    __tablename__ = "note_folders"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String(80), nullable=False)
+
+
+class Note(Base):
+    __tablename__ = "notes"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    folder_id = Column(Integer, ForeignKey("note_folders.id"), nullable=True)
+    title = Column(String(160), nullable=False)
+    content = Column(Text, nullable=False, default="")
+    pinned = Column(Boolean, nullable=False, default=False)
+    version = Column(Integer, nullable=False, default=1)
+    updated_at = Column(DateTime, nullable=False, default=utc_now)
+
+
+class NoteShare(Base):
+    __tablename__ = "note_shares"
+    __table_args__ = (UniqueConstraint("note_id", "member_id", name="uq_note_member"),)
+    id = Column(Integer, primary_key=True)
+    note_id = Column(Integer, ForeignKey("notes.id"), nullable=False, index=True)
+    member_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    permission = Column(String(12), nullable=False, default="view")
+
+
+class Feedback(Base):
+    __tablename__ = "feedback"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    subject = Column(String(160), nullable=False)
+    content = Column(Text, nullable=False)
+    category = Column(String(20), nullable=False, default="suggestion")
+    status = Column(String(20), nullable=False, default="new")
+    reply = Column(Text, nullable=False, default="")
+    created_at = Column(DateTime, nullable=False, default=utc_now)
