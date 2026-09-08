@@ -4,6 +4,7 @@ import { api, jsonBody } from '../lib/api'
 import PasswordInput from '../components/PasswordInput'
 import { useApp } from '../App'
 import Modal from '../components/Modal'
+import OperationsPanel from '../components/OperationsPanel'
 import EmptyState from '../components/EmptyState'
 
 const fresh = () => ({ username: '', email: '', password: '', role: 'user', active: true })
@@ -78,6 +79,7 @@ export default function Admin() {
   }
 
   return <div className="stack gap-20">
+    <OperationsPanel/>
     <section className="section-intro glass">
       <div>
         <p className="eyebrow"><ShieldCheck size={14}/> Admin workspace</p>
@@ -105,13 +107,13 @@ export default function Admin() {
       </div>}
     </section>
 
-    <Modal open={open} onClose={() => setOpen(false)} title={editing ? 'Edit user' : 'Create user'} subtitle={editing ? 'Leave password empty to keep the current one.' : 'New users receive their own starter workspace.'}>
+    <Modal open={open} onClose={() => setOpen(false)} title={editing ? 'Edit user' : 'Create user'} subtitle={editing ? 'Users choose their own password through a reset link.' : 'New users receive their own starter workspace.'}>
       <form onSubmit={submit} className="stack gap-16">
         <label className="field"><span>Name</span><input required value={form.username} onChange={e => setForm({...form, username: e.target.value})}/></label>
         <label className="field"><span>Email</span><input required type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})}/></label>
         <div className="form-grid two">
           <label className="field"><span>Role</span><select value={form.role} onChange={e => setForm({...form, role: e.target.value})}><option value="user">User</option><option value="admin">Admin</option></select></label>
-          <label className="field"><span>Password</span><PasswordInput required={!editing} minLength="8" value={form.password} onChange={e => setForm({...form, password: e.target.value})}/></label>
+          {!editing&&<label className="field"><span>Initial password</span><PasswordInput required minLength="12" value={form.password} onChange={e => setForm({...form, password: e.target.value})}/></label>}{editing&&<button type="button" className="button ghost" disabled={busy} onClick={async()=>{setBusy(true);try{await api(`/api/admin/users/${editing.id}/password-reset`,{method:"POST"});notify("Password reset link sent")}catch(e){setError(e.message)}finally{setBusy(false)}}}>Send password reset</button>}
         </div>
         <label className="check-row"><input type="checkbox" checked={form.active} onChange={e => setForm({...form, active: e.target.checked})}/><span>Account is active</span></label>
         {error && <div className="form-error">{error}</div>}

@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, Pencil, Plus, Repeat2, Search, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, Copy, Pencil, Plus, Repeat2, Search, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { format } from 'date-fns'
+import { dateInput, displayDate } from '../lib/time'
 import { api, money } from '../lib/api'
 import { useApp } from '../App'
 import TransactionModal from '../components/TransactionModal'
 import EmptyState from '../components/EmptyState'
+import StatementImport from '../components/StatementImport'
 
 export default function Transactions() {
-  const { settings, refreshKey, refresh, notify ,confirm} = useApp()
+  const { user, settings, refreshKey, refresh, notify ,confirm} = useApp()
   const [rows, setRows] = useState([])
   const [search, setSearch] = useState('')
   const [type, setType] = useState('all')
@@ -25,7 +27,7 @@ export default function Transactions() {
   useEffect(() => { api('/api/wallets').then(setWallets).catch(() => setWallets([])) }, [refreshKey])
 
   const fmt = v => money(v, settings.currency, settings.compact_numbers)
-  const grouped = useMemo(() => rows.reduce((acc, tx) => { const key = format(new Date(tx.date), 'yyyy-MM-dd'); (acc[key] ||= []).push(tx); return acc }, {}), [rows])
+  const grouped = useMemo(() => rows.reduce((acc, tx) => { const key = format(displayDate(tx.date), 'yyyy-MM-dd'); (acc[key] ||= []).push(tx); return acc }, {}), [rows])
   const remove = async tx => { if (!await confirm(`Delete “${tx.description}”?`)) return; try { await api(`/api/transactions/${tx.id}`, {method:'DELETE'}); refresh(); notify('Transaction deleted') } catch (err) { notify(err.message, 'error') } }
 
   return <div className="stack gap-18">
@@ -34,6 +36,7 @@ export default function Transactions() {
       <div className="segment-control compact-control"><button className={type==='all'?'active':''} onClick={() => setType('all')}>All</button><button className={type==='expense'?'active':''} onClick={() => setType('expense')}>Expenses</button><button className={type==='income'?'active':''} onClick={() => setType('income')}>Income</button><button className={type==='transfer'?'active':''} onClick={() => setType('transfer')}>Transfers</button></div>
     </section>
 
+    <div className="section-row"><StatementImport wallets={wallets}/></div>
     <section className="transaction-wallets" aria-label="Current wallet balances">
       {wallets.filter(wallet => !wallet.archived).map(wallet => <div className="transaction-wallet-balance glass" key={wallet.id}><span>{wallet.name}</span><strong>{fmt(wallet.balance)}</strong></div>)}
     </section>
@@ -46,8 +49,8 @@ export default function Transactions() {
           <AnimatePresence>{txs.map(tx => <motion.div className="transaction-row roomy" key={tx.id} layout initial={{opacity:0,y:6}} animate={{opacity:1,y:0}} exit={{opacity:0,x:20}}>
             <span className={`tx-symbol ${tx.type}`}>{tx.type === 'income' ? <ArrowDownLeft size={18}/> : tx.type === 'transfer' ? <ArrowRightLeft size={18}/> : <ArrowUpRight size={18}/>}</span>
             <div className="tx-main"><strong>{tx.description}</strong><small>{tx.type === 'transfer' ? `${tx.wallet_name} → ${tx.transfer_wallet_name}` : `${tx.category_name || 'Uncategorized'} · ${tx.wallet_name}`} {tx.recurring_frequency !== 'none' && <em><Repeat2 size={12}/> {tx.recurring_frequency}</em>}</small></div>
-            <div className="tx-side"><strong className={`tx-amount ${tx.type}`}>{tx.type==='income'?'+':tx.type==='expense'?'−':''}{fmt(tx.amount)}</strong><small>{format(new Date(tx.date),'HH:mm')}</small></div>
-            <div className="row-actions"><button onClick={() => {setEditing(tx);setModal(true)}} aria-label="Edit"><Pencil size={16}/></button><button className="danger" onClick={() => remove(tx)} aria-label="Delete"><Trash2 size={16}/></button></div>
+            <div className="tx-side"><strong className={`tx-amount ${tx.type}`}>{tx.type==='income'?'+':tx.type==='expense'?'−':''}{fmt(tx.amount)}</strong><small>{format(displayDate(tx.date),'HH:mm')}</small></div>
+            <div className="row-actions"><button title="Duplicate as new" aria-label="Duplicate as new" onClick={()=>{sessionStorage.setItem(`flowbudget_tx_draft_${user.id}`,JSON.stringify({...tx,id:undefined,revision:undefined,date:dateInput()}));setEditing(null);setModal(true)}}><Copy size={16}/></button><button onClick={() => {setEditing(tx);setModal(true)}} aria-label="Edit"><Pencil size={16}/></button><button className="danger" onClick={() => remove(tx)} aria-label="Delete"><Trash2 size={16}/></button></div>
           </motion.div>)}</AnimatePresence>
         </div>)}
       </div>}

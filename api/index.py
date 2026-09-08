@@ -8,6 +8,8 @@ import json
 import logging
 import os
 import secrets
+import time
+import re
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta
 from typing import Optional
@@ -27,11 +29,13 @@ from .schemas import (
     SettingsPayload, TransactionIn, UserCreate, UserUpdate, WalletIn,
 )
 from .seed import EXPENSE_CATEGORIES, INCOME_CATEGORIES, ensure_default_categories, seed_database
-from .models import RecoveryPoint, NoteRevision
+from .models import RecoveryPoint, NoteRevision, utc_now
 from .data_safety import save_recovery, clear_budget, clear_notes
-from .idempotency import reserve
+from .idempotency import reserve, create_once
 from .models import RequestReceipt
 from .models import BankMessage, MessageKey
+from .reliability_models import AccountSession
+from .timekeeping import ledger_iso, now as ledger_now, today as ledger_today
 
 APP_SECRET = os.getenv("APP_SECRET", "flowbudget-dev-secret-change-me")
 serializer = URLSafeTimedSerializer(APP_SECRET, salt="flowbudget-lock")
@@ -45,6 +49,8 @@ async def lifespan(application: FastAPI):
     try:
         if IS_EPHEMERAL_VERCEL_SQLITE:
             raise RuntimeError("FlowBudget on Vercel requires a persistent DATABASE_URL")
+        if os.getenv('VERCEL') and (len(APP_SECRET) < 32 or APP_SECRET == 'flowbudget-dev-secret-change-me'):
+            raise RuntimeError('A strong APP_SECRET is required in production')
         with engine.begin() as connection:
             # Serialize schema/bootstrap work across simultaneous serverless starts.
             if connection.dialect.name == "postgresql":
@@ -67,7 +73,18 @@ app = FastAPI(title="FlowBudget API", version="1.0.0", lifespan=lifespan)
 async def storage_readiness(request: Request, call_next):
     if not getattr(app.state, "storage_ready", False):
         return JSONResponse(status_code=503, content={"detail": "The service is temporarily unavailable. Please try again shortly.", "code": "STORAGE_UNAVAILABLE"}, headers={"Retry-After": "30", "Cache-Control": "no-store"})
+    started=time.monotonic()
     response = await call_next(request)
+    duration=int((time.monotonic()-started)*1000)
+    if response.status_code>=500 or duration>=2000:
+        from .reliability_models import ServiceEvent
+        area=re.sub(r'/\d+(?=/|$)','/:id',request.url.path)[:100]
+        logging.getLogger('flowbudget').warning('request path=%s status=%d duration_ms=%d',area,response.status_code,duration)
+        try:
+            with SessionLocal() as events:
+                events.add(ServiceEvent(area=area,status=response.status_code,duration_ms=duration));events.commit()
+        except Exception:
+            logging.getLogger('flowbudget').warning('Operational event could not be stored')
     response.headers["Cache-Control"] = "no-store"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "same-origin"
@@ -114,7 +131,11 @@ def user_payload(user: User):
 
 
 def issue_token(user: User) -> str:
-    return auth_serializer.dumps({"user_id": user.id, "role": user.role, "credential": hashlib.sha256(user.password_hash.encode()).hexdigest()})
+    sid = secrets.token_urlsafe(32)
+    with SessionLocal() as db:
+        db.add(AccountSession(id=sid, user_id=user.id, verified_at=utc_now()))
+        db.commit()
+    return auth_serializer.dumps({"user_id": user.id, "sid": sid, "role": user.role, "credential": hashlib.sha256(user.password_hash.encode()).hexdigest()})
 
 
 def current_user(request: Request, db: Session = Depends(get_db)) -> User:
@@ -131,6 +152,14 @@ def current_user(request: Request, db: Session = Depends(get_db)) -> User:
         raise HTTPException(status_code=401, detail="Account is inactive")
     if not hmac.compare_digest(data.get("credential", ""), hashlib.sha256(user.password_hash.encode()).hexdigest()):
         raise HTTPException(status_code=401, detail="Please sign in again")
+    session = db.get(AccountSession, data.get('sid', ''))
+    if not session or session.revoked or session.user_id != user.id:
+        raise HTTPException(401, 'Please sign in again. This session has ended.')
+    request.state.session_id = session.id
+    from .models import utc_now
+    if session.label == 'Browser session' or session.last_seen < utc_now()-timedelta(minutes=5):
+        session.label = request.headers.get('user-agent', 'Browser session')[:200]
+        session.last_seen = utc_now(); db.commit()
     return user
 
 
@@ -240,7 +269,7 @@ def materialize_recurring(db: Session) -> int:
 
 
 def materialize_recurring_for_user(db: Session, user_id: int) -> int:
-    now = datetime.now()
+    now = ledger_now()
     created = 0
     templates = db.query(Transaction).filter(
         Transaction.user_id == user_id,
@@ -269,8 +298,9 @@ def materialize_recurring_for_user(db: Session, user_id: int) -> int:
 
 def tx_payload(tx: Transaction):
     return {
+        'revision': transaction_revision(tx),
         "id": tx.id, "type": tx.type, "amount": float(tx.amount), "description": tx.description,
-        "notes": tx.notes or "", "date": tx.date.isoformat(), "wallet_id": tx.wallet_id,
+        "notes": tx.notes or "", "date": ledger_iso(tx.date), "wallet_id": tx.wallet_id,
         "transfer_wallet_id": tx.transfer_wallet_id, "category_id": tx.category_id,
         "recurring_frequency": tx.recurring_frequency or "none",
         "recurring_until": tx.recurring_until.isoformat() if tx.recurring_until else None,
@@ -281,12 +311,25 @@ def tx_payload(tx: Transaction):
     }
 
 
+def transaction_revision(tx):
+    values = [str(getattr(tx,c.name)) for c in Transaction.__table__.columns]
+    return hashlib.sha256(json.dumps(values).encode()).hexdigest()
+
+
+def check_revision(request, tx):
+    expected = request.headers.get('If-Match')
+    if not expected:
+        raise HTTPException(409, 'Reload the transaction before editing it.')
+    if expected != transaction_revision(tx):
+        raise HTTPException(409, 'This transaction changed on another device. Your draft is kept; reload the latest transaction before saving.')
+
+
 def wallet_balance(db: Session, wallet: Wallet) -> float:
     income = db.query(func.coalesce(func.sum(Transaction.amount), 0)).filter(Transaction.wallet_id == wallet.id, Transaction.type == "income").scalar() or 0
     expense = db.query(func.coalesce(func.sum(Transaction.amount), 0)).filter(Transaction.wallet_id == wallet.id, Transaction.type == "expense").scalar() or 0
     transfers_out = db.query(func.coalesce(func.sum(Transaction.amount), 0)).filter(Transaction.wallet_id == wallet.id, Transaction.type == "transfer").scalar() or 0
     transfers_in = db.query(func.coalesce(func.sum(Transaction.amount), 0)).filter(Transaction.transfer_wallet_id == wallet.id, Transaction.type == "transfer").scalar() or 0
-    return round(float(wallet.initial_balance) + float(income) - float(expense) - float(transfers_out) + float(transfers_in), 3)
+    return float(round(wallet.initial_balance + income - expense - transfers_out + transfers_in, 3))
 
 
 def budget_period_start(db: Session, budget: Budget, today: date) -> date:
@@ -302,7 +345,7 @@ def budget_period_start(db: Session, budget: Budget, today: date) -> date:
 
 
 def budget_spent(db: Session, budget: Budget) -> float:
-    start = budget_period_start(db, budget, date.today())
+    start = budget_period_start(db, budget, ledger_today())
     q = db.query(func.coalesce(func.sum(Transaction.amount), 0)).filter(
         Transaction.user_id == budget.user_id,
         Transaction.type == "expense",
@@ -342,10 +385,14 @@ def health(db: Session = Depends(get_db)):
 
 
 @app.post("/api/auth/login")
-def login(payload: LoginPayload, db: Session = Depends(get_db)):
+def login(payload: LoginPayload, request: Request, db: Session = Depends(get_db)):
+    from .account_security import limit, audit
+    limit(db, 'login:'+normalize_email(payload.email), 15)
+    limit(db, 'login-ip:'+(request.client.host if request.client else 'unknown'), 100)
     user = db.query(User).filter(User.email == normalize_email(payload.email)).first()
     if not user or not user.active or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")
+    audit(db, user.id, user.id, 'Signed in with password'); db.commit()
     return {"token": issue_token(user), "user": user_payload(user)}
 
 
@@ -354,8 +401,13 @@ def me(user: User = Depends(current_user)):
     return user_payload(user)
 
 @app.delete("/api/account", status_code=204)
-def delete_account(user: User = Depends(current_user), db: Session = Depends(get_db)):
+def delete_account(request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
     """Permanently remove the signed-in user's account and private workspace."""
+    from .account_security import confirmed
+    confirmed(request, db, user)
+    if user.role == 'admin' and db.query(User).filter_by(role='admin', active=True).count() <= 1:
+        raise HTTPException(409, 'Add another active administrator before deleting your account.')
+    db.query(Transaction).filter_by(user_id=user.id).update({Transaction.recurring_parent_id: None})
     email = normalize_email(user.email)
     db.query(WalletShare).filter(or_(WalletShare.owner_id == user.id, WalletShare.member_user_id == user.id, WalletShare.invitee_email == email)).delete(synchronize_session=False)
     note_ids = db.query(Note.id).filter(Note.user_id == user.id)
@@ -406,6 +458,8 @@ def admin_update_user(user_id: int, payload: UserUpdate, admin: User = Depends(a
     row.active = payload.active
     if payload.password:
         row.password_hash = hash_password(payload.password)
+        from .reliability_models import AccountSession
+        db.query(AccountSession).filter_by(user_id=row.id).update({'revoked': True})
     db.query(PendingSignup).filter(PendingSignup.email.in_([old_email, email])).delete(synchronize_session=False)
     for share in db.query(WalletShare).filter(WalletShare.member_user_id == user_id).all():
         conflict = db.query(WalletShare).filter(
@@ -419,6 +473,8 @@ def admin_update_user(user_id: int, payload: UserUpdate, admin: User = Depends(a
             db.delete(share)
         else:
             share.invitee_email = email
+    from .account_security import audit
+    audit(db, row.id, admin.id, 'Administrator updated account details')
     db.commit(); db.refresh(row)
     return user_payload(row)
 
@@ -529,6 +585,10 @@ def security_disable(user: User = Depends(authorize), db: Session = Depends(get_
 @app.get("/api/settings")
 def get_settings(user: User = Depends(current_user), db: Session = Depends(get_db)):
     return {
+        'quiet_hours_enabled': setting(db,user.id,'quiet_hours_enabled','false') == 'true',
+        'quiet_start': setting(db,user.id,'quiet_start','22:00'),
+        'quiet_end': setting(db,user.id,'quiet_end','08:00'),
+        'reminder_topics': json.loads(setting(db,user.id,'reminder_topics','["daily"]')),
         'phone': setting(db, user.id, 'phone', ''),
         'font_family': setting(db, user.id, 'font_family', 'system'),
         'text_color': setting(db, user.id, 'text_color', 'ink'),
@@ -545,7 +605,7 @@ def get_settings(user: User = Depends(current_user), db: Session = Depends(get_d
 @app.put("/api/settings")
 def update_settings(payload: SettingsPayload, user: User = Depends(current_user), db: Session = Depends(get_db)):
     for k, v in payload.model_dump().items():
-        set_setting(db, user.id, k, str(v).lower() if isinstance(v, bool) else str(v))
+        set_setting(db, user.id, k, json.dumps(v) if isinstance(v,list) else str(v).lower() if isinstance(v, bool) else str(v))
     db.commit()
     return payload.model_dump()
 
@@ -558,10 +618,8 @@ def wallets(user: User = Depends(current_user), db: Session = Depends(get_db)):
 
 
 @app.post("/api/wallets", status_code=201)
-def create_wallet(payload: WalletIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    row = Wallet(user_id=user.id, **payload.model_dump())
-    db.add(row); db.commit(); db.refresh(row)
-    return {**payload.model_dump(), "id": row.id, "balance": wallet_balance(db, row)}
+def create_wallet(payload: WalletIn, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    return create_once(db, user, request, 'wallet', payload, Wallet)
 
 
 @app.put("/api/wallets/{item_id}")
@@ -580,6 +638,8 @@ def delete_wallet(item_id: int, delete_transactions: bool = False, user: User = 
     used = db.query(Transaction).filter(Transaction.user_id == user.id, or_(Transaction.wallet_id == item_id, Transaction.transfer_wallet_id == item_id)).first()
     if used and not delete_transactions: raise HTTPException(409, "Confirm deletion of this wallet and its linked transactions")
     save_recovery(db, user, user, f"Deleted wallet: {row.name}")
+    from .recovery import trash
+    trash(db, row, user, 'wallet')
     set_setting(db, user.id, "workspace_initialized", "true")
     linked = db.query(Transaction.id).filter(Transaction.user_id == user.id, or_(Transaction.wallet_id == item_id, Transaction.transfer_wallet_id == item_id))
     db.query(Transaction).filter(Transaction.user_id == user.id, Transaction.recurring_parent_id.in_(linked)).update({Transaction.recurring_parent_id: None}, synchronize_session=False)
@@ -596,8 +656,9 @@ def categories(kind: Optional[str] = None, user: User = Depends(current_user), d
 
 
 @app.post("/api/categories", status_code=201)
-def create_category(payload: CategoryIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    row = Category(user_id=user.id, **payload.model_dump()); db.add(row); db.commit(); db.refresh(row); return row
+def create_category(payload: CategoryIn, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    return create_once(db, user, request, 'category', payload, Category)
+
 
 @app.put("/api/categories/{item_id}")
 def update_category(item_id: int, payload: CategoryIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
@@ -611,7 +672,10 @@ def update_category(item_id: int, payload: CategoryIn, user: User = Depends(curr
 def delete_category(item_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
     row = db.query(Category).filter(Category.id == item_id, Category.user_id == user.id).first()
     if not row: raise HTTPException(404, "Category not found")
-    if db.query(Transaction).filter(Transaction.user_id == user.id, Transaction.category_id == item_id).first(): raise HTTPException(409, "Category is in use")
+    from .recovery import trash
+    trash(db, row, user, 'category')
+    db.query(Transaction).filter_by(user_id=user.id, category_id=item_id).update({'category_id':None})
+    db.query(Budget).filter_by(user_id=user.id, category_id=item_id).update({'category_id':None})
     db.delete(row); db.commit()
 
 
@@ -662,9 +726,12 @@ def create_transaction(payload: TransactionIn, request: Request, user: User = De
 
 
 @app.put("/api/transactions/{item_id}")
-def update_transaction(item_id: int, payload: TransactionIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    row = db.query(Transaction).filter(Transaction.id == item_id, Transaction.user_id == user.id).first()
+def update_transaction(item_id: int, payload: TransactionIn, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    row = db.query(Transaction).filter(Transaction.id == item_id, Transaction.user_id == user.id).with_for_update().first()
     if not row: raise HTTPException(404, "Transaction not found")
+    check_revision(request, row)
+    from .account_security import audit
+    audit(db, user.id, user.id, 'Edited transaction', f'transaction:{row.id}')
     validate_transaction_references(db, user.id, payload)
     for k, v in payload.model_dump().items(): setattr(row, k, v)
     db.commit(); db.refresh(row); return tx_payload(row)
@@ -675,6 +742,8 @@ def delete_transaction(item_id: int, user: User = Depends(current_user), db: Ses
     row = db.query(Transaction).filter(Transaction.id == item_id, Transaction.user_id == user.id).first()
     if not row: raise HTTPException(404, "Transaction not found")
     save_recovery(db, user, user, f"Deleted transaction: {row.description}")
+    from .recovery import trash
+    trash(db, row, user, 'transaction')
     db.query(Transaction).filter(Transaction.user_id == user.id, Transaction.recurring_parent_id == item_id).delete()
     db.delete(row); db.commit()
 
@@ -690,10 +759,10 @@ def budgets(user: User = Depends(current_user), db: Session = Depends(get_db)):
 
 
 @app.post("/api/budgets", status_code=201)
-def create_budget(payload: BudgetIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def create_budget(payload: BudgetIn, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
     if payload.category_id and not db.query(Category).filter(Category.id == payload.category_id, Category.user_id == user.id).first():
         raise HTTPException(400, "Category not found")
-    row = Budget(user_id=user.id, **payload.model_dump()); db.add(row); db.commit(); return {"id": row.id}
+    return create_once(db, user, request, 'budget', payload, Budget)
 
 
 @app.put("/api/budgets/{item_id}")
@@ -710,6 +779,8 @@ def update_budget(item_id: int, payload: BudgetIn, user: User = Depends(current_
 def delete_budget(item_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
     row = db.query(Budget).filter(Budget.id == item_id, Budget.user_id == user.id).first()
     if not row: raise HTTPException(404, "Budget not found")
+    from .recovery import trash
+    trash(db, row, user, 'budget')
     db.delete(row); db.commit()
 
 
@@ -720,15 +791,20 @@ def goals(user: User = Depends(current_user), db: Session = Depends(get_db)):
 
 
 @app.post("/api/goals", status_code=201)
-def create_goal(payload: GoalIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    row = Goal(user_id=user.id, **payload.model_dump()); db.add(row); db.commit(); return {"id": row.id}
+def create_goal(payload: GoalIn, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    return create_once(db, user, request, 'goal', payload, Goal)
 
 
 @app.post("/api/goals/{item_id}/contribute")
-def contribute_goal(item_id: int, payload: ContributionIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    row = db.query(Goal).filter(Goal.id == item_id, Goal.user_id == user.id).first()
+def contribute_goal(item_id: int, payload: ContributionIn, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    receipt, previous = reserve(db, user.id, f'contribute_goal:{item_id}', request.headers.get('Idempotency-Key'), payload)
+    if previous is not None: return previous
+    row = db.query(Goal).filter(Goal.id == item_id, Goal.user_id == user.id).with_for_update().first()
     if not row: raise HTTPException(404, "Goal not found")
-    row.current_amount = min(row.target_amount, row.current_amount + payload.amount); db.commit(); return {"current_amount": float(row.current_amount)}
+    row.current_amount = min(row.target_amount, row.current_amount + payload.amount)
+    result = {"current_amount": float(row.current_amount)}
+    if receipt: receipt.response = json.dumps(result)
+    db.commit(); return result
 
 @app.put("/api/goals/{item_id}")
 def update_goal(item_id: int, payload: GoalIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
@@ -742,6 +818,8 @@ def update_goal(item_id: int, payload: GoalIn, user: User = Depends(current_user
 def delete_goal(item_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
     row = db.query(Goal).filter(Goal.id == item_id, Goal.user_id == user.id).first()
     if not row: raise HTTPException(404, "Goal not found")
+    from .recovery import trash
+    trash(db, row, user, 'goal')
     db.delete(row); db.commit()
 
 
@@ -752,15 +830,20 @@ def debts(user: User = Depends(current_user), db: Session = Depends(get_db)):
 
 
 @app.post("/api/debts", status_code=201)
-def create_debt(payload: DebtIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    row = Debt(user_id=user.id, **payload.model_dump()); db.add(row); db.commit(); return {"id": row.id}
+def create_debt(payload: DebtIn, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    return create_once(db, user, request, 'debt', payload, Debt)
 
 
 @app.post("/api/debts/{item_id}/pay")
-def pay_debt(item_id: int, payload: ContributionIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    row = db.query(Debt).filter(Debt.id == item_id, Debt.user_id == user.id).first()
+def pay_debt(item_id: int, payload: ContributionIn, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    receipt, previous = reserve(db, user.id, f'pay_debt:{item_id}', request.headers.get('Idempotency-Key'), payload)
+    if previous is not None: return previous
+    row = db.query(Debt).filter(Debt.id == item_id, Debt.user_id == user.id).with_for_update().first()
     if not row: raise HTTPException(404, "Debt not found")
-    row.remaining = max(0, row.remaining - payload.amount); db.commit(); return {"remaining": float(row.remaining)}
+    row.remaining = max(0, row.remaining - payload.amount)
+    result = {"remaining": float(row.remaining)}
+    if receipt: receipt.response = json.dumps(result)
+    db.commit(); return result
 
 @app.put("/api/debts/{item_id}")
 def update_debt(item_id: int, payload: DebtIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
@@ -774,6 +857,8 @@ def update_debt(item_id: int, payload: DebtIn, user: User = Depends(current_user
 def delete_debt(item_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
     row = db.query(Debt).filter(Debt.id == item_id, Debt.user_id == user.id).first()
     if not row: raise HTTPException(404, "Debt not found")
+    from .recovery import trash
+    trash(db, row, user, 'debt')
     db.delete(row); db.commit()
 
 
@@ -781,7 +866,7 @@ def delete_debt(item_id: int, user: User = Depends(current_user), db: Session = 
 def dashboard(month: Optional[str] = None, user: User = Depends(current_user), db: Session = Depends(get_db)):
     materialize_recurring_for_user(db, user.id)
     try:
-        current = datetime.strptime(month, "%Y-%m") if month else datetime.now()
+        current = datetime.strptime(month, "%Y-%m") if month else ledger_now()
     except ValueError:
         raise HTTPException(400, "month must be YYYY-MM")
     start = datetime(current.year, current.month, 1)
@@ -868,6 +953,8 @@ def export_backup(user: User = Depends(current_user), db: Session = Depends(get_
 
 @app.post("/api/backup/restore")
 async def restore_backup(request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    from .account_security import confirmed
+    confirmed(request, db, user)
     data = await request.json()
     if data.get("version") != 1: raise HTTPException(400, "Unsupported backup version")
     # Reject foreign IDs before replacing any account data.
@@ -965,4 +1052,5 @@ async def database_unavailable(_: Request, exc: OperationalError):
 @app.exception_handler(Exception)
 async def unhandled(_: Request, exc: Exception):
     # Avoid leaking internals while still returning structured JSON to the UI.
-    return JSONResponse(status_code=500, content={"detail": "Unexpected server error", "type": exc.__class__.__name__})
+    logging.getLogger('flowbudget').error('Unhandled request failure: %s',type(exc).__name__)
+    return JSONResponse(status_code=500, content={"detail": "Unexpected server error. Please try again."})

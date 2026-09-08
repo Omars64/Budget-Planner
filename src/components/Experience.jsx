@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import { LoaderCircle } from 'lucide-react'
 import { useApp } from '../App'
 import ResizablePanels from './ResizablePanels'
-import { isNativeApp } from '../lib/deviceNotifications'
+import { isNativeApp,quietAt,reminderBody,configureReminder } from '../lib/deviceNotifications'
+import {dateKey,clockTime} from '../lib/time'
 import { syncBankSms } from '../lib/bankSms'
+import SecurityPrompt from './SecurityPrompt'
 
 export default function Experience() {
   const { settings, user, notify } = useApp()
@@ -19,7 +21,7 @@ export default function Experience() {
     const progress = e => { active = e.detail; setPending(active) }
     const failed = e => notify(e.detail, 'error')
     const submit = e => {
-      if (active) { e.preventDefault(); e.stopImmediatePropagation(); notify('Please wait for the current request to finish.') }
+      if (active && !e.target.matches('[data-reauth]')) { e.preventDefault(); e.stopImmediatePropagation(); notify('Please wait for the current request to finish.') }
     }
     const invalid = e => {
       const label = e.target.getAttribute('aria-label') || e.target.closest('label')?.querySelector('span')?.textContent || e.target.placeholder || 'This field'
@@ -49,26 +51,28 @@ export default function Experience() {
     return () => { ['--app-font', '--text', '--accent', '--accent-rgb', '--accent-soft'].forEach(key => document.documentElement.style.removeProperty(key)) }
   }, [settings.font_family, settings.text_color, settings.accent_color])
   useEffect(() => {
-    if (!settings.reminders_enabled || isNativeApp()) return
+    if(isNativeApp()){void configureReminder(settings).catch(e=>notify(e.message,'error'));return}
+    if (!settings.reminders_enabled) return
     const check = () => {
       const now = new Date()
-      const day = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`
-      const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+      const day = dateKey(now)
+      const time = clockTime(now)
+      if(quietAt(settings,time)||!reminderBody(settings))return
       const key = `flowbudget-reminder-${user.id}`
       if (time < (settings.reminder_time || '20:00')) return
       try {
         if (localStorage.getItem(key) === day) return
         localStorage.setItem(key, day)
       } catch { return }
-      notify('Daily reminder: add today\'s transactions.')
+      notify(reminderBody(settings))
       if ('Notification' in window && Notification.permission === 'granted') {
-        try { new Notification('FlowBudget', { body: 'Take a moment to add today\'s transactions.', icon: '/flowbudget-logo.png', tag: 'daily-budget' }) } catch { /* The in-app reminder is still displayed. */ }
+        try { new Notification('FlowBudget', { body: reminderBody(settings), icon: '/flowbudget-logo.png', tag: 'daily-budget' }) } catch { /* The in-app reminder is still displayed. */ }
       }
     }
     check()
     const interval = setInterval(check, 30000)
     window.addEventListener('focus', check)
     return () => { clearInterval(interval); window.removeEventListener('focus', check) }
-  }, [settings.reminders_enabled, settings.reminder_time, user.id, notify])
-  return <><ResizablePanels/>{pending > 0 && <div className="request-progress" role="status"><LoaderCircle className="request-spinner" size={18}/>Processing request...</div>}</>
+  }, [settings, user.id, notify])
+  return <><SecurityPrompt/><ResizablePanels/>{pending > 0 && <div className="request-progress" role="status"><LoaderCircle className="request-spinner" size={18}/>Saving...</div>}</>
 }

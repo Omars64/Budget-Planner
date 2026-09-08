@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -63,7 +63,9 @@ def download_recovery(point_id: int, user=Depends(current_user), db: Session = D
 
 
 @router.post("/api/workspace/clear")
-def clear_workspace(payload: ClearWorkspaceIn, user=Depends(current_user), db: Session = Depends(get_db)):
+def clear_workspace(payload: ClearWorkspaceIn, request: Request, user=Depends(current_user), db: Session = Depends(get_db)):
+    from .account_security import confirmed
+    confirmed(request, db, user)
     point = save_recovery(db, user, user, f"Cleared {payload.scope}")
     clear_budget(db, user.id, preserve_main_wallet=True, preserve_categories=True)
     if payload.scope == "workspace": clear_notes(db, user.id)
@@ -166,6 +168,8 @@ def update_note(note_id: int, payload: NoteIn, user=Depends(current_user), db: S
 def delete_note(note_id: int, user=Depends(current_user), db: Session = Depends(get_db)):
     row = note_access(db, user, note_id, owner=True)
     save_recovery(db, user, user, f"Deleted note: {row.title}")
+    from .recovery import trash
+    trash(db, row, user, 'note')
     db.query(NoteRevision).filter_by(note_id=note_id).delete()
     db.query(NoteShare).filter_by(note_id=note_id).delete()
     db.delete(row); db.commit()

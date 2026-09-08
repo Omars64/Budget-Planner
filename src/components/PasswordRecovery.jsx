@@ -1,0 +1,10 @@
+import {useState} from 'react'
+import {api,jsonBody} from '../lib/api'
+import PasswordInput from './PasswordInput'
+
+export default function PasswordRecovery({onBack}){
+  const [token]=useState(()=>new URLSearchParams(location.search).get('reset')||'')
+  const [email,setEmail]=useState(''),[password,setPassword]=useState(''),[repeat,setRepeat]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[done,setDone]=useState('')
+  const submit=async e=>{e.preventDefault();if(busy)return;if(token&&password!==repeat){setError('Passwords do not match');return}setBusy(true);setError('');try{const result=await api(token?'/api/auth/password-reset/complete':'/api/auth/password-reset/request',{method:'POST',...jsonBody(token?{token,password}:{email})});setDone(token?'Password changed. Sign in with your new password.':result.message);setPassword('');setRepeat('')}catch(err){setError(err.message)}finally{setBusy(false)}}
+  return <><h1>{token?'Choose a new password':'Reset password'}</h1>{done?<p role="status">{done}</p>:<form onSubmit={submit} className="stack gap-16">{token?<><label className="field"><span>New password (at least 12 characters)</span><PasswordInput required minLength={12} maxLength={128} autoComplete="new-password" value={password} onChange={e=>setPassword(e.target.value)}/></label><label className="field"><span>Repeat new password</span><PasswordInput required minLength={12} autoComplete="new-password" value={repeat} onChange={e=>setRepeat(e.target.value)}/></label></>:<label className="field"><span>Account email</span><input required type="email" value={email} onChange={e=>setEmail(e.target.value)}/></label>}{error&&<p className="form-error" role="alert">{error}</p>}<button className="button primary" disabled={busy}>{busy?'Processing...':token?'Change password':'Send reset link'}</button></form>}<button className="auth-switch" type="button" onClick={()=>{history.replaceState(null,'',location.pathname+location.hash);onBack()}}>Back to sign in</button></>
+}

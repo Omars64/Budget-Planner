@@ -23,6 +23,7 @@ import { useConfirmation } from './components/Confirmation'
 import Experience from './components/Experience'
 import { biometricSupported, unlockBiometric, cancelBiometric } from './lib/biometric'
 import DeviceSignInPreference from './components/DeviceSignInPreference'
+import PasswordRecovery from './components/PasswordRecovery'
 import { cancelReminder } from './lib/deviceNotifications'
 import { BankSms, smsAvailable } from './lib/bankSms'
 
@@ -32,7 +33,7 @@ export const useApp = () => useContext(AppContext)
 function LoginScreen({ onLogin }) {
   useEffect(() => () => cancelBiometric(), [])
   const [, refreshSignInPreference] = useState(0)
-  const [mode, setMode] = useState('login')
+  const [mode, setMode] = useState(()=>new URLSearchParams(location.search).has('reset')?'reset':'login')
   const [signInMethod, setSignInMethod] = useState('password')
   const passkeyLogin = async () => {
     setBusy(true); setError('')
@@ -97,6 +98,7 @@ function LoginScreen({ onLogin }) {
   return <div className="lock-screen auth-screen" onInvalid={e => setError(e.target.validationMessage)}>
     <motion.div className="lock-card auth-card glass" initial={{ opacity: 0, y: 20, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }}>
       <BrandLogo className="large" />
+      {mode === 'reset' && <PasswordRecovery onBack={()=>setMode('login')}/>}
 
       {mode === 'login' && <>
         <p className="eyebrow">Welcome back</p>
@@ -110,6 +112,7 @@ function LoginScreen({ onLogin }) {
           <button className="button primary full" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
         </form>}
         <DeviceSignInPreference disabled={busy} onChange={() => { setSignInMethod('password'); setError(''); refreshSignInPreference(v => v + 1) }}/>
+        <button type="button" className="auth-switch" onClick={()=>setMode('reset')}>Forgot password?</button>
         <button className="auth-switch" type="button" onClick={() => { setError(''); setMode('signup') }}>New to FlowBudget? <strong>Create an account</strong></button>
       </>}
 
@@ -208,6 +211,7 @@ export default function App() {
   }, [loadSettings, loadAppearance])
 
   const signOut = useCallback(() => {
+    void api('/api/account/signout',{method:'POST'}).catch(()=>{})
     if (smsAvailable()) void BankSms.configure({enabled:false}).catch(console.error)
     void cancelReminder().catch(console.error)
     auth.clear()

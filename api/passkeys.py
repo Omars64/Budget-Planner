@@ -5,7 +5,7 @@ import secrets
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import Column, String, DateTime, Integer, ForeignKey, Text
 from sqlalchemy.orm import Session
@@ -90,6 +90,8 @@ def status(user: User = Depends(current_user), db: Session = Depends(get_db)):
 
 @router.post('/api/passkeys/register/options')
 def register_options(payload: Password, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    from .account_security import limit
+    limit(db, f'passkey-register:{user.id}', 10)
     if not verify_password(payload.password, user.password_hash): raise HTTPException(401, 'Incorrect password')
     options = generate_registration_options(rp_id=rp_id(), rp_name='FlowBudget', user_id=str(user.id).encode(), user_name=user.email,
         exclude_credentials=[PublicKeyCredentialDescriptor(id=base64url_to_bytes(row.id)) for row in db.query(Passkey).filter_by(user_id=user.id).all()],
@@ -135,7 +137,25 @@ def login_verify(payload: Response, db: Session = Depends(get_db)):
     return {'token': issue_token(user), 'user': user_payload(user)}
 
 @router.delete('/api/passkeys', status_code=204)
-def revoke(user: User = Depends(current_user), db: Session = Depends(get_db)):
+def revoke(request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    from .account_security import confirmed, audit
+    confirmed(request, db, user)
+    audit(db, user.id, user.id, 'Revoked all passkeys')
     db.query(AppSetting).filter_by(user_id=user.id, key='passkey').delete()
     db.query(Passkey).filter_by(user_id=user.id).delete()
     db.commit()
+
+
+@router.get('/api/passkeys/list')
+def list_keys(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    import hashlib
+    return [{'id':r.id,'fingerprint':hashlib.sha256(r.id.encode()).hexdigest()[:12]} for r in db.query(Passkey).filter_by(user_id=user.id).all()]
+
+
+@router.delete('/api/passkeys/item/{credential_id}', status_code=204)
+def revoke_one(credential_id: str, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    from .account_security import confirmed, audit
+    confirmed(request, db, user)
+    row=db.query(Passkey).filter_by(id=credential_id,user_id=user.id).first()
+    if not row: raise HTTPException(404,'Passkey not found')
+    db.delete(row); audit(db,user.id,user.id,'Revoked a passkey'); db.commit()

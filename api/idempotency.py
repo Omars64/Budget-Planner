@@ -4,6 +4,7 @@ import json
 from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from .models import RequestReceipt
+from fastapi.encoders import jsonable_encoder
 
 
 def reserve(db, user_id, scope, key, payload):
@@ -28,3 +29,14 @@ def reserve(db, user_id, scope, key, payload):
             raise HTTPException(409, 'This request identifier was already used for different data')
         return receipt, json.loads(receipt.response)
     return receipt, None
+
+
+def create_once(db, user, request, scope, payload, model, encode=None):
+    receipt, previous = reserve(db, user.id, scope, request.headers.get('Idempotency-Key'), payload)
+    if previous is not None: return previous
+    row = model(user_id=user.id, **payload.model_dump())
+    db.add(row); db.flush()
+    result = jsonable_encoder(encode(row) if encode else {c.name:getattr(row,c.name) for c in model.__table__.columns if c.name!='user_id'})
+    if receipt: receipt.response=json.dumps(result)
+    db.commit()
+    return result

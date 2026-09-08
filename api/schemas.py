@@ -2,6 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from .timekeeping import ledger_time
 
 
 class ORMModel(BaseModel):
@@ -77,6 +78,7 @@ class TransactionIn(BaseModel):
 
     @model_validator(mode="after")
     def validate_transaction(self):
+        self.date = ledger_time(self.date)
         if self.type == "transfer":
             if not self.transfer_wallet_id:
                 raise ValueError("A destination wallet is required for transfers")
@@ -153,6 +155,10 @@ class PinPayload(BaseModel):
 
 
 class SettingsPayload(BaseModel):
+    quiet_hours_enabled: bool = False
+    quiet_start: str = Field(default='22:00', pattern=r'^([01]\d|2[0-3]):[0-5]\d$')
+    quiet_end: str = Field(default='08:00', pattern=r'^([01]\d|2[0-3]):[0-5]\d$')
+    reminder_topics: list[Literal['daily','budgets','bills','debts']] = Field(default_factory=lambda:['daily'],max_length=4)
     phone: str = Field(default='', pattern=r'^$|^\+[1-9]\d{6,14}$')
     font_family: Literal['system', 'arial', 'georgia', 'verdana'] = 'system'
     text_color: Literal['ink', 'charcoal', 'forest'] = 'ink'

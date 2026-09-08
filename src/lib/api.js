@@ -19,9 +19,12 @@ const pending = new Map()
 const transactionKeys = new Map()
 let writes = 0
 export function api(path, options = {}) {
+  if (options.method === 'PUT' && options.body) {
+    try { const data = JSON.parse(options.body); if (data.revision) { const headers = new Headers(options.headers); headers.set('If-Match', data.revision); options = {...options, headers} } } catch { /* Non-JSON requests do not carry revisions. */ }
+  }
   const key = JSON.stringify([auth.token, path, options.method || 'GET', options.body || ''])
   if (!options.signal && pending.has(key)) return pending.get(key)
-  const transaction = options.method === 'POST' && ['/api/transactions', '/api/shared/transactions'].includes(path)
+  const transaction = options.method === 'POST' && !path.startsWith('/api/auth/') && !path.startsWith('/api/passkeys/') && path !== '/api/account/confirm'
   if (transaction) {
     if (!transactionKeys.has(key)) transactionKeys.set(key, crypto.randomUUID())
     const headers = new Headers(options.headers)
@@ -30,10 +33,15 @@ export function api(path, options = {}) {
   }
   const mutation = options.method && options.method !== 'GET'
   if (mutation) window.dispatchEvent(new CustomEvent('flowbudget:pending', { detail: ++writes }))
-  const request = send(path, options).then(data => {
+  const request = send(path, options).catch(async error => {
+    if (error.status !== 428) throw error
+    await new Promise((resolve,reject)=>window.dispatchEvent(new CustomEvent('flowbudget:confirm-password',{detail:{resolve,reject}})))
+    return send(path,options)
+  }).then(data => {
     if (transaction) transactionKeys.delete(key)
     return data
   }).catch(error => {
+    if (transaction && error.status >= 400 && error.status < 500) transactionKeys.delete(key)
     if (mutation) window.dispatchEvent(new CustomEvent('flowbudget:error', { detail:error.message || 'The request could not be saved. Please try again.' }))
     throw error
   }).finally(() => {

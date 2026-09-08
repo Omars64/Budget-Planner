@@ -169,6 +169,27 @@ def send_verification_code(to_email: str, username: str, code: str) -> None:
     raise last_error or EmailServiceError("Verification email could not be delivered")
 
 
+def send_password_reset(to_email: str, token: str) -> None:
+    config = get_smtp_config(require_password=True)
+    site = os.getenv('WEBAUTHN_ORIGIN', 'https://budget-planner-ecru-seven.vercel.app').rstrip('/')
+    msg = EmailMessage()
+    msg['Subject'] = 'Reset your FlowBudget password'
+    msg['From'] = f'FlowBudget <{config.from_email}>'
+    msg['To'] = to_email
+    msg.set_content(f'Open this link to choose a new password:\n\n{site}/?reset={token}\n\nThis link expires in 20 minutes and works once. If you did not request it, ignore this email.')
+    last_error = None
+    for port in _ports_to_try(config):
+        try:
+            with _smtp_session(config, port) as server:
+                server.login(config.username, config.password)
+                server.send_message(msg)
+            return
+        except Exception as exc:
+            last_error = _classify_error(exc)
+            if isinstance(last_error, EmailAuthenticationError): break
+    raise last_error or EmailServiceError('Reset email could not be delivered')
+
+
 def smtp_status(probe: bool = False) -> dict:
     try:
         config = get_smtp_config(require_password=False)

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { ArrowDownLeft, ArrowUpRight, Landmark, Sparkles, WalletCards } from 'lucide-react'
 import { format } from 'date-fns'
+import { dateInput, displayDate } from '../lib/time'
 import { api, money } from '../lib/api'
 import { useApp } from '../App'
 import MetricCard from '../components/MetricCard'
@@ -11,7 +12,7 @@ import EmptyState from '../components/EmptyState'
 export default function Overview() {
   const { settings, refreshKey } = useApp()
   const [data, setData] = useState(null)
-  const [month, setMonth] = useState(new Date().toISOString().slice(0,7))
+  const [month, setMonth] = useState(dateInput().slice(0,7))
   const [error, setError] = useState('')
   useEffect(() => { api(`/api/dashboard?month=${month}`).then(setData).catch(e => setError(e.message)) }, [month, refreshKey])
   const fmt = v => money(v, settings.currency, settings.compact_numbers)
@@ -72,7 +73,7 @@ export default function Overview() {
         <div className="transaction-list compact">
           {data.recent_transactions.length ? data.recent_transactions.map(tx => <div className="transaction-row" key={tx.id}>
             <span className={`tx-symbol ${tx.type}`}>{tx.type === 'income' ? <ArrowDownLeft size={18}/> : <ArrowUpRight size={18}/>}</span>
-            <div className="tx-main"><strong>{tx.description}</strong><small>{tx.category_name || (tx.type === 'transfer' ? `${tx.wallet_name} → ${tx.transfer_wallet_name}` : 'Uncategorized')} · {format(new Date(tx.date), 'dd MMM, HH:mm')}</small></div>
+            <div className="tx-main"><strong>{tx.description}</strong><small>{tx.category_name || (tx.type === 'transfer' ? `${tx.wallet_name} → ${tx.transfer_wallet_name}` : 'Uncategorized')} · {format(displayDate(tx.date), 'dd MMM, HH:mm')}</small></div>
             <strong className={`tx-amount ${tx.type}`}>{tx.type === 'income' ? '+' : tx.type === 'expense' ? '−' : ''}{fmt(tx.amount)}</strong>
           </div>) : <EmptyState/>}
         </div>

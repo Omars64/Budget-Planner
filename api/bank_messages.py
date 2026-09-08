@@ -43,7 +43,8 @@ def revoke_key(user=Depends(current_user), db=Depends(get_db)):
 
 
 def ingest(db, user_id, payload):
-    if re.search(r'\b(otp|verification|one.time|password|passcode)\b', payload.message, re.I):
+    db.query(User).filter_by(id=user_id).with_for_update().first()
+    if re.search(r'\b(otp|verification|one.time|password|passcode|login|pin)\b|\u0631\u0645\u0632\s*(?:\u0627\u0644\u062a\u062d\u0642\u0642|\u0627\u0644\u062a\u0641\u0639\u064a\u0644)|\u0643\u0644\u0645\u0629\s*\u0627\u0644\u0645\u0631\u0648\u0631', payload.message, re.I):
         raise HTTPException(422, 'Verification codes and passwords must not be forwarded')
     existing = db.query(BankMessage).filter_by(user_id=user_id, reference=payload.reference).first()
     if existing: return {'id': existing.id, 'duplicate': True}
@@ -74,7 +75,12 @@ def paste_message(payload: MessageIn, user=Depends(current_user), db=Depends(get
 
 @router.get('/api/bank-messages')
 def messages(user=Depends(current_user), db=Depends(get_db)):
-    return db.query(BankMessage).filter_by(user_id=user.id, recorded=False).order_by(BankMessage.id.desc()).limit(500).all()
+    from .message_parser import suggest
+    rows=db.query(BankMessage).filter_by(user_id=user.id, recorded=False).order_by(BankMessage.id.desc()).limit(500).all()
+    texts={}
+    for row in db.query(BankMessage).filter_by(user_id=user.id).all():
+        key=(row.bank,row.message.strip());texts[key]=texts.get(key,0)+1
+    return [{'id':r.id,'bank':r.bank,'message':r.message,'created_at':r.created_at.isoformat()+'Z','suggestions':suggest(r.message),'possible_duplicate':texts[(r.bank,r.message.strip())]>1} for r in rows]
 
 
 @router.post('/api/bank-messages/{message_id}/record')

@@ -59,7 +59,7 @@ class SignupVerify(BaseModel):
 
 class ShareIn(BaseModel):
     email: str = Field(min_length=5, max_length=160)
-    permission: Literal["view", "edit"] = "view"
+    permission: Literal["view", "add", "edit"] = "view"
 
 
 class AppearanceIn(BaseModel):
@@ -163,9 +163,9 @@ def share_for_wallet(db: Session, user: User, wallet_id: int):
     return wallet, share.permission, False
 
 
-def require_edit(db: Session, user: User, wallet_id: int) -> Wallet:
+def require_edit(db: Session, user: User, wallet_id: int, creating=False) -> Wallet:
     wallet, permission, _ = share_for_wallet(db, user, wallet_id)
-    if permission != "edit":
+    if permission != "edit" and not (creating and permission == 'add'):
         raise HTTPException(403, "You have view-only access to this wallet")
     return wallet
 
@@ -188,13 +188,16 @@ def can_edit_wallet(db: Session, user: User, wallet_id: Optional[int]) -> bool:
 
 
 def shared_tx_payload(db: Session, user: User, tx: Transaction, visible_ids: set[int], context=None) -> dict:
+    from .index import transaction_revision
+    from .timekeeping import ledger_iso
     names = []
     if tx.wallet_id in visible_ids and tx.wallet: names.append(tx.wallet.name)
     if tx.transfer_wallet_id in visible_ids and tx.transfer_wallet: names.append(tx.transfer_wallet.name)
     owner = context[0].get(tx.user_id) if context else db.get(User, tx.user_id)
     editable = (tx.wallet_id in context[1] and (tx.type != "transfer" or tx.transfer_wallet_id in context[1])) if context else can_edit_wallet(db, user, tx.wallet_id) and (tx.type != "transfer" or can_edit_wallet(db, user, tx.transfer_wallet_id))
     return {
-        "id": tx.id, "type": tx.type, "amount": float(tx.amount), "description": tx.description, "notes": tx.notes or "", "date": tx.date.isoformat(),
+        'revision': transaction_revision(tx),
+        "id": tx.id, "type": tx.type, "amount": float(tx.amount), "description": tx.description, "notes": tx.notes or "", "date": ledger_iso(tx.date),
         "wallet_id": tx.wallet_id, "transfer_wallet_id": tx.transfer_wallet_id, "category_id": tx.category_id,
         "wallet_name": tx.wallet.name if tx.wallet_id in visible_ids and tx.wallet else "Shared wallet",
         "transfer_wallet_name": tx.transfer_wallet.name if tx.transfer_wallet_id in visible_ids and tx.transfer_wallet else ("Private wallet" if tx.transfer_wallet_id else None),
@@ -205,11 +208,11 @@ def shared_tx_payload(db: Session, user: User, tx: Transaction, visible_ids: set
 
 
 def validate_shared_tx(db: Session, user: User, payload: SharedTransactionIn, owner_id: Optional[int] = None):
-    source = require_edit(db, user, payload.wallet_id)
+    source = require_edit(db, user, payload.wallet_id, creating=owner_id is None)
     if owner_id is not None and source.user_id != owner_id:
         raise HTTPException(400, "A shared transaction cannot be moved to another owner's wallet")
     if payload.transfer_wallet_id:
-        dest = require_edit(db, user, payload.transfer_wallet_id)
+        dest = require_edit(db, user, payload.transfer_wallet_id, creating=owner_id is None)
         if dest.user_id != source.user_id:
             raise HTTPException(400, "Shared transfers must stay within the same owner's wallets")
     if payload.category_id:
@@ -222,6 +225,8 @@ def validate_shared_tx(db: Session, user: User, payload: SharedTransactionIn, ow
 
 @router.post("/api/auth/signup/start")
 def signup_start(payload: SignupStart, db: Session = Depends(get_db)):
+    from .account_security import limit
+    limit(db, 'signup:'+normalize_email(payload.email), 8, 3600)
     email = clean_email(payload.email); username = payload.username.strip()
     if db.query(User).filter(User.email == email).first():
         raise HTTPException(409, "An account with this email already exists. Sign in instead.")
@@ -294,7 +299,7 @@ def shared_wallets(user: User = Depends(current_user), db: Session = Depends(get
     for wallet in wallets:
         owner = owners.get(wallet.user_id); is_owner = wallet.user_id == user.id; incoming_share = incoming_map.get(wallet.id); shares = outgoing_map.get(wallet.id, []) if is_owner else []
         balance = float(wallet.initial_balance) + float(totals.get((wallet.id, "income"), 0)) - float(totals.get((wallet.id, "expense"), 0)) - float(totals.get((wallet.id, "transfer"), 0)) + float(incoming_totals.get(wallet.id, 0))
-        result.append({"wallet_id": wallet.id, "name": wallet.name, "type": wallet.type, "color": wallet.color, "balance": round(balance, 3), "owner_email": owner.email if owner else "", "owner_name": owner.username if owner else "", "is_owner": is_owner, "permission": "edit" if is_owner else incoming_share.permission, "can_edit": is_owner or incoming_share.permission == "edit", "shares": [{"id": s.id, "email": s.invitee_email, "permission": s.permission, "registered": bool(s.member_user_id)} for s in shares]})
+        result.append({"wallet_id": wallet.id, "name": wallet.name, "type": wallet.type, "color": wallet.color, "balance": round(balance, 3), "owner_email": owner.email if owner else "", "owner_name": owner.username if owner else "", "is_owner": is_owner, "permission": "edit" if is_owner else incoming_share.permission, "can_edit": is_owner or incoming_share.permission == "edit", "can_add": is_owner or incoming_share.permission in {"edit","add"}, "shares": [{"id": s.id, "email": s.invitee_email, "permission": s.permission, "registered": bool(s.member_user_id)} for s in shares]})
     return sorted(result, key=lambda item: (not item["is_owner"], item["name"].lower()))
 
 
@@ -310,6 +315,8 @@ def share_wallet(wallet_id: int, payload: ShareIn, user: User = Depends(current_
         share.permission = payload.permission; share.member_user_id = member.id if member else None
     else:
         share = WalletShare(wallet_id=wallet.id, owner_id=user.id, invitee_email=email, member_user_id=member.id if member else None, permission=payload.permission); db.add(share)
+    from .account_security import audit
+    audit(db, user.id, user.id, 'Updated wallet sharing', f'wallet:{wallet.id}')
     db.commit(); db.refresh(share)
     return {"id": share.id, "wallet_id": wallet.id, "email": email, "permission": share.permission, "registered": bool(share.member_user_id)}
 
@@ -318,6 +325,8 @@ def share_wallet(wallet_id: int, payload: ShareIn, user: User = Depends(current_
 def remove_share(share_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
     share = db.query(WalletShare).filter(WalletShare.id == share_id, WalletShare.owner_id == user.id).first()
     if not share: raise HTTPException(404, "Share not found")
+    from .account_security import audit
+    audit(db, user.id, user.id, 'Revoked wallet sharing', f'wallet:{share.wallet_id}')
     db.delete(share); db.commit(); return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -325,6 +334,14 @@ def remove_share(share_id: int, user: User = Depends(current_user), db: Session 
 def shared_categories(wallet_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
     wallet, _, _ = share_for_wallet(db, user, wallet_id)
     return db.query(Category).filter(Category.user_id == wallet.user_id).order_by(Category.kind, Category.name).all()
+
+
+@router.get('/api/shared/wallets/{wallet_id}/activity')
+def wallet_activity(wallet_id:int,user=Depends(current_user),db=Depends(get_db)):
+    wallet,_,_=share_for_wallet(db,user,wallet_id)
+    from .reliability_models import Activity
+    rows=db.query(Activity).filter_by(user_id=wallet.user_id,resource=f'wallet:{wallet_id}').order_by(Activity.id.desc()).limit(100).all()
+    return [{'id':r.id,'action':r.action,'actor':db.get(User,r.actor_id).username if db.get(User,r.actor_id) else 'Former user','created_at':r.created_at.isoformat()+'Z'} for r in rows]
 
 
 @router.get("/api/shared/transactions")
@@ -353,6 +370,8 @@ def create_shared_transaction(payload: SharedTransactionIn, request: Request, us
     receipt, previous = reserve(db, user.id, 'shared-transaction', request.headers.get('Idempotency-Key'), payload)
     if previous is not None: return previous
     row = Transaction(user_id=source.user_id, **payload.model_dump()); db.add(row); db.flush()
+    from .account_security import audit
+    audit(db, row.user_id, user.id, 'Added shared transaction', f'wallet:{row.wallet_id}')
     result = shared_tx_payload(db, user, row, shared_wallet_ids(db, user))
     if receipt: receipt.response = json.dumps(result)
     db.commit()
@@ -360,11 +379,15 @@ def create_shared_transaction(payload: SharedTransactionIn, request: Request, us
 
 
 @router.put("/api/shared/transactions/{transaction_id}")
-def update_shared_transaction(transaction_id: int, payload: SharedTransactionIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    row = db.get(Transaction, transaction_id)
+def update_shared_transaction(transaction_id: int, payload: SharedTransactionIn, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    row = db.query(Transaction).filter_by(id=transaction_id).with_for_update().first()
     if not row: raise HTTPException(404, "Transaction not found")
     if not can_edit_wallet(db, user, row.wallet_id) or (row.type == "transfer" and not can_edit_wallet(db, user, row.transfer_wallet_id)): raise HTTPException(403, "You do not have edit access to this transaction")
     validate_shared_tx(db, user, payload, row.user_id)
+    from .index import check_revision
+    from .account_security import audit
+    check_revision(request, row)
+    audit(db, row.user_id, user.id, 'Edited shared transaction', f'wallet:{row.wallet_id}')
     for key, value in payload.model_dump().items(): setattr(row, key, value)
     db.commit(); db.refresh(row); return shared_tx_payload(db, user, row, shared_wallet_ids(db, user))
 
@@ -375,5 +398,7 @@ def delete_shared_transaction(transaction_id: int, user: User = Depends(current_
     if not row: raise HTTPException(404, "Transaction not found")
     if not can_edit_wallet(db, user, row.wallet_id) or (row.type == "transfer" and not can_edit_wallet(db, user, row.transfer_wallet_id)): raise HTTPException(403, "You do not have edit access to this transaction")
     save_recovery(db, db.get(User, row.user_id), user, f"Deleted shared transaction: {row.description}")
+    from .recovery import trash
+    trash(db, row, user, 'transaction')
     db.query(Transaction).filter(Transaction.recurring_parent_id == row.id).update({Transaction.recurring_parent_id: None}, synchronize_session=False)
     db.delete(row); db.commit(); return Response(status_code=status.HTTP_204_NO_CONTENT)
