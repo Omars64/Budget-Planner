@@ -4,7 +4,7 @@ import { passwordOnlyEnabled, setPasswordOnly } from '../lib/biometric'
 export default function DeviceSignInPreference({ disabled, onChange }) {
   const [enabled, setEnabled] = useState(passwordOnlyEnabled)
   const [error, setError] = useState('')
-  return <div className="stack gap-10">
+  return <div className="device-signin-preference stack gap-10">
     <label className="check-row">
       <input type="checkbox" checked={enabled} disabled={disabled} onChange={e => {
         try {
