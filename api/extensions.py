@@ -2,16 +2,11 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import html
 import json
 import os
 import re
 import secrets
-import smtplib
-import ssl
 from datetime import datetime, timedelta, timezone
-from email.message import EmailMessage
-from email.utils import format_datetime, make_msgid
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
@@ -104,34 +99,8 @@ def challenge_email(token: str) -> str:
 
 
 def send_code(to_email: str, username: str, code: str) -> None:
-    host = os.getenv("SMTP_HOST", "smtp.gmail.com").strip()
-    port = int(os.getenv("SMTP_PORT", "587"))
-    smtp_user = os.getenv("SMTP_USER", "").strip()
-    smtp_password = os.getenv("SMTP_PASSWORD", "").replace(" ", "")
-    from_email = os.getenv("SMTP_FROM", smtp_user).strip() or smtp_user
-    if not smtp_user or not smtp_password:
-        raise RuntimeError("Email verification is not configured")
-
-    safe_name = html.escape(username)
-    msg = EmailMessage()
-    msg["Subject"] = f"{code} is your FlowBudget verification code"
-    msg["From"] = f"FlowBudget <{from_email}>"
-    msg["To"] = to_email
-    msg["Reply-To"] = from_email
-    msg["Date"] = format_datetime(datetime.now(timezone.utc))
-    msg["Message-ID"] = make_msgid(domain=from_email.split("@")[-1] if "@" in from_email else None)
-    msg.set_content(f"Hi {username},\n\nYour FlowBudget verification code is {code}. It expires in 10 minutes. If you did not request it, ignore this email.\n\nFlowBudget")
-    msg.add_alternative(f'''<!doctype html><html><body style="margin:0;background:#f4f8fb;font-family:Arial,sans-serif;color:#153246"><table role="presentation" width="100%"><tr><td align="center" style="padding:32px 16px"><table role="presentation" width="100%" style="max-width:520px;background:#fff;border:1px solid #dce8f0;border-radius:20px"><tr><td style="padding:28px"><div style="font-size:22px;font-weight:700;color:#0a4173">FlowBudget</div><p>Hi {safe_name},</p><p>Use this code to finish creating your account:</p><div style="font-size:34px;letter-spacing:10px;font-weight:800;color:#0a4173;padding:18px 0">{code}</div><p style="font-size:13px;color:#647987">The code expires in 10 minutes. If you did not request it, ignore this message.</p></td></tr></table></td></tr></table></body></html>''', subtype="html")
-    context = ssl.create_default_context()
-    if port == 465:
-        with smtplib.SMTP_SSL(host, port, context=context, timeout=15) as server:
-            server.login(smtp_user, smtp_password)
-            server.send_message(msg)
-    else:
-        with smtplib.SMTP(host, port, timeout=15) as server:
-            server.ehlo(); server.starttls(context=context); server.ehlo()
-            server.login(smtp_user, smtp_password)
-            server.send_message(msg)
+    from .email_service import send_verification_code
+    send_verification_code(to_email, username, code)
 
 
 def validate_image(value: Optional[str], max_bytes: int, label: str) -> str:

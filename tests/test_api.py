@@ -18,6 +18,17 @@ def auth_headers(client, email='omarsolanki46@gmail.com', password='FlowBudgetAd
     return {'Authorization': f"Bearer {r.json()['token']}"}
 
 
+def test_passwords_are_stored_as_one_way_hashes():
+    from api.index import hash_password, verify_password
+
+    raw = 'StrongPass123!'
+    stored = hash_password(raw)
+    assert stored.startswith('scrypt$')
+    assert raw not in stored
+    assert verify_password(raw, stored)
+    assert not verify_password('wrong-password', stored)
+
+
 def test_auth_admin_user_management_and_isolation():
     with TestClient(app) as client:
         assert client.get('/api/wallets').status_code == 401

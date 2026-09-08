@@ -104,16 +104,25 @@ def normalize_email(email: str) -> str:
 
 def hash_password(password: str) -> str:
     salt = secrets.token_bytes(16)
-    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 240_000)
-    return f"{base64.b64encode(salt).decode()}:{base64.b64encode(digest).decode()}"
+    digest = hashlib.scrypt(password.encode(), salt=salt, n=2**14, r=8, p=1, dklen=32)
+    return f"scrypt$16384$8$1${base64.b64encode(salt).decode()}${base64.b64encode(digest).decode()}"
 
 
 def verify_password(password: str, stored: str) -> bool:
     try:
-        salt64, digest64 = stored.split(":", 1)
-        salt = base64.b64decode(salt64)
-        expected = base64.b64decode(digest64)
-        actual = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 240_000)
+        if stored.startswith("scrypt$"):
+            scheme, n, r, p, salt64, digest64 = stored.split("$", 5)
+            if scheme != "scrypt":
+                return False
+            salt = base64.b64decode(salt64)
+            expected = base64.b64decode(digest64)
+            actual = hashlib.scrypt(password.encode(), salt=salt, n=int(n), r=int(r), p=int(p), dklen=len(expected))
+        else:
+            # Backward compatibility for hashes created before the scrypt upgrade.
+            salt64, digest64 = stored.split(":", 1)
+            salt = base64.b64decode(salt64)
+            expected = base64.b64decode(digest64)
+            actual = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 240_000)
         return hmac.compare_digest(actual, expected)
     except Exception:
         return False

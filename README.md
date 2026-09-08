@@ -164,6 +164,8 @@ Copy `.env.example` if you want explicit configuration.
 - `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` — sender login, app password, and sender address; Gmail requires an App Password for the account in `SMTP_USER`, not its regular password
 - `PUBLIC_APP_URL` — canonical HTTPS URL used in password-reset links; keep this on the same trusted domain users recognize
 
+Passwords are never stored as plaintext or reversible encryption. New passwords are stored as salted, memory-hard `scrypt` hashes. Existing legacy PBKDF2 hashes remain readable only for verification so current users are not locked out; changing a password replaces the old hash with `scrypt`.
+
 ### Outlook delivery
 
 The application sends small plain-text-plus-HTML transactional messages with a stable `Message-ID`, `Reply-To`, and sender-domain alignment. This improves compatibility, but application code cannot override an Outlook/Microsoft 365 tenant quarantine policy. For reliable delivery, send from a domain you control rather than a personal Gmail address and publish all three records for that sending domain:

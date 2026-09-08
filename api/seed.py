@@ -26,8 +26,8 @@ INCOME_CATEGORIES = [
 
 def hash_password(password: str) -> str:
     salt = secrets.token_bytes(16)
-    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 240_000)
-    return f"{base64.b64encode(salt).decode()}:{base64.b64encode(digest).decode()}"
+    digest = hashlib.scrypt(password.encode(), salt=salt, n=2**14, r=8, p=1, dklen=32)
+    return f"scrypt$16384$8$1${base64.b64encode(salt).decode()}${base64.b64encode(digest).decode()}"
 
 
 def ensure_admin_user(db: Session) -> User:
