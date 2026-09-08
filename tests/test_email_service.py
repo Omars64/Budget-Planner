@@ -74,6 +74,16 @@ def test_outlook_message_has_plain_text_html_and_authenticated_sender():
     assert "A &lt; B" in message.get_body(preferencelist=("html",)).get_content()
     assert message["Date"] and message["Message-ID"]
     assert config.username in message["From"]
+    assert message["Auto-Submitted"] == "auto-generated"
+    assert message["X-Entity-Ref-ID"].startswith("flowbudget-")
+
+
+def test_password_reset_message_has_plain_text_html_and_safe_origin(monkeypatch):
+    monkeypatch.setenv("PUBLIC_APP_URL", "https://budget-planner-ecru-seven.vercel.app")
+    config = email_service.get_smtp_config()
+    message = email_service._base_message(config, "recipient@outlook.com", "Reset your FlowBudget password", "password-reset")
+    assert message["Reply-To"] == config.from_email
+    assert message["Content-Language"] == "en"
 
 
 def test_gmail_rejects_mismatched_sender(monkeypatch):

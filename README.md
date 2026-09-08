@@ -162,6 +162,17 @@ Copy `.env.example` if you want explicit configuration.
 - `ADMIN_INITIAL_PASSWORD` — first admin password; set this in deployment secrets before first startup
 - `SMTP_HOST`, `SMTP_PORT` — email server and port (Gmail: `smtp.gmail.com`, `587`)
 - `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` — sender login, app password, and sender address; Gmail requires an App Password for the account in `SMTP_USER`, not its regular password
+- `PUBLIC_APP_URL` — canonical HTTPS URL used in password-reset links; keep this on the same trusted domain users recognize
+
+### Outlook delivery
+
+The application sends small plain-text-plus-HTML transactional messages with a stable `Message-ID`, `Reply-To`, and sender-domain alignment. This improves compatibility, but application code cannot override an Outlook/Microsoft 365 tenant quarantine policy. For reliable delivery, send from a domain you control rather than a personal Gmail address and publish all three records for that sending domain:
+
+1. SPF authorizes the actual email provider.
+2. DKIM signs outgoing messages for the same domain used in `From`.
+3. DMARC aligns that authenticated domain with `From` and starts at `p=none` while reports are reviewed.
+
+The SMTP configuration now rejects a mismatched `SMTP_FROM` domain. If the current Gmail sender still lands in quarantine, check the quarantine message's `Authentication-Results` for `spf`, `dkim`, `dmarc`, and `compauth`; then configure the sending domain/provider or ask the Outlook administrator to release and allow the verified sender. Do not add a broad allow rule for an unauthenticated sender.
 
 In Vercel, open the **budget-planner project > Settings > Environment Variables**. Apply production settings to **Production**, then redeploy for changes to take effect. Keep passwords and database connection strings out of Git. Connecting Neon with the `FLOWBUDGET` prefix supplies `FLOWBUDGET_DATABASE_URL` automatically.
 

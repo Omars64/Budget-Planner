@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+import hashlib
 import logging
 import os
 import smtplib
@@ -72,6 +73,8 @@ def get_smtp_config(require_password: bool = True) -> SMTPConfig:
         raise EmailConfigurationError("SMTP sender address is invalid")
     if host.lower() in {"smtp.gmail.com", "smtp.googlemail.com"} and from_email.lower() != username.lower():
         raise EmailConfigurationError("Gmail SMTP_FROM must match SMTP_USER for authenticated delivery")
+    if from_email.rsplit("@", 1)[-1].lower() != username.rsplit("@", 1)[-1].lower():
+        raise EmailConfigurationError("SMTP_FROM must use the authenticated sender domain for DMARC alignment")
 
     return SMTPConfig(
         host=host,
@@ -83,18 +86,28 @@ def get_smtp_config(require_password: bool = True) -> SMTPConfig:
     )
 
 
-def _build_verification_message(config: SMTPConfig, to_email: str, username: str, code: str) -> EmailMessage:
-    safe_name = html.escape(username)
+def _base_message(config: SMTPConfig, to_email: str, subject: str, purpose: str) -> EmailMessage:
+    """Create a small, standards-compliant transactional message for Outlook."""
+    domain = config.from_email.split("@", 1)[1] if "@" in config.from_email else None
+    entity = hashlib.sha256(f"{purpose}:{to_email.lower()}".encode("utf-8")).hexdigest()[:24]
     msg = EmailMessage()
-    msg["Subject"] = f"{code} is your FlowBudget verification code"
+    msg["Subject"] = subject
     msg["From"] = f"FlowBudget <{config.from_email}>"
     msg["To"] = to_email
     msg["Reply-To"] = config.from_email
     msg["Date"] = format_datetime(datetime.now(timezone.utc))
-    domain = config.from_email.split("@", 1)[1] if "@" in config.from_email else None
     msg["Message-ID"] = make_msgid(domain=domain)
     msg["Auto-Submitted"] = "auto-generated"
     msg["X-Auto-Response-Suppress"] = "All"
+    msg["X-Entity-Ref-ID"] = f"flowbudget-{entity}"
+    msg["Content-Language"] = "en"
+    msg["Importance"] = "normal"
+    return msg
+
+
+def _build_verification_message(config: SMTPConfig, to_email: str, username: str, code: str) -> EmailMessage:
+    safe_name = html.escape(username)
+    msg = _base_message(config, to_email, f"{code} is your FlowBudget verification code", "verification")
 
     msg.set_content(
         f"Hi {username},\n\n"
@@ -171,12 +184,18 @@ def send_verification_code(to_email: str, username: str, code: str) -> None:
 
 def send_password_reset(to_email: str, token: str) -> None:
     config = get_smtp_config(require_password=True)
-    site = os.getenv('WEBAUTHN_ORIGIN', 'https://budget-planner-ecru-seven.vercel.app').rstrip('/')
-    msg = EmailMessage()
-    msg['Subject'] = 'Reset your FlowBudget password'
-    msg['From'] = f'FlowBudget <{config.from_email}>'
-    msg['To'] = to_email
-    msg.set_content(f'Open this link to choose a new password:\n\n{site}/?reset={token}\n\nThis link expires in 20 minutes and works once. If you did not request it, ignore this email.')
+    site = _first_env('PUBLIC_APP_URL', 'WEBAUTHN_ORIGIN', default='https://budget-planner-ecru-seven.vercel.app').rstrip('/')
+    link = f'{site}/?reset={token}'
+    msg = _base_message(config, to_email, 'Reset your FlowBudget password', 'password-reset')
+    msg.set_content(
+        'Open this link to choose a new password:\n\n'
+        f'{link}\n\n'
+        'This link expires in 20 minutes and works once. If you did not request it, ignore this email.'
+    )
+    msg.add_alternative(
+        f'''<!doctype html><html lang="en"><body style="margin:0;background:#f4f8fb;font-family:Arial,sans-serif;color:#153246"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#fff;border:1px solid #dce8f0;border-radius:12px"><tr><td style="padding:28px"><div style="font-size:22px;font-weight:700;color:#0a4173">FlowBudget</div><p>We received a request to change your password.</p><p><a href="{html.escape(link, quote=True)}" style="display:inline-block;background:#0a4173;color:#fff;padding:12px 18px;border-radius:6px;text-decoration:none">Choose a new password</a></p><p style="font-size:13px;color:#647987">This link expires in 20 minutes and works once. If you did not request it, ignore this email.</p></td></tr></table></td></tr></table></body></html>''',
+        subtype='html',
+    )
     last_error = None
     for port in _ports_to_try(config):
         try:
