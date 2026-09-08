@@ -1,0 +1,47 @@
+const {chromium} = require(process.env.FLOWBUDGET_PLAYWRIGHT || 'playwright')
+const assert = require('node:assert/strict')
+
+;(async () => {
+  const browser = await chromium.launch({channel:'msedge', headless:true})
+  try {
+    for (const width of [1440,390]) {
+      const context = await browser.newContext({viewport:{width,height:900}})
+      const page = await context.newPage()
+      const errors=[]
+      page.on('pageerror', error => errors.push(error.message))
+      const cdp = await context.newCDPSession(page)
+      await cdp.send('WebAuthn.enable')
+      await cdp.send('WebAuthn.addVirtualAuthenticator', {options:{protocol:'ctap2',transport:'internal',hasResidentKey:true,hasUserVerification:true,isUserVerified:true,automaticPresenceSimulation:true}})
+      await page.goto('http://localhost:5187/#/settings')
+      await page.getByLabel('Email',{exact:true}).fill('omarsolanki46@gmail.com')
+      await page.getByLabel('Password',{exact:true}).fill('LocalCompatibilityTest!2026')
+      await page.getByRole('button',{name:'Sign in',exact:true}).click()
+      await page.getByLabel('Confirm password to register a passkey',{exact:true}).fill('LocalCompatibilityTest!2026')
+      await page.getByRole('button',{name:/Enable biometric sign-in|Register another passkey/}).click()
+      await page.getByText('Passkey registered',{exact:true}).waitFor()
+      assert.equal((await context.request.get('http://localhost:5187/api/health')).status(),200)
+      // New browser session token, same authenticator: server must recognize enrollment.
+      await page.evaluate(() => sessionStorage.removeItem('flowbudget_token'))
+      await page.reload()
+      const preference=page.getByLabel('Use password only on this device')
+      await preference.check()
+      await page.reload()
+      assert(await preference.isChecked())
+      assert(await page.getByRole('button',{name:'Biometric / passkey',exact:true}).isDisabled())
+      await page.waitForFunction(() => Number(getComputedStyle(document.querySelector('.auth-card')).opacity) >= 0.99)
+      await page.screenshot({path:`.verification/password-only-${width}.png`})
+      await preference.uncheck()
+      await page.getByRole('button',{name:'Biometric / passkey',exact:true}).click()
+      await page.getByRole('button',{name:'Sign in with passkey',exact:true}).click()
+      await page.getByLabel('Confirm password to register a passkey',{exact:true}).waitFor()
+      await page.getByLabel('Use password only on this device').check()
+      assert(await page.getByRole('button',{name:'Register another passkey',exact:true}).isDisabled())
+      assert.equal(await page.getByLabel('Confirm password to register a passkey',{exact:true}).count(),0)
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),false)
+      assert.deepEqual(errors,[])
+      await page.screenshot({path:`.verification/compatibility-settings-${width}.png`})
+      await context.close()
+    }
+    console.log('PASS: real browser WebAuthn enrollment and fresh-session login, password-only persistence, Settings, 390/1440px, no runtime errors')
+  } finally { await browser.close() }
+})().catch(e=>{console.error(e);process.exitCode=1})

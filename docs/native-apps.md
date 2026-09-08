@@ -5,7 +5,7 @@
 - Server-verified passkeys: explicit Password / Biometric choice, registration after password confirmation, single-use five-minute challenges, revocation. The legacy browser-stored bearer token is removed. Users must register again.
 - Android and iOS Capacitor projects bundle the React UI and use the same hosted API and database. They are native installable application projects, not browser shortcuts.
 - Native reminder scheduling uses the operating system and permission prompt. Sign-out cancels reminders. In the browser, reminders still require an open page; web push is not configured.
-- Android Bank messages includes exact sender configuration and a permission prompt. A RECEIVE_SMS receiver captures matching new KWD alerts in private app storage, excluding common OTP/security text. Alerts upload when the app opens or regains focus, with server deduplication. It does not read SMS history or change the default SMS app. This is not continuous background cloud upload.
+- Android SMS capture is disabled as of 8 September 2026: no SMS permission or receiver is included. Existing queued alerts are preserved and can still sync, but new alerts must be added manually. See [the compatibility investigation](android-bank-compatibility.md).
 - iPhone in Kuwait cannot expose the SMS inbox through a supported API for this finance app. Apple's carrier messaging API requires a default SMS app and EU eligibility. No native implementation can promise equivalent silent SMS capture under these constraints.
 - The phone-number field was removed from signup/settings because it was not used for notifications or capture. Existing stored phone data is not erased.
 
@@ -17,7 +17,7 @@
 4. iOS: on a Mac, open ios/App/App.xcodeproj in Xcode, select the Apple development team and a physical device, then archive for TestFlight/App Store. Windows cannot sign/build the iOS release.
 5. Test on physical devices: notifications while closed, permission denial, force-stop/reboot behavior, bank sender filters, offline pending messages, account switching, and removal/reinstall. Native SMS code has not yet passed an Android compile/device test in this environment.
 
-The Android SMS permission requires a Play Console declaration and approval under the SMS-based money management exception. Do not request SEND_SMS or default-SMS-handler privileges.
+Do not reintroduce SMS, accessibility, notification-listener or overlay permissions without a separate compatibility review and the required store approval. Rebuilding and signing the native application is required to remove permissions from an installed APK; website deployments do not update native manifests.
 
 ## Backend configuration
 

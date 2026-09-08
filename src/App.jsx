@@ -21,7 +21,8 @@ import BrandLogo from './components/BrandLogo'
 import PasswordInput from './components/PasswordInput'
 import { useConfirmation } from './components/Confirmation'
 import Experience from './components/Experience'
-import { biometricSupported, unlockBiometric } from './lib/biometric'
+import { biometricSupported, unlockBiometric, cancelBiometric } from './lib/biometric'
+import DeviceSignInPreference from './components/DeviceSignInPreference'
 import { cancelReminder } from './lib/deviceNotifications'
 import { BankSms, smsAvailable } from './lib/bankSms'
 
@@ -29,12 +30,14 @@ const AppContext = createContext(null)
 export const useApp = () => useContext(AppContext)
 
 function LoginScreen({ onLogin }) {
+  useEffect(() => () => cancelBiometric(), [])
+  const [, refreshSignInPreference] = useState(0)
   const [mode, setMode] = useState('login')
   const [signInMethod, setSignInMethod] = useState('password')
   const passkeyLogin = async () => {
     setBusy(true); setError('')
     try { const result = await unlockBiometric(); auth.token = result.token; await onLogin(result.user) }
-    catch (err) { setError(err.name === 'NotAllowedError' ? 'Passkey cancelled or unavailable. You can use your password.' : err.message) }
+    catch (err) { setError(['NotAllowedError', 'AbortError'].includes(err.name) ? 'Passkey cancelled or unavailable. You can use your password.' : err.message) }
     finally { setBusy(false) }
   }
   const [email, setEmail] = useState('')
@@ -106,6 +109,7 @@ function LoginScreen({ onLogin }) {
           {error && <div className="form-error">{error}</div>}
           <button className="button primary full" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
         </form>}
+        <DeviceSignInPreference disabled={busy} onChange={() => { setSignInMethod('password'); setError(''); refreshSignInPreference(v => v + 1) }}/>
         <button className="auth-switch" type="button" onClick={() => { setError(''); setMode('signup') }}>New to FlowBudget? <strong>Create an account</strong></button>
       </>}
 
