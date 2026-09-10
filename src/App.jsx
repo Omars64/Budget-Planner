@@ -33,11 +33,17 @@ export const useApp = () => useContext(AppContext)
 function LoginScreen({ onLogin }) {
   useEffect(() => () => cancelBiometric(), [])
   const [, refreshSignInPreference] = useState(0)
+  const [rememberMe, setRememberMe] = useState(() => auth.remembered)
   const [mode, setMode] = useState(()=>new URLSearchParams(location.search).has('reset')?'reset':'login')
   const [signInMethod, setSignInMethod] = useState('password')
+  const finishLogin = async result => {
+    auth.setRemembered(rememberMe)
+    auth.token = result.token
+    await onLogin(result.user)
+  }
   const passkeyLogin = async () => {
     setBusy(true); setError('')
-    try { const result = await unlockBiometric(); auth.token = result.token; await onLogin(result.user) }
+    try { const result = await unlockBiometric(); await finishLogin(result) }
     catch (err) { setError(['NotAllowedError', 'AbortError'].includes(err.name) ? 'Passkey cancelled or unavailable. You can use your password.' : err.message) }
     finally { setBusy(false) }
   }
@@ -63,8 +69,7 @@ function LoginScreen({ onLogin }) {
     setBusy(true); setError('')
     try {
       const result = await api('/api/auth/login', { method: 'POST', ...jsonBody({ email, password }) })
-      auth.token = result.token
-      await onLogin(result.user)
+      await finishLogin(result)
     } catch (err) { setError(err.message); setPassword('') }
     finally { setBusy(false) }
   }
@@ -89,8 +94,7 @@ function LoginScreen({ onLogin }) {
     setBusy(true); setError('')
     try {
       const result = await api('/api/auth/signup/verify', { method: 'POST', ...jsonBody({ challenge, code }) })
-      auth.token = result.token
-      await onLogin(result.user)
+      await finishLogin(result)
     } catch (err) { setError(err.message); setCode('') }
     finally { setBusy(false) }
   }
@@ -111,6 +115,7 @@ function LoginScreen({ onLogin }) {
           {error && <div className="form-error">{error}</div>}
           <button className="button primary full" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
         </form>}
+        <label className="check-row remember-session"><input type="checkbox" checked={rememberMe} disabled={busy} onChange={e => { try { auth.setRemembered(e.target.checked); setRememberMe(e.target.checked); setError('') } catch (err) { setError(err.message) } }}/><span>Keep me signed in on this device</span></label>
         <DeviceSignInPreference disabled={busy} onChange={() => { setSignInMethod('password'); setError(''); refreshSignInPreference(v => v + 1) }}/>
         <button type="button" className="auth-switch" onClick={()=>setMode('reset')}>Forgot password?</button>
         <button className="auth-switch" type="button" onClick={() => { setError(''); setMode('signup') }}>New to FlowBudget? <strong>Create an account</strong></button>

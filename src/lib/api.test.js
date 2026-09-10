@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { api, money } from './api'
+import { api, auth, money } from './api'
 
 describe('money formatter', () => {
   it('formats KWD using three fractional digits', () => {
@@ -25,4 +25,31 @@ it('coalesces repeated submits while a request is pending', async () => {
     resolve({ ok: true, status: 201, json: async () => ({ id: 5 }) })
     expect(await second).toEqual({ id: 5 })
   } finally { vi.unstubAllGlobals() }
+})
+
+it('keeps the token across browser or Android restarts only when explicitly enabled', () => {
+  sessionStorage.clear()
+  localStorage.clear()
+  auth.setRemembered(false)
+  auth.token = 'temporary-token'
+  expect(sessionStorage.getItem('flowbudget_token')).toBe('temporary-token')
+  expect(localStorage.getItem('flowbudget_token')).toBeNull()
+  auth.clear()
+  expect(auth.token).toBe('')
+
+  auth.setRemembered(true)
+  auth.token = 'persistent-token'
+  sessionStorage.clear()
+  expect(auth.token).toBe('persistent-token')
+  auth.clear()
+  expect(auth.token).toBe('')
+  expect(localStorage.getItem('flowbudget_remember_session')).toBe('true')
+})
+
+it('removing keep-me-signed-in deletes the persisted token', () => {
+  localStorage.setItem('flowbudget_remember_session', 'true')
+  localStorage.setItem('flowbudget_token', 'old-token')
+  auth.setRemembered(false)
+  expect(auth.token).toBe('')
+  expect(localStorage.getItem('flowbudget_token')).toBeNull()
 })

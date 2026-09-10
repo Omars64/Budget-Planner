@@ -1,6 +1,7 @@
 import { Capacitor } from '@capacitor/core'
 
 const tokenKey = 'flowbudget_token'
+const rememberKey = 'flowbudget_remember_session'
 const nativeApiBase = 'https://budget-planner-ecru-seven.vercel.app'
 const apiBase = import.meta.env.VITE_API_BASE_URL || (Capacitor.isNativePlatform() ? nativeApiBase : '')
 const responseCache = new Map()
@@ -10,8 +11,30 @@ export const readCached = path => {
 }
 
 export const auth = {
-  get token() { return sessionStorage.getItem(tokenKey) || '' },
-  set token(value) { value ? sessionStorage.setItem(tokenKey, value) : sessionStorage.removeItem(tokenKey) },
+  get remembered() {
+    try { return localStorage.getItem(rememberKey) === 'true' } catch { return false }
+  },
+  setRemembered(value) {
+    try {
+      localStorage.setItem(rememberKey, String(Boolean(value)))
+      if (!value) localStorage.removeItem(tokenKey)
+    } catch { if (value) throw new Error('Allow site storage to keep you signed in on this device.') }
+  },
+  get token() {
+    try { return sessionStorage.getItem(tokenKey) || (auth.remembered ? localStorage.getItem(tokenKey) || '' : '') } catch { return '' }
+  },
+  set token(value) {
+    try {
+      if (value) {
+        sessionStorage.setItem(tokenKey, value)
+        if (auth.remembered) localStorage.setItem(tokenKey, value)
+        else localStorage.removeItem(tokenKey)
+      } else {
+        sessionStorage.removeItem(tokenKey)
+        localStorage.removeItem(tokenKey)
+      }
+    } catch { throw new Error('Allow site storage to complete sign-in.') }
+  },
   clear() {
     responseCache.clear()
     sessionStorage.removeItem(tokenKey)
