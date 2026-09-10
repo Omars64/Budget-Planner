@@ -12,3 +12,4 @@ pytest-cache-files-*/
 .verification/
 .DS_Store
 .vercel/
+.android-signing/

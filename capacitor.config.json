@@ -2,5 +2,9 @@
   "appId": "com.flowbudget.app",
   "appName": "FlowBudget",
   "webDir": "dist",
-  "plugins": { "LocalNotifications": { "presentationOptions": ["badge", "sound", "banner", "list"] } }
+  "server": { "androidScheme": "https", "cleartext": false },
+  "plugins": {
+    "CapacitorHttp": { "enabled": true },
+    "LocalNotifications": { "presentationOptions": ["badge", "sound", "banner", "list"] }
+  }
 }

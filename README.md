@@ -121,6 +121,33 @@ Open the Vite URL, normally `http://localhost:5173`.
 
 Vite proxies `/api` requests to the local FastAPI server.
 
+## Android app build
+
+The repository includes a Capacitor Android project. The browser build uses relative `/api` requests locally, while the installed Android app automatically uses the production FlowBudget API at `https://budget-planner-ecru-seven.vercel.app`. Override this during development with `VITE_API_BASE_URL`.
+
+```powershell
+npm run android:sync
+npm run android:open
+```
+
+For a connected device or emulator, use `npm run android:run`. For a Play Store release, open the `android/` project in Android Studio and generate a signed **Android App Bundle** (`.aab`). Keep the package name `com.flowbudget.app` stable for future updates, protect the upload keystore, and use Google Play App Signing. The backend remains on Vercel; never put database credentials in the Android app.
+
+On this Windows machine, build an installable signed APK and an AAB with:
+
+```powershell
+npm run android:apk -- -Release -UseWindowsTrustStore
+```
+
+This uses JDK 21 (from `JAVA_HOME`, `-JdkHome`, or the locally downloaded `.verification/toolchain/jdk-21*` folder) and the Android SDK under `%LOCALAPPDATA%/Android/Sdk`. It does not change your system Java. `-UseWindowsTrustStore` uses Windows' trusted certificates for Gradle downloads; TLS verification remains enabled. Without `-Release`, the command builds a debug APK for development.
+
+Release outputs use the current version name, for example `android/app/build/outputs/apk/release/FlowBudget-1.0.1.apk` and `android/app/build/outputs/bundle/release/app-release.aab`. Install the APK on Android; the AAB is for a later Play Console submission. The first release build generates a signing key in `.android-signing/` and protects its password with Windows DPAPI. Keep that folder and the Windows account: the encrypted password file is tied to this user and machine. Arrange a secure key/password backup before publishing. Signing files and generated APKs/AABs are ignored by Git.
+
+The installed app bundles the interface locally and uses Capacitor's native HTTPS transport for the existing production API. Existing accounts and financial data are shared with the website. Native passkeys and automatic SMS capture remain disabled in this version. Local reminders can run outside the app after permission is granted; there is no remote push service configured.
+
+For phone testing, transfer the release APK to your Android device, open it, and allow installation from that specific file/browser app if Android requests it. Revoke that installation permission afterward. Sign in with your existing FlowBudget account. This APK is not a Play Store publication.
+
+If the emulator launches but HTTPS requests fail with `Trust anchor for certification path not found`, check whether PC antivirus HTTPS scanning is replacing the server certificate. This machine's AVG Web/Mail Shield does that. Windows trusts its certificate, but the emulator does not. Test the release on a physical phone using a trusted connection instead of disabling TLS verification or adding an antivirus CA to the production app. Emulator startup and release signing were verified; authenticated workflows and bank-app coexistence still require physical-device testing.
+
 ## First launch
 
 The first API startup creates the database and seeds a small demo dataset with wallets, transactions, budgets, goals and a debt. You can remove these records normally or use **Settings → Demo data → Reset demo data** to restore them.

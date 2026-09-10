@@ -15,6 +15,7 @@ from webauthn.helpers.structs import AuthenticatorSelectionCriteria, ResidentKey
 from .database import Base, get_db
 from .index import current_user, issue_token, user_payload, verify_password
 from .models import AppSetting, User, utc_now
+from .android_identity import ANDROID_ORIGIN, ANDROID_RP_ID, asset_links
 
 router = APIRouter()
 
@@ -60,6 +61,14 @@ def origin():
 def rp_id():
     return urlparse(origin()).hostname
 
+def trusted_origins():
+    # Only the published release certificate is trusted, not localhost or debug keys.
+    return [origin(), ANDROID_ORIGIN] if rp_id() == ANDROID_RP_ID else [origin()]
+
+@router.get('/.well-known/assetlinks.json')
+def android_asset_links():
+    return asset_links() if rp_id() == ANDROID_RP_ID else []
+
 def canonical_credential_id(payload):
     """Use rawId as the canonical credential identifier across browsers."""
     raw_id = payload.get('rawId') or payload.get('id')
@@ -102,7 +111,7 @@ def register_options(payload: Password, user: User = Depends(current_user), db: 
 def register_verify(payload: Response, user: User = Depends(current_user), db: Session = Depends(get_db)):
     expected = consume(db, payload.challenge_id, f'register:{user.id}')
     try:
-        verified = verify_registration_response(credential=payload.credential, expected_challenge=expected, expected_rp_id=rp_id(), expected_origin=origin(), require_user_verification=True)
+        verified = verify_registration_response(credential=payload.credential, expected_challenge=expected, expected_rp_id=rp_id(), expected_origin=trusted_origins(), require_user_verification=True)
     except Exception:
         raise HTTPException(400, 'Passkey could not be verified. Please try again.')
     credential_id = bytes_to_base64url(verified.credential_id)
@@ -129,7 +138,7 @@ def login_verify(payload: Response, db: Session = Depends(get_db)):
     user = db.get(User, row.user_id)
     if not user or not user.active: raise HTTPException(401, 'Account unavailable')
     try:
-        result = verify_authentication_response(credential=payload.credential, expected_challenge=expected, expected_rp_id=rp_id(), expected_origin=origin(), credential_public_key=base64url_to_bytes(row.public_key), credential_current_sign_count=row.sign_count, require_user_verification=True)
+        result = verify_authentication_response(credential=payload.credential, expected_challenge=expected, expected_rp_id=rp_id(), expected_origin=trusted_origins(), credential_public_key=base64url_to_bytes(row.public_key), credential_current_sign_count=row.sign_count, require_user_verification=True)
     except Exception:
         raise HTTPException(401, 'Passkey verification failed. Please try again.')
     row.sign_count = result.new_sign_count

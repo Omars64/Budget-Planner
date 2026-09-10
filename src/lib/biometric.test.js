@@ -1,12 +1,17 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { biometricSupported, cancelBiometric, passwordOnlyEnabled, setPasswordOnly, setupBiometric, unlockBiometric } from './biometric'
 import { api } from './api'
+const native = vi.hoisted(() => ({enabled:false, status:vi.fn(), create:vi.fn(), get:vi.fn(), cancel:vi.fn()}))
 
 vi.mock('./api', () => ({ api: vi.fn(), jsonBody: value => ({body:JSON.stringify(value)}) }))
-vi.mock('@capacitor/core', () => ({ Capacitor: { isNativePlatform: () => false } }))
+vi.mock('@capacitor/core', () => ({ Capacitor: { isNativePlatform: () => native.enabled, getPlatform: () => 'android', isPluginAvailable: () => true }, registerPlugin: () => native }))
 
 beforeEach(() => {
   localStorage.clear()
+  native.enabled = false
+  for (const key of ['status', 'create', 'get', 'cancel']) native[key].mockReset()
+  native.status.mockResolvedValue({supported:true,screenLock:true})
+  native.cancel.mockResolvedValue({})
   vi.stubGlobal('isSecureContext', true)
   vi.stubGlobal('PublicKeyCredential', class {})
   Object.defineProperty(navigator, 'credentials', {configurable:true, value:{create:vi.fn(), get:vi.fn()}})
@@ -70,4 +75,37 @@ it('finishes a user-initiated enrollment without requesting device permissions',
   const verification = JSON.parse(api.mock.calls[1][1].body)
   expect(verification.credential.rawId).toBe('AQID')
   expect(navigator.credentials.create.mock.calls[0][0].signal).toBeInstanceOf(AbortSignal)
+})
+
+it('uses Android Credential Manager and sends its unchanged credential to the server', async () => {
+  native.enabled = true
+  const credential = {id:'AQID',rawId:'AQID',type:'public-key',response:{clientDataJSON:'dGVzdA'}}
+  native.create.mockResolvedValue({credential})
+  api.mockResolvedValueOnce({challenge_id:'native',options:{challenge:'dGVzdA',rp:{id:'budget-planner-ecru-seven.vercel.app'}}}).mockResolvedValueOnce({enabled:true})
+  await expect(setupBiometric('test@example.com','secret')).resolves.toEqual({enabled:true})
+  expect(native.create).toHaveBeenCalledOnce()
+  expect(JSON.parse(api.mock.calls[1][1].body)).toEqual({challenge_id:'native',credential})
+  expect(navigator.credentials.create).not.toHaveBeenCalled()
+})
+
+it('requires server verification before native sign-in returns a session', async () => {
+  native.enabled = true
+  native.get.mockResolvedValue({credential:{id:'AQID'}})
+  api.mockResolvedValueOnce({challenge_id:'native',options:{challenge:'dGVzdA'}}).mockRejectedValueOnce(new Error('Passkey verification failed'))
+  await expect(unlockBiometric()).rejects.toThrow('verification failed')
+  expect(navigator.credentials.get).not.toHaveBeenCalled()
+})
+
+it('gives Android screen-lock setup guidance before opening the provider', async () => {
+  native.enabled = true
+  native.status.mockResolvedValue({supported:true,screenLock:false})
+  await expect(unlockBiometric()).rejects.toThrow('Android Settings > Security')
+  expect(native.get).not.toHaveBeenCalled()
+})
+
+it('does not invoke native passkeys in password-only mode', async () => {
+  native.enabled = true
+  setPasswordOnly(true)
+  await expect(unlockBiometric()).rejects.toThrow('Use your password')
+  expect(native.status).not.toHaveBeenCalled()
 })

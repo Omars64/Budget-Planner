@@ -1,0 +1,6 @@
+.android-signing/
+.verification/
+android/
+ios/
+Git_Commands.txt
+tests/
