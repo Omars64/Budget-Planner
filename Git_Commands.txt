@@ -1,0 +1,12 @@
+#0a4173
+
+git status
+git add .
+git commit -m "Add account deletion and notification improvements"
+git push origin main
+
+git add .
+git commit -m "Harden password storage with scrypt"
+git push origin main
+
+api/passkeys.py src/App.jsx src/lib/biometric.js src/main.jsx src/pages/Admin.jsx src/pages/Settings.jsx src/components/PasswordInput.jsx src/password-input.css

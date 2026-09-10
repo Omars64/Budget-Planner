@@ -3,16 +3,19 @@ import hashlib
 import json
 import secrets
 import cbor2
+import pytest
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives import hashes
 from fastapi.testclient import TestClient
-from api.app import app
 from tests.test_api import auth_headers
+from api.app import app
+from api.android_identity import ANDROID_ORIGIN, ANDROID_CERT_SHA256
 
 def enc(value):
     return base64.urlsafe_b64encode(value).decode().rstrip('=')
 
-def test_passkey_registration_login_replay_and_revocation():
+@pytest.mark.parametrize('credential_origin', ['https://budget-planner-ecru-seven.vercel.app', ANDROID_ORIGIN])
+def test_passkey_registration_login_replay_and_revocation(credential_origin):
     with TestClient(app) as client:
         headers = auth_headers(client)
         assert client.post('/api/passkeys/register/options', headers=headers, json={'password':'incorrect-password'}).status_code == 401
@@ -22,7 +25,7 @@ def test_passkey_registration_login_replay_and_revocation():
         cose = cbor2.dumps({1:2, 3:-7, -1:1, -2:public.x.to_bytes(32,'big'), -3:public.y.to_bytes(32,'big')})
         credential_id = secrets.token_bytes(32)
         rp_hash = hashlib.sha256(b'budget-planner-ecru-seven.vercel.app').digest()
-        client_data = json.dumps({'type':'webauthn.create','challenge':options['options']['challenge'],'origin':'https://budget-planner-ecru-seven.vercel.app'}).encode()
+        client_data = json.dumps({'type':'webauthn.create','challenge':options['options']['challenge'],'origin':credential_origin}).encode()
         auth_data = rp_hash + bytes([0x45]) + (0).to_bytes(4,'big') + bytes(16) + len(credential_id).to_bytes(2,'big') + credential_id + cose
         credential = {'id':enc(credential_id),'rawId':enc(credential_id),'type':'public-key','response':{'clientDataJSON':enc(client_data),'attestationObject':enc(cbor2.dumps({'fmt':'none','attStmt':{},'authData':auth_data}))}}
         registered = client.post('/api/passkeys/register/verify', headers=headers, json={'challenge_id':options['challenge_id'],'credential':credential})
@@ -51,7 +54,7 @@ def test_passkey_registration_login_replay_and_revocation():
             assert db.query(Passkey).count() == 2
             assert db.query(AppSetting).filter_by(key='passkey').count() == 0
         options = client.post('/api/passkeys/login/options').json()
-        client_data = json.dumps({'type':'webauthn.get','challenge':options['options']['challenge'],'origin':'https://budget-planner-ecru-seven.vercel.app'}).encode()
+        client_data = json.dumps({'type':'webauthn.get','challenge':options['options']['challenge'],'origin':credential_origin}).encode()
         auth_data = rp_hash + bytes([5]) + (1).to_bytes(4,'big')
         signature = key.sign(auth_data + hashlib.sha256(client_data).digest(), ec.ECDSA(hashes.SHA256()))
         credential['response'] = {'clientDataJSON':enc(client_data),'authenticatorData':enc(auth_data),'signature':enc(signature)}
@@ -71,15 +74,34 @@ def test_passkey_registration_login_replay_and_revocation():
         assert 'Settings > Biometric sign-in' in rejected.json()['detail']
 
 
-def register_second_device(client, headers):
+def register_second_device(client, headers, credential_origin='https://budget-planner-ecru-seven.vercel.app', expected_status=200):
     options = client.post('/api/passkeys/register/options', headers=headers, json={'password':'FlowBudgetAdmin!ChangeMe2026'}).json()
     key = ec.generate_private_key(ec.SECP256R1())
     public = key.public_key().public_numbers()
     cose = cbor2.dumps({1:2, 3:-7, -1:1, -2:public.x.to_bytes(32,'big'), -3:public.y.to_bytes(32,'big')})
     credential_id = secrets.token_bytes(32)
-    client_data = json.dumps({'type':'webauthn.create', 'challenge':options['options']['challenge'], 'origin':'https://budget-planner-ecru-seven.vercel.app'}).encode()
+    client_data = json.dumps({'type':'webauthn.create', 'challenge':options['options']['challenge'], 'origin':credential_origin}).encode()
     auth_data = hashlib.sha256(b'budget-planner-ecru-seven.vercel.app').digest() + bytes([0x45]) + bytes(4) + bytes(16) + len(credential_id).to_bytes(2,'big') + credential_id + cose
     credential = {'id':enc(credential_id), 'rawId':enc(credential_id), 'type':'public-key', 'response':{'clientDataJSON':enc(client_data), 'attestationObject':enc(cbor2.dumps({'fmt':'none', 'attStmt':{}, 'authData':auth_data}))}}
     result = client.post('/api/passkeys/register/verify', headers=headers, json={'challenge_id':options['challenge_id'], 'credential':credential})
-    assert result.status_code == 200, result.text
+    assert result.status_code == expected_status, result.text
     return enc(credential_id)
+
+
+def test_untrusted_android_signer_and_localhost_cannot_register():
+    with TestClient(app) as client:
+        headers = auth_headers(client)
+        register_second_device(client, headers, 'android:apk-key-hash:' + enc(bytes(32)), 400)
+        register_second_device(client, headers, 'https://localhost', 400)
+
+
+def test_public_asset_links_matches_only_the_release_identity(monkeypatch):
+    with TestClient(app) as client:
+        response = client.get('/.well-known/assetlinks.json')
+        assert response.status_code == 200
+        assert response.headers['content-type'] == 'application/json'
+        assert response.json()[0]['target'] == {'namespace':'android_app', 'package_name':'com.flowbudget.app', 'sha256_cert_fingerprints':[ANDROID_CERT_SHA256]}
+        from api.passkeys import trusted_origins
+        monkeypatch.setenv('WEBAUTHN_ORIGIN', 'https://preview.example.com')
+        assert trusted_origins() == ['https://preview.example.com']
+        assert client.get('/.well-known/assetlinks.json').json() == []
