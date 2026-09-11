@@ -92,7 +92,7 @@ def _base_message(config: SMTPConfig, to_email: str, subject: str, purpose: str)
     entity = hashlib.sha256(f"{purpose}:{to_email.lower()}".encode("utf-8")).hexdigest()[:24]
     msg = EmailMessage()
     msg["Subject"] = subject
-    msg["From"] = f"FlowBudget <{config.from_email}>"
+    msg["From"] = f"Budgetly <{config.from_email}>"
     msg["To"] = to_email
     msg["Reply-To"] = config.from_email
     msg["Date"] = format_datetime(datetime.now(timezone.utc))
@@ -107,17 +107,17 @@ def _base_message(config: SMTPConfig, to_email: str, subject: str, purpose: str)
 
 def _build_verification_message(config: SMTPConfig, to_email: str, username: str, code: str) -> EmailMessage:
     safe_name = html.escape(username)
-    msg = _base_message(config, to_email, f"{code} is your FlowBudget verification code", "verification")
+    msg = _base_message(config, to_email, f"{code} is your Budgetly verification code", "verification")
 
     msg.set_content(
         f"Hi {username},\n\n"
-        f"Your FlowBudget verification code is {code}.\n"
+        f"Your Budgetly verification code is {code}.\n"
         "It expires in 10 minutes.\n\n"
         "If you did not request this code, you can safely ignore this email.\n\n"
-        "FlowBudget"
+        "Budgetly"
     )
     msg.add_alternative(
-        f'''<!doctype html><html><body style="margin:0;background:#f4f8fb;font-family:Arial,sans-serif;color:#153246"><table role="presentation" width="100%"><tr><td align="center" style="padding:32px 16px"><table role="presentation" width="100%" style="max-width:520px;background:#fff;border:1px solid #dce8f0;border-radius:20px"><tr><td style="padding:28px"><div style="font-size:22px;font-weight:700;color:#0a4173">FlowBudget</div><p>Hi {safe_name},</p><p>Use this code to finish creating your account:</p><div style="font-size:34px;letter-spacing:10px;font-weight:800;color:#0a4173;padding:18px 0">{code}</div><p style="font-size:13px;color:#647987">The code expires in 10 minutes. If you did not request it, ignore this message.</p></td></tr></table></td></tr></table></body></html>''',
+        f'''<!doctype html><html><body style="margin:0;background:#f4f8fb;font-family:Arial,sans-serif;color:#153246"><table role="presentation" width="100%"><tr><td align="center" style="padding:32px 16px"><table role="presentation" width="100%" style="max-width:520px;background:#fff;border:1px solid #dce8f0;border-radius:20px"><tr><td style="padding:28px"><div style="font-size:22px;font-weight:700;color:#0a4173">Budgetly</div><p>Hi {safe_name},</p><p>Use this code to finish creating your account:</p><div style="font-size:34px;letter-spacing:10px;font-weight:800;color:#0a4173;padding:18px 0">{code}</div><p style="font-size:13px;color:#647987">The code expires in 10 minutes. If you did not request it, ignore this message.</p></td></tr></table></td></tr></table></body></html>''',
         subtype="html",
     )
     return msg
@@ -186,14 +186,14 @@ def send_password_reset(to_email: str, token: str) -> None:
     config = get_smtp_config(require_password=True)
     site = _first_env('PUBLIC_APP_URL', 'WEBAUTHN_ORIGIN', default='https://budget-planner-ecru-seven.vercel.app').rstrip('/')
     link = f'{site}/?reset={token}'
-    msg = _base_message(config, to_email, 'Reset your FlowBudget password', 'password-reset')
+    msg = _base_message(config, to_email, 'Reset your Budgetly password', 'password-reset')
     msg.set_content(
         'Open this link to choose a new password:\n\n'
         f'{link}\n\n'
         'This link expires in 20 minutes and works once. If you did not request it, ignore this email.'
     )
     msg.add_alternative(
-        f'''<!doctype html><html lang="en"><body style="margin:0;background:#f4f8fb;font-family:Arial,sans-serif;color:#153246"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#fff;border:1px solid #dce8f0;border-radius:12px"><tr><td style="padding:28px"><div style="font-size:22px;font-weight:700;color:#0a4173">FlowBudget</div><p>We received a request to change your password.</p><p><a href="{html.escape(link, quote=True)}" style="display:inline-block;background:#0a4173;color:#fff;padding:12px 18px;border-radius:6px;text-decoration:none">Choose a new password</a></p><p style="font-size:13px;color:#647987">This link expires in 20 minutes and works once. If you did not request it, ignore this email.</p></td></tr></table></td></tr></table></body></html>''',
+        f'''<!doctype html><html lang="en"><body style="margin:0;background:#f4f8fb;font-family:Arial,sans-serif;color:#153246"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#fff;border:1px solid #dce8f0;border-radius:12px"><tr><td style="padding:28px"><div style="font-size:22px;font-weight:700;color:#0a4173">Budgetly</div><p>We received a request to change your password.</p><p><a href="{html.escape(link, quote=True)}" style="display:inline-block;background:#0a4173;color:#fff;padding:12px 18px;border-radius:6px;text-decoration:none">Choose a new password</a></p><p style="font-size:13px;color:#647987">This link expires in 20 minutes and works once. If you did not request it, ignore this email.</p></td></tr></table></td></tr></table></body></html>''',
         subtype='html',
     )
     last_error = None

@@ -102,7 +102,7 @@ def register_options(payload: Password, user: User = Depends(current_user), db: 
     from .account_security import limit
     limit(db, f'passkey-register:{user.id}', 10)
     if not verify_password(payload.password, user.password_hash): raise HTTPException(401, 'Incorrect password')
-    options = generate_registration_options(rp_id=rp_id(), rp_name='FlowBudget', user_id=str(user.id).encode(), user_name=user.email,
+    options = generate_registration_options(rp_id=rp_id(), rp_name='Budgetly', user_id=str(user.id).encode(), user_name=user.email,
         exclude_credentials=[PublicKeyCredentialDescriptor(id=base64url_to_bytes(row.id)) for row in db.query(Passkey).filter_by(user_id=user.id).all()],
         authenticator_selection=AuthenticatorSelectionCriteria(resident_key=ResidentKeyRequirement.REQUIRED, user_verification=UserVerificationRequirement.REQUIRED))
     return challenge(db, options, f'register:{user.id}')
@@ -134,7 +134,7 @@ def login_verify(payload: Response, db: Session = Depends(get_db)):
     except (KeyError, ValueError, TypeError):
         raise HTTPException(401, 'Invalid passkey response.')
     row = db.query(Passkey).filter_by(id=credential_id).with_for_update().first()
-    if not row: raise HTTPException(401, 'This device passkey is no longer registered to FlowBudget. Sign in with your password, then register this device in Settings > Biometric sign-in.')
+    if not row: raise HTTPException(401, 'This device passkey is no longer registered to Budgetly. Sign in with your password, then register this device in Settings > Biometric sign-in.')
     user = db.get(User, row.user_id)
     if not user or not user.active: raise HTTPException(401, 'Account unavailable')
     try:

@@ -36,6 +36,7 @@ from .models import RequestReceipt
 from .models import BankMessage, MessageKey
 from .reliability_models import AccountSession
 from .timekeeping import ledger_iso, now as ledger_now, today as ledger_today
+from .ledger_filters import ledger_options, filter_ledger
 
 APP_SECRET = os.getenv("APP_SECRET", "flowbudget-dev-secret-change-me")
 serializer = URLSafeTimedSerializer(APP_SECRET, salt="flowbudget-lock")
@@ -48,7 +49,7 @@ async def lifespan(application: FastAPI):
     application.state.storage_ready = False
     try:
         if IS_EPHEMERAL_VERCEL_SQLITE:
-            raise RuntimeError("FlowBudget on Vercel requires a persistent DATABASE_URL")
+            raise RuntimeError("Budgetly on Vercel requires a persistent DATABASE_URL")
         if os.getenv('VERCEL') and (len(APP_SECRET) < 32 or APP_SECRET == 'flowbudget-dev-secret-change-me'):
             raise RuntimeError('A strong APP_SECRET is required in production')
         with engine.begin() as connection:
@@ -66,7 +67,7 @@ async def lifespan(application: FastAPI):
     yield
 
 
-app = FastAPI(title="FlowBudget API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Budgetly API", version="1.0.0", lifespan=lifespan)
 
 
 @app.middleware("http")
@@ -368,7 +369,7 @@ def budget_spent(db: Session, budget: Budget) -> float:
 def seed_user_workspace(db: Session, user_id: int, commit: bool = True):
     for key, value in {
         "currency": "KWD",
-        "display_name": "FlowBudget",
+        "display_name": "Budgetly",
         "week_starts_on": "sunday",
         "compact_numbers": "false",
         "accent_color": "#0a4173",
@@ -386,7 +387,7 @@ def health(db: Session = Depends(get_db)):
     db.execute(text("SELECT 1"))
     return {
         "ok": True,
-        "service": "FlowBudget",
+        "service": "Budgetly",
         "time": datetime.now().astimezone().isoformat(),
         "persistent_storage": not IS_EPHEMERAL_VERCEL_SQLITE,
         "database": engine.dialect.name,
@@ -593,6 +594,9 @@ def security_disable(user: User = Depends(authorize), db: Session = Depends(get_
 
 @app.get("/api/settings")
 def get_settings(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    display_name = setting(db, user.id, "display_name", "Budgetly")
+    if display_name in {"FlowBudget", "Flow Budget"}:
+        display_name = "Budgetly"
     return {
         'quiet_hours_enabled': setting(db,user.id,'quiet_hours_enabled','false') == 'true',
         'quiet_start': setting(db,user.id,'quiet_start','22:00'),
@@ -605,7 +609,7 @@ def get_settings(user: User = Depends(current_user), db: Session = Depends(get_d
         'reminders_enabled': setting(db, user.id, 'reminders_enabled', 'false') == 'true',
         'reminder_time': setting(db, user.id, 'reminder_time', '20:00'),
         "currency": setting(db, user.id, "currency", "KWD"),
-        "display_name": setting(db, user.id, "display_name", "FlowBudget"),
+        "display_name": display_name,
         "week_starts_on": setting(db, user.id, "week_starts_on", "sunday"),
         "compact_numbers": setting(db, user.id, "compact_numbers", "false") == "true",
     }
@@ -693,6 +697,7 @@ def transactions(
     search: str = "", tx_type: str = "all", wallet_id: Optional[int] = None,
     category_id: Optional[int] = None, date_from: Optional[datetime] = None,
     date_to: Optional[datetime] = None, limit: int = Query(200, ge=1, le=1000),
+    options: tuple = Depends(ledger_options),
     user: User = Depends(current_user), db: Session = Depends(get_db),
 ):
     materialize_recurring_for_user(db, user.id)
@@ -703,7 +708,7 @@ def transactions(
     if category_id: q = q.filter(Transaction.category_id == category_id)
     if date_from: q = q.filter(Transaction.date >= date_from)
     if date_to: q = q.filter(Transaction.date <= date_to)
-    return [tx_payload(t) for t in q.order_by(Transaction.date.desc(), Transaction.id.desc()).limit(limit).all()]
+    return [tx_payload(t) for t in filter_ledger(q, options).limit(limit).all()]
 
 
 def validate_transaction_references(db: Session, user_id: int, payload: TransactionIn) -> None:

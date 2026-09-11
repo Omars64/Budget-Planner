@@ -54,7 +54,7 @@ try {
     $apkDir = Join-Path $projectRoot "android/app/build/outputs/apk/$variant"
     $metadata = Get-Content (Join-Path $apkDir 'output-metadata.json') -Raw | ConvertFrom-Json
     $version = $metadata.elements[0].versionName
-    $name = if ($Release) { "FlowBudget-$version.apk" } else { "FlowBudget-$version-test.apk" }
+    $name = if ($Release) { "Budgetly-$version.apk" } else { "Budgetly-$version-test.apk" }
     $output = Join-Path $apkDir $name
     Copy-Item -LiteralPath (Join-Path $apkDir "app-$variant.apk") -Destination $output -Force
     Write-Output "Installable APK: $output"

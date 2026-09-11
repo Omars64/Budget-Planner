@@ -37,7 +37,7 @@ public class PasskeysPlugin extends Plugin {
         String id = call.getString("requestId");
         String rp = options == null ? "" : creating ? options.optJSONObject("rp") == null ? "" : options.optJSONObject("rp").optString("id") : options.optString("rpId");
         if (!RP_ID.equals(rp) || id == null || options.toString().length() > 262144) {
-            call.reject("Invalid FlowBudget passkey request."); return false;
+            call.reject("Invalid Budgetly passkey request."); return false;
         }
         pending = new CancellationSignal();
         pendingCall = call;

@@ -66,7 +66,7 @@ export default function Experience() {
       } catch { return }
       notify(reminderBody(settings))
       if ('Notification' in window && Notification.permission === 'granted') {
-        try { new Notification('FlowBudget', { body: reminderBody(settings), icon: '/flowbudget-logo.png', tag: 'daily-budget' }) } catch { /* The in-app reminder is still displayed. */ }
+        try { new Notification('Budgetly', { body: reminderBody(settings), icon: '/flowbudget-logo.png', tag: 'daily-budget' }) } catch { /* The in-app reminder is still displayed. */ }
       }
     }
     check()

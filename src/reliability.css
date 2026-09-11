@@ -5,3 +5,26 @@
 .connection-status{position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:90;padding:8px 16px;border-radius:8px;background:var(--text);color:#fff;font-size:12px;max-width:90%;text-align:center}
 .balance-preview{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:10px 0;border-block:1px solid var(--line)}
 .template-controls{display:flex;align-items:end;gap:8px;flex-wrap:wrap}.template-controls .field{flex:1;min-width:140px}
+
+.ledger-filters{display:flex;flex-direction:column;align-items:stretch;gap:12px;padding:16px}
+.ledger-filters .search-box{min-width:0;flex:auto}
+.ledger-filter-fields{display:grid;grid-template-columns:minmax(0,1.5fr) repeat(3,minmax(0,1fr));gap:12px}
+.ledger-filter-fields .field{min-width:0;margin:0}
+.ledger-filter-fields input,.ledger-filter-fields select{width:100%;min-width:0;min-height:44px;font-size:14px}
+.ledger-filter-fields .field>span{font-size:12px}
+.ledger-filters>.button{align-self:flex-start}
+.wallet-badges{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:7px;min-width:0}
+.wallet-badges>span{font-size:13px;font-weight:650;line-height:1.45;padding:5px 9px;border-radius:6px;background:var(--accent-soft);color:var(--text);max-width:100%;white-space:normal;overflow-wrap:anywhere}
+.ledger-disclosure{border-top:1px solid var(--line);margin-top:12px;padding-top:4px}
+.ledger-disclosure>summary{cursor:pointer;min-height:44px;padding:12px 4px;color:var(--text);font-size:14px;font-weight:650;overflow-wrap:anywhere}
+.ledger-disclosure>summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+.ledger-disclosure .share-members{margin-top:0}
+.share-members strong{font-size:13px;overflow-wrap:anywhere}.share-members small{font-size:12px}
+.ledger-pagination{display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap;margin-top:20px;font-size:13px}
+.shared-grid{display:block}
+.shared-wallet-section{min-width:0}
+.shared-wallet-list{grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));align-items:start}
+.shared-wallet-card{border-radius:8px;background:rgba(255,255,255,.85);padding:14px;min-width:0}
+.shared-wallet-title strong{white-space:normal;overflow-wrap:anywhere}
+@media(max-width:900px){.ledger-filter-fields{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){.ledger-filters{padding:12px}.ledger-filter-fields{gap:12px 8px}.wallet-badges>span{font-size:14px}.shared-wallet-title strong{font-size:14px}.shared-wallet-title small{font-size:11px}}

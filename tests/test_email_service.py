@@ -35,7 +35,7 @@ class FakeSMTP:
 
     def send_message(self, message):
         assert message["To"] == "recipient@example.com"
-        assert "FlowBudget" in message["From"]
+        assert "Budgetly" in message["From"]
         return {}
 
     def noop(self):

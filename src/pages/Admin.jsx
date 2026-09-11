@@ -83,7 +83,7 @@ export default function Admin() {
     <section className="section-intro glass">
       <div>
         <p className="eyebrow"><ShieldCheck size={14}/> Admin workspace</p>
-        <h2>Manage the people who use FlowBudget.</h2>
+        <h2>Manage the people who use Budgetly.</h2>
         <p className="muted">Create accounts, adjust roles, reset passwords, and retire users cleanly.</p>
       </div>
       <button className="button primary" onClick={() => show(null)}><Plus/>Add user</button>

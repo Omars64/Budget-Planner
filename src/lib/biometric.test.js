@@ -35,7 +35,7 @@ it('password-only mode persists without deleting account passkeys or invoking an
 
 it('does not start an authenticator from a hidden page', async () => {
   const hidden = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
-  await expect(unlockBiometric()).rejects.toThrow('Open FlowBudget')
+  await expect(unlockBiometric()).rejects.toThrow('Open Budgetly')
   expect(api).not.toHaveBeenCalled()
   hidden.mockRestore()
 })

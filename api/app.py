@@ -1,4 +1,4 @@
-"""Vercel/local ASGI entrypoint with the extended FlowBudget feature set."""
+"""Vercel/local ASGI entrypoint with the extended Budgetly feature set."""
 
 from fastapi import Query, Depends
 from .index import admin_user

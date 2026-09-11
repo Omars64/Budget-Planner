@@ -1,6 +1,6 @@
 {
   "appId": "com.flowbudget.app",
-  "appName": "FlowBudget",
+  "appName": "Budgetly",
   "webDir": "dist",
   "server": { "androidScheme": "https", "cleartext": false },
   "plugins": {

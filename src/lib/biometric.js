@@ -22,7 +22,7 @@ export const cancelBiometric = () => activeRequest?.abort()
 
 async function withCredentialRequest(action) {
   if (!biometricSupported()) throw new Error('Passkeys are unavailable on this device. Use your password.')
-  if (document.visibilityState === 'hidden') throw new Error('Open FlowBudget before using your passkey.')
+  if (document.visibilityState === 'hidden') throw new Error('Open Budgetly before using your passkey.')
   if (activeRequest) throw new Error('A passkey request is already in progress.')
   const controller = new AbortController()
   activeRequest = controller

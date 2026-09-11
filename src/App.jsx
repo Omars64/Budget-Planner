@@ -106,7 +106,7 @@ function LoginScreen({ onLogin }) {
 
       {mode === 'login' && <>
         <p className="eyebrow">Welcome back</p>
-        <h1>Sign in to FlowBudget</h1>
+        <h1>Sign in to Budgetly</h1>
         <p className="muted">Your budget workspace is private to your account.</p>
         <div className="segment-control signin-method" aria-label="Sign-in method"><button type="button" disabled={busy} className={signInMethod === 'password' ? 'active' : ''} onClick={() => setSignInMethod('password')}>Password</button><button type="button" disabled={busy || !biometricSupported()} className={signInMethod === 'passkey' ? 'active' : ''} onClick={() => setSignInMethod('passkey')}>Biometric / passkey</button></div>
         {signInMethod === 'passkey' ? <div className="stack gap-12">{error && <div className="form-error">{error}</div>}<button className="button primary full" disabled={busy} onClick={passkeyLogin}>{busy ? 'Verifying...' : 'Sign in with passkey'}</button></div> : <form onSubmit={login} className="stack gap-12">
@@ -118,7 +118,7 @@ function LoginScreen({ onLogin }) {
         <label className="check-row remember-session"><input type="checkbox" checked={rememberMe} disabled={busy} onChange={e => { try { auth.setRemembered(e.target.checked); setRememberMe(e.target.checked); setError('') } catch (err) { setError(err.message) } }}/><span>Keep me signed in on this device</span></label>
         <DeviceSignInPreference disabled={busy} onChange={() => { setSignInMethod('password'); setError(''); refreshSignInPreference(v => v + 1) }}/>
         <button type="button" className="auth-switch" onClick={()=>setMode('reset')}>Forgot password?</button>
-        <button className="auth-switch" type="button" onClick={() => { setError(''); setMode('signup') }}>New to FlowBudget? <strong>Create an account</strong></button>
+        <button className="auth-switch" type="button" onClick={() => { setError(''); setMode('signup') }}>New to Budgetly? <strong>Create an account</strong></button>
       </>}
 
       {mode === 'signup' && <>
@@ -157,7 +157,7 @@ function LoginScreen({ onLogin }) {
 export default function App() {
   const { confirm, confirmation } = useConfirmation()
   const [session, setSession] = useState({ loading: true, user: null })
-  const [settings, setSettings] = useState({ currency: 'KWD', display_name: 'FlowBudget', week_starts_on: 'sunday', compact_numbers: false })
+  const [settings, setSettings] = useState({ currency: 'KWD', display_name: 'Budgetly', week_starts_on: 'sunday', compact_numbers: false })
   const [appearance, setAppearance] = useState({ profile_image: '', wallpaper_image: '' })
   const [refreshKey, setRefreshKey] = useState(0)
   const [toast, setToast] = useState(null)

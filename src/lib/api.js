@@ -38,6 +38,7 @@ export const auth = {
   clear() {
     responseCache.clear()
     sessionStorage.removeItem(tokenKey)
+    localStorage.removeItem(tokenKey)
     Object.keys(sessionStorage).filter(key => key.startsWith('flowbudget_note_draft_')).forEach(key => sessionStorage.removeItem(key))
   },
 }
@@ -85,7 +86,7 @@ async function send(path, options = {}) {
   if (auth.token) headers.set('Authorization', `Bearer ${auth.token}`)
   let response
   try { response = await fetch(`${apiBase}${path}`, { ...options, headers }) }
-  catch { throw new Error('Could not reach FlowBudget. Check your connection and retry; transaction retries are protected against duplicates.') }
+  catch { throw new Error('Could not reach Budgetly. Check your connection and retry; transaction retries are protected against duplicates.') }
   if (response.status === 204) { responseCache.clear(); return null }
   let data = null
   try { data = await response.json() } catch { data = null }

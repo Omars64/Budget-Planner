@@ -1,6 +1,8 @@
-# FlowBudget
+# Budgetly
 
-FlowBudget is a full-stack personal budget planner inspired by the workflow coverage of mature mobile budget managers, with an original interface and implementation.
+Budgetly (formerly FlowBudget) is a full-stack personal budget planner inspired by the workflow coverage of mature mobile budget managers, with an original interface and implementation.
+
+Both transaction ledgers support wallet, Kuwait calendar month, type and text filters, newest/oldest sorting, and pages of 100 records. Wallet member lists and signed-in sessions start collapsed. Android release 1.0.3 uses the Budgetly display name and retains `com.flowbudget.app`, the existing signing key, storage keys, and forwarding headers for compatibility. Deploy the API changes together with the frontend before using the new month, sort and pagination controls in the APK.
 
 The visual system is deliberately transparent/glass-like and uses **`#0a4173` as the primary accent**. The UI includes animated ambient layers, spring modals, animated page transitions, live charting, responsive cards, mobile bottom navigation and desktop navigation.
 

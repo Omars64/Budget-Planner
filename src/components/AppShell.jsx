@@ -28,14 +28,14 @@ export default function AppShell({ children }) {
   const { user, settings, appearance, refresh, notify, lock } = useApp()
   const location = useLocation()
   const visibleNav = user?.role === 'admin' ? [...nav, ['/admin', 'Admin', ShieldCheck]] : nav
-  const title = visibleNav.find(([path]) => path === location.pathname)?.[1] || 'FlowBudget'
+  const title = visibleNav.find(([path]) => path === location.pathname)?.[1] || 'Budgetly'
 
   return <div className="app-shell">
     <aside className={`sidebar glass ${menu ? 'open' : ''}`}>
       <div className="sidebar-head">
         <div className="brand">
           <BrandLogo />
-          <div><strong>FlowBudget</strong><small>Personal finance</small></div>
+          <div><strong>Budgetly</strong><small>Personal finance</small></div>
         </div>
         <button className="icon-button mobile-only" onClick={() => setMenu(false)} aria-label="Close menu"><X size={19}/></button>
       </div>
@@ -46,7 +46,7 @@ export default function AppShell({ children }) {
       </nav>
       <button className="button ghost sidebar-signout" onClick={lock}><LogOut size={17}/><span>Sign out</span></button>
       <div className="sidebar-foot glass-subtle">
-        {appearance.profile_image ? <img className="sidebar-avatar" src={appearance.profile_image} alt="Profile"/> : <span className="default-avatar"><Mountain size={24}/></span>}<div><strong>{user?.username || 'FlowBudget'}</strong><small>{user?.role === 'admin' ? 'Admin account' : 'Personal workspace'}</small></div>
+        {appearance.profile_image ? <img className="sidebar-avatar" src={appearance.profile_image} alt="Profile"/> : <span className="default-avatar"><Mountain size={24}/></span>}<div><strong>{user?.username || 'Budgetly'}</strong><small>{user?.role === 'admin' ? 'Admin account' : 'Personal workspace'}</small></div>
       </div>
     </aside>
     {menu && <div className="sidebar-scrim" onClick={() => setMenu(false)} />}

@@ -20,6 +20,7 @@ from .data_safety import save_recovery
 from .database import get_db
 from .models import Category, PendingSignup, Transaction, User, Wallet, WalletShare
 from .schemas import TransactionIn
+from .ledger_filters import ledger_options, filter_ledger
 from .index import (
     APP_SECRET,
     current_user,
@@ -207,7 +208,7 @@ def signup_start(payload: SignupStart, db: Session = Depends(get_db)):
     code = f"{secrets.randbelow(1_000_000):06d}"
     try: send_code(email, username, code)
     except Exception as exc:
-        print(f"FlowBudget verification email error: {type(exc).__name__}: {exc}")
+        print(f"Budgetly verification email error: {type(exc).__name__}: {exc}")
         raise HTTPException(503, "We could not send the verification email. Please try again in a moment.")
     if pending:
         pending.username = username; pending.password_hash = password_hash; pending.code_hash = code_hash(email, code); pending.expires_at = now + timedelta(minutes=10); pending.last_sent_at = now; pending.attempts = 0; pending.updated_at = now
@@ -314,7 +315,7 @@ def wallet_activity(wallet_id:int,user=Depends(current_user),db=Depends(get_db))
 
 
 @router.get("/api/shared/transactions")
-def shared_transactions(search: str = "", tx_type: str = "all", wallet_id: Optional[int] = None, limit: int = Query(300, ge=1, le=1000), user: User = Depends(current_user), db: Session = Depends(get_db)):
+def shared_transactions(search: str = "", tx_type: str = "all", wallet_id: Optional[int] = None, limit: int = Query(300, ge=1, le=1000), options: tuple = Depends(ledger_options), user: User = Depends(current_user), db: Session = Depends(get_db)):
     ids = shared_wallet_ids(db, user)
     if not ids: return []
     if wallet_id:
@@ -326,7 +327,7 @@ def shared_transactions(search: str = "", tx_type: str = "all", wallet_id: Optio
     if tx_type != "all":
         if tx_type not in {"income", "expense", "transfer"}: raise HTTPException(422, "Invalid transaction type")
         q = q.filter(Transaction.type == tx_type)
-    rows = q.order_by(Transaction.date.desc(), Transaction.id.desc()).limit(limit).all()
+    rows = filter_ledger(q, options).limit(limit).all()
     owners = {u.id: u for u in db.query(User).filter(User.id.in_({t.user_id for t in rows})).all()}
     editable = {r[0] for r in db.query(Wallet.id).filter_by(user_id=user.id).all()}
     editable.update(r[0] for r in db.query(WalletShare.wallet_id).filter(WalletShare.permission == "edit", or_(WalletShare.member_user_id == user.id, WalletShare.invitee_email == normalize_email(user.email))).all())

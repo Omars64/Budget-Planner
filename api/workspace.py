@@ -185,7 +185,7 @@ def note_history(note_id: int, user=Depends(current_user), db: Session = Depends
 def share_note(note_id: int, payload: ShareIn, user=Depends(current_user), db: Session = Depends(get_db)):
     note_access(db, user, note_id, owner=True)
     member = db.query(User).filter_by(email=normalize_email(payload.email), active=True).first()
-    if not member: raise HTTPException(404, "Ask this person to create a FlowBudget account first")
+    if not member: raise HTTPException(404, "Ask this person to create a Budgetly account first")
     if member.id == user.id: raise HTTPException(400, "You already own this note")
     row = db.query(NoteShare).filter_by(note_id=note_id, member_id=member.id).first()
     if not row:

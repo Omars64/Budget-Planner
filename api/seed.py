@@ -46,7 +46,7 @@ def ensure_admin_user(db: Session) -> User:
 def add_default_settings(db: Session, user_id: int):
     for key, value in {
         "currency": "KWD",
-        "display_name": "FlowBudget",
+        "display_name": "Budgetly",
         "week_starts_on": "sunday",
         "compact_numbers": "false",
     }.items():

@@ -101,7 +101,7 @@ export default function Notes() {
   }
   const download = () => {
     const url = URL.createObjectURL(new Blob([`${draft.title}\n\n${draft.content}`], { type: 'text/plain' }))
-    const link = document.createElement('a'); link.href = url; link.download = 'FlowBudget-note.txt'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000)
+    const link = document.createElement('a'); link.href = url; link.download = 'Budgetly-note.txt'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
   return <div className={`workspace notes-workspace ${draft ? 'has-selection' : ''}`}>
     <aside className="workspace-folders">
