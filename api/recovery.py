@@ -38,6 +38,16 @@ def list_trash(user=Depends(current_user), db=Depends(get_db)):
     return [{'id':r.id,'kind':r.kind,'label':r.label,'created_at':r.created_at.isoformat()+'Z','recover_until':(r.created_at+timedelta(days=30)).isoformat()+'Z'} for r in rows]
 
 
+@router.delete('/api/trash/{item_id}', status_code=204)
+def delete_trash(item_id: int, user=Depends(current_user), db=Depends(get_db)):
+    item = db.query(TrashItem).filter_by(id=item_id, user_id=user.id).with_for_update().first()
+    if not item:
+        raise HTTPException(404, 'Deleted item not found')
+    audit(db, user.id, user.id, 'Permanently deleted Trash item', f'trash:{item.id}')
+    db.delete(item)
+    db.commit()
+
+
 def owned(db, model, ident, user_id):
     return db.query(model).filter_by(id=ident,user_id=user_id).first() if ident else None
 

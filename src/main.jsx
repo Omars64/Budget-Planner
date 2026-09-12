@@ -7,6 +7,7 @@ import './enhancements.css'
 import './experience.css'
 import './password-input.css'
 import './reliability.css'
+import './budgetly.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

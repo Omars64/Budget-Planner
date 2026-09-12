@@ -712,6 +712,8 @@ def transactions(
 
 
 def validate_transaction_references(db: Session, user_id: int, payload: TransactionIn) -> None:
+    if payload.recurring_frequency != "none" and payload.recurring_until is None:
+        raise HTTPException(422, "Choose a repeat-until date for recurring transactions")
     source = db.query(Wallet).filter(Wallet.id == payload.wallet_id, Wallet.user_id == user_id).first()
     if not source:
         raise HTTPException(400, "Source wallet not found")
@@ -732,7 +734,7 @@ def create_transaction(payload: TransactionIn, request: Request, user: User = De
     receipt, previous = reserve(db, user.id, 'transaction', request.headers.get('Idempotency-Key'), payload)
     if previous is not None: return previous
     validate_transaction_references(db, user.id, payload)
-    row = Transaction(user_id=user.id, **payload.model_dump()); db.add(row); db.flush()
+    row = Transaction(user_id=user.id, **payload.model_dump()); db.add(row); db.flush(); db.refresh(row)
     result = tx_payload(row)
     if receipt: receipt.response = json.dumps(result)
     db.commit()

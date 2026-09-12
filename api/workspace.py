@@ -62,6 +62,17 @@ def download_recovery(point_id: int, user=Depends(current_user), db: Session = D
     return json.loads(row.payload)
 
 
+@router.delete("/api/recovery/{point_id}", status_code=204)
+def delete_recovery(point_id: int, user=Depends(current_user), db: Session = Depends(get_db)):
+    row = db.query(RecoveryPoint).filter_by(id=point_id, user_id=user.id).with_for_update().first()
+    if not row:
+        raise HTTPException(404, "Recovery copy not found")
+    from .account_security import audit
+    audit(db, user.id, user.id, "Deleted recovery copy", f"recovery:{row.id}")
+    db.delete(row)
+    db.commit()
+
+
 @router.post("/api/workspace/clear")
 def clear_workspace(payload: ClearWorkspaceIn, request: Request, user=Depends(current_user), db: Session = Depends(get_db)):
     from .account_security import confirmed

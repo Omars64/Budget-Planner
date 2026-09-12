@@ -339,7 +339,7 @@ def create_shared_transaction(payload: SharedTransactionIn, request: Request, us
     source = validate_shared_tx(db, user, payload)
     receipt, previous = reserve(db, user.id, 'shared-transaction', request.headers.get('Idempotency-Key'), payload)
     if previous is not None: return previous
-    row = Transaction(user_id=source.user_id, **payload.model_dump()); db.add(row); db.flush()
+    row = Transaction(user_id=source.user_id, **payload.model_dump()); db.add(row); db.flush(); db.refresh(row)
     from .account_security import audit
     audit(db, row.user_id, user.id, 'Added shared transaction', f'wallet:{row.wallet_id}')
     result = shared_tx_payload(db, user, row, shared_wallet_ids(db, user))
