@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { Wallet } from 'lucide-react'
 import { format } from 'date-fns'
 import { dateInput, displayDate } from '../lib/time'
@@ -13,8 +14,9 @@ import useLedger from '../lib/useLedger'
 import LedgerRow, { TransactionDetails } from '../components/LedgerRow'
 
 export default function Transactions() {
+  const location = useLocation()
   const { user, settings, refreshKey, refresh, notify ,confirm} = useApp()
-  const [filters, setFilters] = useState(defaultLedgerFilters)
+  const [filters, setFilters] = useState(() => ({ ...defaultLedgerFilters, ...location.state?.aiFilters }))
   const ledger = useLedger('/api/transactions', filters, refreshKey)
   const { rows, loading } = ledger
   const [modal, setModal] = useState(false)

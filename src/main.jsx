@@ -13,6 +13,7 @@ import './budgetly.css'
 import './theme.css'
 import './motion.css'
 import './notes-workspace.css'
+import './ask-ai.css'
 
 applyAppearance(readDeviceAppearance())
 

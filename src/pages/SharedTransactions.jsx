@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { History, MailPlus, Trash2, Users, Wallet } from 'lucide-react'
 import { format } from 'date-fns'
 import { dateInput, saveDate, displayDate, showTime } from '../lib/time'
@@ -22,10 +23,11 @@ const blankTx = walletId => ({
 })
 
 export default function SharedTransactions() {
+  const location = useLocation()
   const { settings, refreshKey, refresh, notify ,confirm} = useApp()
   const [sharedWallets, setSharedWallets] = useState(() => readCached('/api/shared/wallets') || [])
   const [personalWallets, setPersonalWallets] = useState(() => (readCached('/api/wallets') || []).filter(w => !w.archived))
-  const [filters, setFilters] = useState(defaultLedgerFilters)
+  const [filters, setFilters] = useState(() => ({ ...defaultLedgerFilters, ...location.state?.aiFilters }))
   const ledger = useLedger('/api/shared/transactions', filters, refreshKey, true)
   const { rows, loading } = ledger
   const walletFilter = filters.wallet

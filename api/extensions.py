@@ -174,6 +174,7 @@ def shared_tx_payload(db: Session, user: User, tx: Transaction, visible_ids: set
         "category_name": tx.category.name if tx.category else None, "category_color": tx.category.color if tx.category else None,
         "recurring_frequency": tx.recurring_frequency or "none", "recurring_until": tx.recurring_until.isoformat() if tx.recurring_until else None,
         "shared_wallet_names": names, "owner_email": owner.email if owner else "", "owner_name": owner.username if owner else "", "can_edit": editable,
+        "shared_wallet_ids": [wallet_id for wallet_id in [tx.wallet_id, tx.transfer_wallet_id] if wallet_id in visible_ids],
     }
 
 

@@ -5,6 +5,7 @@ import { ArrowLeft, BadgeCheck, LockKeyhole, Mail, RefreshCw, Sparkles, UserRoun
 import { api, auth, jsonBody } from './lib/api'
 import AppShell from './components/AppShell'
 const Overview = lazy(() => import('./pages/Overview'))
+const AskAI = lazy(() => import('./pages/AskAI'))
 const Transactions = lazy(() => import('./pages/Transactions'))
 const SharedTransactions = lazy(() => import('./pages/SharedTransactions'))
 const CalendarPage = lazy(() => import('./pages/CalendarPage'))
@@ -247,6 +248,7 @@ export default function App() {
       <Suspense fallback={<div role="status">Loading page...</div>}>
       <Routes>
         <Route path="/" element={<Overview />} />
+        <Route path="/ask-ai" element={<AskAI />} />
         <Route path="/transactions" element={<Transactions />} />
         <Route path="/shared-transactions" element={<SharedTransactions />} />
         <Route path="/calendar" element={<CalendarPage />} />

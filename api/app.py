@@ -12,6 +12,7 @@ from . import account_security
 from . import recovery
 from . import productivity
 from . import operations
+from . import ai
 from .email_service import send_verification_code, smtp_status
 
 # Route signup verification through the hardened email transport. Keeping this
@@ -25,6 +26,7 @@ app.include_router(account_security.router)
 app.include_router(recovery.router)
 app.include_router(productivity.router)
 app.include_router(operations.router)
+app.include_router(ai.router)
 
 
 @app.get("/api/health/email")
