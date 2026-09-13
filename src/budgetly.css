@@ -60,7 +60,7 @@ body:has(.budgetly-v2) .ambient { display:none; }
 .budgetly-v2 .filter-trigger { position:relative; }
 .budgetly-v2 .filter-trigger i { position:absolute; right:7px; top:7px; width:6px; height:6px; border-radius:50%; background:var(--accent); }
 .budgetly-v2 .active-filters { display:flex; flex-wrap:wrap; gap:8px; padding:8px 0; }
-.budgetly-v2 .active-filters button { display:flex; align-items:center; gap:8px; border:0; border-radius:6px; background:var(--accent-soft); color:var(--accent); padding:8px 10px; font-size:12px; min-height:36px; }
+.budgetly-v2 .active-filters button { display:flex; align-items:center; gap:8px; border:0; border-radius:6px; background:var(--accent-soft); color:var(--accent-text,var(--accent)); padding:8px 10px; font-size:12px; min-height:36px; }
 .budgetly-v2 .active-filters span { max-width:240px; overflow-wrap:anywhere; }
 .budgetly-v2 .transaction-wallets { order:0; display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:0; padding:8px; background:#f2f5f6; }
 .budgetly-v2 .transaction-wallet-balance { display:grid; padding:12px; gap:6px; background:transparent; border:0; border-radius:0; }

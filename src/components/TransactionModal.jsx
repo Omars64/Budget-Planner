@@ -76,6 +76,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
       </div>
 
       <label className="amount-input"><span>Amount ({settings.currency})</span><input required type="number" step="0.001" min="0.001" value={form.amount} onChange={e => set('amount',e.target.value)} placeholder="0.000" /></label>
+      <label className="field"><span>Description</span><input maxLength="160" value={form.description} onChange={e => set('description',e.target.value)} placeholder="What was this for?"/></label>
 
       <div className="form-grid two">
         <label className="field"><span>Date & time</span><div className="input-with-icon"><CalendarClock size={17}/><input required type="datetime-local" value={form.date} onChange={e => set('date',e.target.value)} /></div></label>
@@ -84,7 +85,6 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
       </div>
       <div className="balance-preview"><span>Current: {money(wallets.find(w=>String(w.id)===String(form.wallet_id))?.balance,settings.currency)}</span>{!editing&&<strong>After: {money(Number(wallets.find(w=>String(w.id)===String(form.wallet_id))?.balance||0)+(form.type==='income'?1:-1)*Number(form.amount||0),settings.currency)}</strong>}</div>
       <details className="form-options" open={advanced} onToggle={e => setAdvanced(e.currentTarget.open)}><summary>More options</summary><div className="stack gap-16">
-        <label className="field"><span>Description (optional)</span><input maxLength="160" value={form.description} onChange={e => set('description',e.target.value)} placeholder="What was this for?"/></label>
         <label className="field"><span><Repeat2 size={15}/> Repeat</span><select value={form.recurring_frequency} onChange={e => set('recurring_frequency',e.target.value)}><option value="none">Does not repeat</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select></label>
         {form.recurring_frequency !== 'none' && <label className="field"><span>Repeat until</span><input required min={form.date.slice(0,10)} type="date" value={form.recurring_until} onChange={e => set('recurring_until',e.target.value)} /></label>}
 

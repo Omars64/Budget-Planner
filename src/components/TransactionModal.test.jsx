@@ -18,6 +18,7 @@ it('removes template controls and explains invalid amounts', async () => {
   await mount()
   expect(screen.queryByText('Saved template')).not.toBeInTheDocument()
   expect(screen.queryByText('Save template')).not.toBeInTheDocument()
+  expect(screen.getByLabelText('Description').closest('details')).toBeNull()
   expect(api).not.toHaveBeenCalledWith('/api/transaction-templates')
   fireEvent.click(screen.getByRole('button',{name:'Add transaction'}))
   expect(screen.getByRole('alert')).toHaveTextContent('amount greater than zero')

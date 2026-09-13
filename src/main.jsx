@@ -8,6 +8,7 @@ import './experience.css'
 import './password-input.css'
 import './reliability.css'
 import './budgetly.css'
+import './theme.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

@@ -70,7 +70,7 @@ export default function AppShell({ children }) {
     {isLedger && nativeAndroid && <button className="transaction-fab" aria-label="Add transaction" title="Add transaction" onClick={addTransaction}><Plus size={28}/></button>}
 
     <nav className="mobile-nav glass">
-      {visibleNav.filter(([to]) => ['/', '/transactions', '/shared-transactions', '/wallets'].includes(to)).map(([to, label, Icon]) => <NavLink key={to} to={to} end={to === '/'} className={({isActive}) => isActive ? 'active' : ''}><Icon size={19}/><span>{label === 'Transactions' ? 'Activity' : label === 'Shared Transactions' ? 'Shared' : label}</span></NavLink>)}
+      {visibleNav.filter(([to]) => ['/', '/transactions', '/shared-transactions', '/wallets'].includes(to)).map(([to, label, Icon]) => <NavLink key={to} to={to} end={to === '/'} className={({isActive}) => isActive ? 'active' : ''}><Icon size={19}/><span>{label === 'Shared Transactions' ? 'Shared' : label}</span></NavLink>)}
       <button onClick={() => setMenu(true)}><Menu size={19}/><span>More</span></button>
     </nav>
 

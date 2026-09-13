@@ -188,7 +188,7 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    const wallpaper = appearance.wallpaper_image || ''
+    const wallpaper = settings.wallpaper_enabled !== false ? appearance.wallpaper_image || '' : ''
     document.body.style.backgroundImage = wallpaper ? `url(${JSON.stringify(wallpaper)})` : ''
     document.body.style.backgroundSize = wallpaper ? 'cover' : ''
     document.body.style.backgroundPosition = wallpaper ? 'center' : ''
@@ -201,7 +201,7 @@ export default function App() {
       document.body.style.backgroundAttachment = ''
       document.body.classList.remove('has-wallpaper')
     }
-  }, [appearance.wallpaper_image])
+  }, [appearance.wallpaper_image, settings.wallpaper_enabled])
 
   useEffect(() => {
     const resume = async () => {

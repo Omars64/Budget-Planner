@@ -6,6 +6,7 @@ import { useApp } from '../App'
 import Modal from '../components/Modal'
 import OperationsPanel from '../components/OperationsPanel'
 import EmptyState from '../components/EmptyState'
+import SettingsSection from '../components/SettingsSection'
 
 const fresh = () => ({ username: '', email: '', password: '', role: 'user', active: true })
 const freshCategory = () => ({ name: '', kind: 'expense', icon: 'circle', color: '#0a4173' })
@@ -78,8 +79,9 @@ export default function Admin() {
     catch (err) { notify(err.message, 'error') }
   }
 
-  return <div className="stack gap-20">
-    <OperationsPanel/>
+  return <div className="settings-grid admin-settings">
+    <SettingsSection title="Service health"><OperationsPanel/></SettingsSection>
+    <SettingsSection title="User management">
     <section className="section-intro glass">
       <div>
         <p className="eyebrow"><ShieldCheck size={14}/> Admin workspace</p>
@@ -106,6 +108,7 @@ export default function Admin() {
         </article>)}
       </div>}
     </section>
+    </SettingsSection>
 
     <Modal open={open} onClose={() => setOpen(false)} title={editing ? 'Edit user' : 'Create user'} subtitle={editing ? 'Users choose their own password through a reset link.' : 'New users receive their own starter workspace.'}>
       <form onSubmit={submit} className="stack gap-16">
