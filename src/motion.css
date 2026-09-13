@@ -1,0 +1,43 @@
+/* Keep movement brief and limited to entrances and deliberate interactions. */
+@keyframes budgetly-reveal {
+  from { opacity:0; transform:translateY(10px); }
+  to { opacity:1; transform:translateY(0); }
+}
+@keyframes budgetly-fade {
+  from { opacity:0; }
+  to { opacity:1; }
+}
+@keyframes budgetly-progress {
+  from { transform:scaleX(0); }
+  to { transform:scaleX(1); }
+}
+@keyframes budgetly-logo {
+  0%,100% { transform:translateY(0); }
+  50% { transform:translateY(-4px); }
+}
+@media(prefers-reduced-motion:no-preference) {
+  .cards-grid>article,.wallet-grid>.wallet-card,.metric-grid>.metric-card,.ledger-entry,.message-row {
+    animation:budgetly-reveal .38s cubic-bezier(.22,1,.36,1) backwards;
+  }
+  :is(.cards-grid,.wallet-grid,.metric-grid)>:nth-child(2) { animation-delay:45ms; }
+  :is(.cards-grid,.wallet-grid,.metric-grid)>:nth-child(3) { animation-delay:90ms; }
+  :is(.cards-grid,.wallet-grid,.metric-grid)>:nth-child(n+4) { animation-delay:135ms; }
+  .settings-section,.panel,.workspace,.auth-card form { animation:budgetly-fade .3s ease-out; }
+  .settings-section[open]>.settings-section-body,.form-options[open]>div { animation:budgetly-reveal .24s ease-out; }
+  .progress>span,.mini-track>i { animation:budgetly-progress .6s cubic-bezier(.22,1,.36,1); transform-origin:left; }
+  .auth-card .brand-logo { animation:budgetly-logo 3.5s ease-in-out 2; }
+  .nav-item.active svg,.mobile-nav .active svg { animation:budgetly-reveal .25s ease-out; }
+  .button,.icon-button,.row-icon,.transaction-fab,.ledger-entry,.message-row,.nav-item {
+    transition:background-color .18s,color .18s,border-color .18s,box-shadow .18s,scale .18s;
+  }
+  :is(.button,.icon-button,.row-icon,.transaction-fab):active:not(:disabled) { scale:.97; }
+  .field input,.field select,.field textarea,.pin-field,.password-input { transition:border-color .18s,box-shadow .18s,background-color .18s; }
+  .settings-section>summary>svg { transition:transform .2s ease; }
+}
+@media(hover:hover) and (prefers-reduced-motion:no-preference) {
+  .button:hover:not(:disabled),.card-top .row-icon:hover:not(:disabled) { scale:1.025; }
+  .transaction-fab:hover { scale:1.06; }
+}
+@media(prefers-reduced-motion:reduce) {
+  *,*::before,*::after { animation:none !important; transition:none !important; scroll-behavior:auto !important; }
+}

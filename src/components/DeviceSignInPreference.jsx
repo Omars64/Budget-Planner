@@ -14,7 +14,7 @@ export default function DeviceSignInPreference({ disabled, onChange }) {
           onChange?.(e.target.checked)
         } catch { setError('Allow site storage to save your sign-in preference.') }
       }}/>
-      Use password only on this device
+      <span>Use password only on this device</span>
     </label>
     {enabled && <small className="muted">Passkey prompts are off in this browser. Your account and other devices are unchanged.</small>}
     {error && <p className="form-error" role="alert">{error}</p>}

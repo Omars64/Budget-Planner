@@ -26,6 +26,7 @@ import DeviceSignInPreference from './components/DeviceSignInPreference'
 import PasswordRecovery from './components/PasswordRecovery'
 import { cancelReminder } from './lib/deviceNotifications'
 import { BankSms, smsAvailable } from './lib/bankSms'
+import { readDeviceAppearance, useAppearance } from './lib/appearance'
 
 const AppContext = createContext(null)
 export const useApp = () => useContext(AppContext)
@@ -100,7 +101,7 @@ function LoginScreen({ onLogin }) {
   }
 
   return <div className="lock-screen auth-screen" onInvalid={e => setError(e.target.validationMessage)}>
-    <motion.div className="lock-card auth-card glass" initial={{ opacity: 0, y: 20, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }}>
+    <motion.div key={mode} className="lock-card auth-card glass" initial={{ opacity: 0, y: 20, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{duration:.38,ease:[.22,1,.36,1]}}>
       <BrandLogo className="large" />
       {mode === 'reset' && <PasswordRecovery onBack={()=>setMode('login')}/>}
 
@@ -157,7 +158,8 @@ function LoginScreen({ onLogin }) {
 export default function App() {
   const { confirm, confirmation } = useConfirmation()
   const [session, setSession] = useState({ loading: true, user: null })
-  const [settings, setSettings] = useState({ currency: 'KWD', display_name: 'Budgetly', week_starts_on: 'sunday', compact_numbers: false })
+  const [settings, setSettings] = useState(() => ({ ...readDeviceAppearance(), currency: 'KWD', display_name: 'Budgetly', week_starts_on: 'sunday', compact_numbers: false }))
+  useAppearance(settings)
   const [appearance, setAppearance] = useState({ profile_image: '', wallpaper_image: '' })
   const [refreshKey, setRefreshKey] = useState(0)
   const [toast, setToast] = useState(null)

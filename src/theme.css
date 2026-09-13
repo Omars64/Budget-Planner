@@ -26,6 +26,18 @@
   --danger:#efaaaa;
 }
 body { color:var(--text); }
+:root[data-theme=dark] body::before { background:var(--page); }
+:root[data-theme=dark] .password-input { background:var(--surface); border-color:var(--line); }
+:root[data-theme=dark] :is(.row-icon,.icon-button) { background:var(--surface-soft); border-color:var(--line); color:var(--accent-text); }
+:root[data-theme=dark] :is(.row-icon,.icon-button):hover:not(:disabled) { background:var(--surface-hover); }
+:root[data-theme=dark] :is(.row-icon.danger,.row-actions button.danger) { color:var(--danger); }
+.card-top .row-icon { width:40px; height:40px; border-radius:8px; }
+.card-top .row-icon svg { width:18px; height:18px; stroke-width:2; }
+.auth-card .remember-session { margin-top:24px; margin-bottom:0; }
+.auth-card .device-signin-preference { margin-top:14px; }
+.auth-card .check-row { display:grid; grid-template-columns:20px minmax(0,1fr); align-items:start; gap:12px; text-align:left; line-height:22px; }
+.auth-card .check-row input { margin:1px 0 0; width:20px; height:20px; }
+.auth-card .check-row span { min-width:0; }
 body:has(.budgetly-v2)::before { background:var(--page); }
 body.has-wallpaper:has(.budgetly-v2)::before { background:rgba(var(--surface-rgb),.18); }
 body.has-wallpaper { --muted:inherit; }
