@@ -16,8 +16,11 @@ def test_notes_permissions_conflicts_folders_and_user_cleanup():
             row = client.post('/api/admin/users', headers=admin, json={'username': name, 'email': name + '@example.com', 'password': 'StrongPass123!'}).json()
             people.append((row['id'], login(client, row['email'])))
         owner, member, stranger = [p[1] for p in people]
-        folder = client.post('/api/note-folders', headers=owner, json={'name': 'Plans'}).json()
-        note = client.post('/api/notes', headers=owner, json={'title': 'Plan', 'content': 'Private', 'folder_id': folder['id']}).json()
+        folder = client.post('/api/note-folders', headers=owner, json={'name': 'Plans', 'color': '#eaf4ff'}).json()
+        note = client.post('/api/notes', headers=owner, json={'title': 'Plan', 'content': 'Private', 'folder_id': folder['id'], 'note_type': 'checklist', 'color': '#fff7d6', 'page_style': 'lined', 'checklist': [{'id': 'one', 'text': 'Ship it', 'done': False}]}).json()
+        assert folder['color'] == '#eaf4ff'
+        assert note['note_type'] == 'checklist' and note['checklist'][0]['text'] == 'Ship it'
+        assert client.get(f"/api/notes/{note['id']}", headers=owner).json()['page_style'] == 'lined'
         path = f"/api/notes/{note['id']}"
         assert client.get('/api/notes', headers=stranger).json() == []
         assert client.put(path, headers=stranger, json=note).status_code == 404

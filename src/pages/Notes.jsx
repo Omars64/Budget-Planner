@@ -1,138 +1,90 @@
+/* global Image, FileReader, crypto, navigator, setInterval, clearInterval, setTimeout */
 import { showTime } from '../lib/time'
-import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Download, Folder, FolderPlus, FileText, History, Pin, Plus, Save, Search, Share2, Trash2, Pencil, RefreshCw } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  ArrowLeft, Check, CheckSquare, Download, FileText, Folder, FolderPlus,
+  History, MoreHorizontal, Paperclip, Pencil, Pin, Plus, Printer, RefreshCw,
+  Search, Share2, Trash2, X
+} from 'lucide-react'
 import { api, jsonBody } from '../lib/api'
 import { useApp } from '../App'
 import Modal from '../components/Modal'
 
+const NOTE_COLORS = [['#ffffff', 'Paper'], ['#eaf4ff', 'Sky'], ['#eaf8f0', 'Mint'], ['#fff7d6', 'Sun'], ['#fff0f2', 'Rose'], ['#f2edff', 'Lavender']]
+const PAGE_STYLES = [['plain', 'Plain'], ['lined', 'Lined'], ['grid', 'Grid']]
+const NOTE_TYPES = [['text', 'Text note'], ['checklist', 'Checklist'], ['drawing', 'Drawing']]
+const blankNote = folder => ({ title: '', content: '', folder_id: /^\d+$/.test(folder) ? Number(folder) : null, pinned: false, version: 1, is_owner: true, can_edit: true, note_type: 'text', color: '#ffffff', page_style: 'plain', checklist: [], attachment_name: null, attachment_type: null, attachment_data: null, shares: [] })
+
+function words(note) {
+  if (note.note_type === 'checklist') return `${(note.checklist || []).filter(item => item.done).length}/${(note.checklist || []).length} complete`
+  return note.content?.trim() ? `${note.content.trim().split(/\s+/).length} words` : 'Empty note'
+}
+
+function DrawingPad({ value, onChange, readOnly }) {
+  const canvasRef = useRef(null)
+  const drawing = useRef(false)
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const context = canvas.getContext('2d')
+    context.clearRect(0, 0, canvas.width, canvas.height)
+    if (!value) return
+    const image = new Image()
+    image.onload = () => context.drawImage(image, 0, 0, canvas.width, canvas.height)
+    image.src = value
+  }, [value])
+  const point = event => { const rect = canvasRef.current.getBoundingClientRect(); return { x: (event.clientX - rect.left) * 1200 / rect.width, y: (event.clientY - rect.top) * 700 / rect.height } }
+  const start = event => {
+    if (readOnly) return
+    drawing.current = true
+    const context = canvasRef.current.getContext('2d'); const { x, y } = point(event)
+    context.beginPath(); context.moveTo(x, y); context.lineWidth = 4; context.lineCap = 'round'; context.strokeStyle = '#0a4173'
+  }
+  const move = event => { if (!drawing.current) return; const context = canvasRef.current.getContext('2d'); const { x, y } = point(event); context.lineTo(x, y); context.stroke() }
+  const stop = () => { if (!drawing.current) return; drawing.current = false; onChange(canvasRef.current.toDataURL('image/png')) }
+  return <div className="drawing-pad"><canvas ref={canvasRef} width="1200" height="700" onPointerDown={start} onPointerMove={move} onPointerUp={stop} onPointerLeave={stop} aria-label="Drawing canvas" />{!readOnly && <button className="button ghost drawing-clear" type="button" onClick={() => { const canvas = canvasRef.current; canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height); onChange('') }}><X size={15}/>Clear</button>}</div>
+}
+
 export default function Notes() {
   const { user, notify, confirm } = useApp()
   const draftKey = `flowbudget_note_draft_${user.id}`
-  const [restored] = useState(() => {
-    try { const value = JSON.parse(sessionStorage.getItem(draftKey)); return value && typeof value.title === 'string' && typeof value.content === 'string' ? value : null }
-    catch { return null }
-  })
-  const [notes, setNotes] = useState([])
-  const [folders, setFolders] = useState([])
-  const [folder, setFolder] = useState('all')
-  const [search, setSearch] = useState('')
-  const [draft, setDraft] = useState(restored)
-  const [dirty, setDirty] = useState(Boolean(restored))
-  const [busy, setBusy] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [folderEdit, setFolderEdit] = useState(null)
-  const [sharing, setSharing] = useState(false)
-  const [historyOpen, setHistoryOpen] = useState(false)
-  const [history, setHistory] = useState([])
-  const [invite, setInvite] = useState({ email: '', permission: 'view' })
+  const [restored] = useState(() => { try { const value = JSON.parse(sessionStorage.getItem(draftKey)); return value && typeof value.title === 'string' ? { ...blankNote('all'), ...value } : null } catch { return null } })
+  const [notes, setNotes] = useState([]); const [folders, setFolders] = useState([]); const [folder, setFolder] = useState('all'); const [search, setSearch] = useState(''); const [draft, setDraft] = useState(restored); const [dirty, setDirty] = useState(Boolean(restored)); const [busy, setBusy] = useState(false); const [loading, setLoading] = useState(true); const [error, setError] = useState(''); const [folderEdit, setFolderEdit] = useState(null); const [sharing, setSharing] = useState(false); const [historyOpen, setHistoryOpen] = useState(false); const [history, setHistory] = useState([]); const [invite, setInvite] = useState({ email: '', permission: 'view' }); const [toolsOpen, setToolsOpen] = useState(false); const fileRef = useRef(null)
 
-  useEffect(() => {
-    try {
-      if (dirty && draft) sessionStorage.setItem(draftKey, JSON.stringify(draft))
-      else sessionStorage.removeItem(draftKey)
-    } catch { /* Saving to the server remains available when browser storage is full. */ }
-  }, [draftKey, dirty, draft])
-
-  const load = async () => {
-    const [n, f] = await Promise.all([api('/api/notes'), api('/api/note-folders')])
-    setNotes(n); setFolders(f); setLoading(false)
-    return n
-  }
+  useEffect(() => { try { if (dirty && draft) sessionStorage.setItem(draftKey, JSON.stringify(draft)); else sessionStorage.removeItem(draftKey) } catch { /* Draft protection is best effort. */ } }, [draftKey, dirty, draft])
+  const load = async () => { const [n, f] = await Promise.all([api('/api/notes'), api('/api/note-folders')]); setNotes(n); setFolders(f); setLoading(false); return n }
   useEffect(() => {
     let cancelled = false
-    const sync = async () => {
-      if (document.visibilityState === 'hidden') return
-      try {
-        const [n, f] = await Promise.all([api('/api/notes'), api('/api/note-folders')])
-        if (cancelled) return
-        setNotes(n); setFolders(f); setLoading(false)
-        if (!dirty) setDraft(current => current?.id ? n.find(x => x.id === current.id) || null : current)
-      } catch (err) { if (!cancelled) { setError(err.message); setLoading(false) } }
-    }
-    sync()
-    const timer = setInterval(sync, 10000)
-    window.addEventListener('focus', sync)
-    return () => { cancelled = true; clearInterval(timer); window.removeEventListener('focus', sync) }
+    const sync = async () => { if (document.visibilityState === 'hidden') return; try { const [n, f] = await Promise.all([api('/api/notes'), api('/api/note-folders')]); if (cancelled) return; setNotes(n); setFolders(f); setLoading(false); if (!dirty) setDraft(current => current?.id ? n.find(item => item.id === current.id) || null : current) } catch (err) { if (!cancelled) { setError(err.message); setLoading(false) } } }
+    sync(); const timer = setInterval(sync, 10000); window.addEventListener('focus', sync); return () => { cancelled = true; clearInterval(timer); window.removeEventListener('focus', sync) }
   }, [dirty])
-  const visible = useMemo(() => notes.filter(n =>
-    (folder === 'shared' ? !n.is_owner : n.is_owner && (folder === 'all' || (folder === 'pinned' ? n.pinned : String(n.folder_id) === folder))) &&
-    `${n.title} ${n.content}`.toLowerCase().includes(search.toLowerCase())), [notes, folder, search])
+  const visible = useMemo(() => notes.filter(note => { const inFolder = folder === 'shared' ? !note.is_owner : note.is_owner && (folder === 'all' || (folder === 'pinned' ? note.pinned : String(note.folder_id) === folder)); const haystack = `${note.title} ${note.content} ${(note.checklist || []).map(item => item.text).join(' ')}`.toLowerCase(); return inFolder && haystack.includes(search.toLowerCase()) }), [notes, folder, search])
   const leave = async () => !dirty || await confirm('Discard unsaved changes to this note?')
-  const select = async note => { if (await leave()) { setDraft(note); setDirty(false); setError('') } }
-  const changeFolder = async value => { if (await leave()) { setFolder(value); setDraft(null); setDirty(false); setError('') } }
-  const change = patch => { setDraft(d => ({ ...d, ...patch })); setDirty(true) }
-  const save = async () => {
-    setBusy(true); setError('')
-    try {
-      const result = await api(draft.id ? `/api/notes/${draft.id}` : '/api/notes', { method: draft.id ? 'PUT' : 'POST', ...jsonBody(draft) })
-      setDraft(result); setDirty(false); await load(); notify('Note saved')
-    } catch (err) { setError(err.message) } finally { setBusy(false) }
-  }
-  const remove = async () => {
-    if (!await confirm('Delete this note? Everyone sharing it will lose access.')) return
-    setBusy(true)
-    try { await api(`/api/notes/${draft.id}`, { method: 'DELETE' }); setDraft(null); setDirty(false); await load(); notify('Note deleted') }
-    catch (err) { setError(err.message) } finally { setBusy(false) }
-  }
-  const saveFolder = async e => {
-    e.preventDefault(); setBusy(true)
-    try { await api(folderEdit.id ? `/api/note-folders/${folderEdit.id}` : '/api/note-folders', { method: folderEdit.id ? 'PUT' : 'POST', ...jsonBody({ name: folderEdit.name }) }); setFolderEdit(null); await load() }
-    catch (err) { notify(err.message, 'error') } finally { setBusy(false) }
-  }
-  const removeFolder = async item => {
-    if (!await leave() || !await confirm(`Delete folder "${item.name}"? Its notes will remain in All notes.`)) return
-    try { await api(`/api/note-folders/${item.id}`, { method: 'DELETE' }); setFolder('all'); setDraft(null); setDirty(false); await load() }
-    catch (err) { notify(err.message, 'error') }
-  }
-  const share = async e => {
-    e.preventDefault(); setBusy(true)
-    try { await api(`/api/notes/${draft.id}/shares`, { method: 'POST', ...jsonBody(invite) }); setDraft((await load()).find(n => n.id === draft.id)); setInvite({ email: '', permission: 'view' }); notify('Note access updated') }
-    catch (err) { notify(err.message, 'error') } finally { setBusy(false) }
-  }
-  const unshare = async item => {
-    if (!await confirm(`Remove access for ${item.email}?`)) return
-    try { await api(`/api/notes/${draft.id}/shares/${item.id}`, { method: 'DELETE' }); setDraft((await load()).find(n => n.id === draft.id)) }
-    catch (err) { notify(err.message, 'error') }
-  }
-  const showHistory = async () => {
-    try { setHistory(await api(`/api/notes/${draft.id}/history`)); setHistoryOpen(true) }
-    catch (err) { notify(err.message, 'error') }
-  }
-  const download = () => {
-    const url = URL.createObjectURL(new Blob([`${draft.title}\n\n${draft.content}`], { type: 'text/plain' }))
-    const link = document.createElement('a'); link.href = url; link.download = 'Budgetly-note.txt'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000)
-  }
+  const select = async note => { if (!await leave()) return; setError(''); setToolsOpen(false); if (!note) { setDraft(null); setDirty(false); return } try { setDraft(note.id ? await api(`/api/notes/${note.id}`) : note); setDirty(false) } catch (err) { setError(err.message) } }
+  const changeFolder = async value => { if (!await leave()) return; setFolder(value); setDraft(null); setDirty(false); setError('') }
+  const change = patch => { setDraft(current => ({ ...current, ...patch })); setDirty(true) }
+  const savePayload = note => ({ title: note.title, content: note.content || '', folder_id: note.folder_id || null, pinned: Boolean(note.pinned), note_type: note.note_type || 'text', color: note.color || '#ffffff', page_style: note.page_style || 'plain', checklist: note.checklist || [], attachment_name: note.attachment_name || null, attachment_type: note.attachment_type || null, attachment_data: note.attachment_data || null, version: note.version || 1 })
+  const save = async () => { if (!draft?.title.trim()) { setError('Add a short title before saving this note.'); return } setBusy(true); setError(''); try { const result = await api(draft.id ? `/api/notes/${draft.id}` : '/api/notes', { method: draft.id ? 'PUT' : 'POST', ...jsonBody(savePayload(draft)) }); setDraft(result); setDirty(false); await load(); notify('Note saved') } catch (err) { setError(err.message) } finally { setBusy(false) } }
+  const remove = async () => { if (!await confirm('Delete this note? Everyone sharing it will lose access.')) return; setBusy(true); try { await api(`/api/notes/${draft.id}`, { method: 'DELETE' }); setDraft(null); setDirty(false); await load(); notify('Note moved to Trash') } catch (err) { setError(err.message) } finally { setBusy(false) } }
+  const saveFolder = async event => { event.preventDefault(); setBusy(true); try { await api(folderEdit.id ? `/api/note-folders/${folderEdit.id}` : '/api/note-folders', { method: folderEdit.id ? 'PUT' : 'POST', ...jsonBody({ name: folderEdit.name, color: folderEdit.color }) }); setFolderEdit(null); await load() } catch (err) { notify(err.message, 'error') } finally { setBusy(false) } }
+  const removeFolder = async item => { if (!await leave() || !await confirm(`Delete folder "${item.name}"? Its notes will remain in All notes.`)) return; try { await api(`/api/note-folders/${item.id}`, { method: 'DELETE' }); setFolder('all'); setDraft(null); setDirty(false); await load() } catch (err) { notify(err.message, 'error') } }
+  const share = async event => { event.preventDefault(); setBusy(true); try { await api(`/api/notes/${draft.id}/shares`, { method: 'POST', ...jsonBody(invite) }); setDraft((await load()).find(note => note.id === draft.id)); setInvite({ email: '', permission: 'view' }); notify('Note access updated') } catch (err) { notify(err.message, 'error') } finally { setBusy(false) } }
+  const unshare = async item => { if (!await confirm(`Remove access for ${item.email}?`)) return; try { await api(`/api/notes/${draft.id}/shares/${item.id}`, { method: 'DELETE' }); setDraft((await load()).find(note => note.id === draft.id)) } catch (err) { notify(err.message, 'error') } }
+  const showHistory = async () => { try { setHistory(await api(`/api/notes/${draft.id}/history`)); setHistoryOpen(true) } catch (err) { notify(err.message, 'error') } }
+  const download = format => { const checklist = (draft.checklist || []).map(item => `${item.done ? '[x]' : '[ ]'} ${item.text}`).join('\n'); const body = `${draft.title}\n\n${draft.note_type === 'checklist' ? checklist : draft.content || ''}`; const data = format === 'json' ? JSON.stringify(savePayload(draft), null, 2) : body; const url = URL.createObjectURL(new Blob([data], { type: format === 'json' ? 'application/json' : 'text/plain' })); const link = document.createElement('a'); link.href = url; link.download = `Budgetly-${(draft.title || 'note').replace(/[^a-z0-9-_]+/gi, '-').toLowerCase()}.${format}`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); setToolsOpen(false) }
+  const print = () => { setToolsOpen(false); window.print() }
+  const shareDevice = async () => { setToolsOpen(false); try { if (navigator.share) await navigator.share({ title: draft.title, text: `${draft.title}\n\n${draft.content || ''}` }); else { await navigator.clipboard?.writeText(`${draft.title}\n\n${draft.content || ''}`); notify('Note copied to clipboard') } } catch { /* Native share was cancelled. */ } }
+  const addChecklistItem = () => change({ checklist: [...(draft.checklist || []), { id: crypto.randomUUID?.() || String(Date.now()), text: '', done: false }] })
+  const updateChecklist = (id, patch) => change({ checklist: (draft.checklist || []).map(item => item.id === id ? { ...item, ...patch } : item) })
+  const removeChecklist = id => change({ checklist: (draft.checklist || []).filter(item => item.id !== id) })
+  const attach = event => { const file = event.target.files?.[0]; if (!file) return; if (file.size > 4 * 1024 * 1024) { notify('Attachments must be smaller than 4 MB', 'error'); event.target.value = ''; return } const reader = new FileReader(); reader.onload = () => change({ attachment_name: file.name, attachment_type: file.type || 'application/octet-stream', attachment_data: reader.result }); reader.readAsDataURL(file); event.target.value = '' }
+
   return <div className={`workspace notes-workspace ${draft ? 'has-selection' : ''}`}>
-    <aside className="workspace-folders">
-      <div className="workspace-heading"><h3>Folders</h3><button title="New folder" aria-label="New folder" className="icon-button" onClick={() => setFolderEdit({ name: '' })}><FolderPlus size={18}/></button></div>
-      {[['all', 'All notes', FileText], ['pinned', 'Pinned', Pin], ['shared', 'Shared notes', Share2]].map(([key, label, Icon]) => <button key={key} className={`folder-link ${folder === key ? 'selected' : ''}`} onClick={() => changeFolder(key)}><Icon size={17}/>{label}</button>)}
-      <div className="folder-divider"/>
-      {folders.map(f => <div className="folder-row" key={f.id}><button className={`folder-link ${folder === String(f.id) ? 'selected' : ''}`} onClick={() => changeFolder(String(f.id))}><Folder size={16}/><span>{f.name}</span></button><button className="icon-button" title="Rename folder" aria-label={`Rename ${f.name}`} onClick={() => setFolderEdit(f)}><Pencil size={13}/></button><button className="icon-button" title="Delete folder" aria-label={`Delete ${f.name}`} onClick={() => removeFolder(f)}><Trash2 size={13}/></button></div>)}
-    </aside>
-    <section className="workspace-list">
-      <div className="workspace-heading"><h3>{folder === 'shared' ? 'Shared notes' : 'Notes'} <small>{visible.length}</small></h3><button className="icon-button" title="New note" aria-label="New note" onClick={() => select({ title: '', content: '', folder_id: /^\d+$/.test(folder) ? Number(folder) : null, pinned: false, version: 1, is_owner: true, can_edit: true })}><Plus size={20}/></button></div>
-      <div className="workspace-search"><Search size={16}/><input aria-label="Search notes" placeholder="Search notes" value={search} onChange={e => setSearch(e.target.value)}/></div>
-      {loading ? <p className="workspace-empty">Loading notes...</p> : !visible.length ? <p className="workspace-empty">No notes here yet.</p> : visible.map(n => <button className={`message-row ${draft?.id === n.id ? 'selected' : ''}`} key={n.id} onClick={() => select(n)}><strong>{n.pinned && <Pin size={12}/>} {n.title}</strong><span>{n.content.slice(0, 100) || 'Empty note'}</span><small>{!n.is_owner ? `${n.owner_name} · ${n.can_edit ? 'Can edit' : 'View only'} · ` : ''}{showTime(n.updated_at)}</small></button>)}
-    </section>
-    <section className="workspace-reader">
-      {!draft ? <div className="reader-empty"><FileText size={32}/><h3>Select a note</h3>{error && <p role="alert">{error}</p>}</div> : <>
-        <div className="reader-toolbar"><button className="icon-button" title="Back to notes" aria-label="Back to notes" onClick={() => select(null)}><ArrowLeft size={18}/></button><span className="save-state">{dirty ? 'Unsaved changes' : draft.id ? 'Saved' : 'New note'}{!draft.can_edit && ' · View only'}</span><div className="button-row">
-          <button className="icon-button" title="Download note" aria-label="Download note" onClick={download}><Download size={17}/></button>
-          {draft.is_owner && <button className={`icon-button ${draft.pinned ? 'is-pinned' : ''}`} title="Pin note" aria-label="Pin note" aria-pressed={draft.pinned} onClick={() => change({ pinned: !draft.pinned })}><Pin size={17}/></button>}
-          {draft.id && draft.is_owner && <button className="icon-button" title="Version history" aria-label="Version history" onClick={showHistory}><History size={17}/></button>}
-          {draft.id && draft.is_owner && <><button className="icon-button" title="Share note" aria-label="Share note" disabled={dirty} onClick={() => setSharing(true)}><Share2 size={17}/></button><button className="icon-button" title="Delete note" aria-label="Delete note" disabled={busy} onClick={remove}><Trash2 size={17}/></button></>}
-          {draft.can_edit && <button className="button primary" disabled={busy || !draft.title.trim() || (!dirty && draft.id)} onClick={save}><Save size={16}/>{busy ? 'Saving...' : 'Save'}</button>}
-        </div></div>
-        {error && <div className="form-error" role="alert">{error}{draft.id && <button className="button ghost" onClick={async () => { if (await leave()) { try { setDraft((await load()).find(n => n.id === draft.id) || null); setDirty(false); setError('') } catch (err) { setError(err.message) } } }}><RefreshCw size={15}/>Reload latest</button>}</div>}
-        <input className="note-title" aria-label="Note title" placeholder="Note title" maxLength={160} readOnly={!draft.can_edit} value={draft.title} onChange={e => change({ title: e.target.value })}/>
-        {draft.is_owner && <label className="note-folder-picker">Folder<select aria-label="Note folder" value={draft.folder_id || ''} onChange={e => change({ folder_id: e.target.value ? Number(e.target.value) : null })}><option value="">Unfiled</option>{folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label>}
-        <textarea className="note-content" aria-label="Note content" placeholder="Write a note..." maxLength={100000} readOnly={!draft.can_edit} value={draft.content} onChange={e => change({ content: e.target.value })}/>
-        <div className="reader-footer">{draft.content.trim() ? draft.content.trim().split(/\s+/).length : 0} words<span>{draft.updated_at && `Updated ${showTime(draft.updated_at)}`}</span></div>
-      </>}
-    </section>
-    <Modal open={!!folderEdit} onClose={() => setFolderEdit(null)} title={folderEdit?.id ? 'Rename folder' : 'New folder'}><form className="stack gap-16" onSubmit={saveFolder}><label className="field"><span>Folder name</span><input required maxLength={80} value={folderEdit?.name || ''} onChange={e => setFolderEdit(f => ({ ...f, name: e.target.value }))}/></label><button className="button primary" disabled={busy || !folderEdit?.name.trim()}>Save folder</button></form></Modal>
-    <Modal open={sharing} onClose={() => setSharing(false)} title="Share note"><form onSubmit={share} className="stack gap-16"><label className="field"><span>Account email</span><input required type="email" value={invite.email} onChange={e => setInvite({ ...invite, email: e.target.value })}/></label><label className="field"><span>Permission</span><select value={invite.permission} onChange={e => setInvite({ ...invite, permission: e.target.value })}><option value="view">Can view</option><option value="edit">Can edit</option></select></label><button disabled={busy} className="button primary">Share note</button></form><div className="note-shares">{draft?.shares?.map(s => <div key={s.id}><span>{s.email}<small>{s.permission === 'edit' ? 'Can edit' : 'Can view'}</small></span><button className="icon-button" title="Remove access" aria-label={`Remove ${s.email}`} onClick={() => unshare(s)}><Trash2 size={16}/></button></div>)}</div></Modal>
+    <aside className="workspace-folders"><div className="workspace-heading"><h3>Folders</h3><button title="New folder" aria-label="New folder" className="icon-button" onClick={() => setFolderEdit({ name: '', color: '#0a4173' })}><FolderPlus size={18}/></button></div>{[['all', 'All notes', FileText], ['pinned', 'Pinned', Pin], ['shared', 'Shared notes', Share2]].map(([key, label, Icon]) => <button key={key} className={`folder-link ${folder === key ? 'selected' : ''}`} onClick={() => changeFolder(key)}><Icon size={17}/><span>{label}</span></button>)}<div className="folder-divider"/>{folders.map(item => <div className="folder-row" key={item.id}><button className={`folder-link ${folder === String(item.id) ? 'selected' : ''}`} onClick={() => changeFolder(String(item.id))}><Folder size={16} style={{ color: item.color }}/><span>{item.name}</span></button><button className="icon-button" title="Rename folder" aria-label={`Rename ${item.name}`} onClick={() => setFolderEdit(item)}><Pencil size={13}/></button><button className="icon-button" title="Delete folder" aria-label={`Delete ${item.name}`} onClick={() => removeFolder(item)}><Trash2 size={13}/></button></div>)}</aside>
+    <section className="workspace-list"><div className="workspace-heading"><h3>{folder === 'shared' ? 'Shared notes' : 'Notes'} <small>{visible.length}</small></h3><button className="icon-button" title="New note" aria-label="New note" onClick={() => select(blankNote(folder))}><Plus size={20}/></button></div><div className="workspace-search"><Search size={16}/><input aria-label="Search notes" placeholder="Search notes" value={search} onChange={event => setSearch(event.target.value)}/></div>{loading ? <p className="workspace-empty">Loading notes...</p> : !visible.length ? <div className="workspace-empty"><FileText size={26}/><p>No notes here yet.</p><button className="button primary" onClick={() => select(blankNote(folder))}><Plus size={15}/>Create a note</button></div> : visible.map(note => <button className={`message-row note-row ${draft?.id === note.id ? 'selected' : ''}`} key={note.id} onClick={() => select(note)} style={{ '--note-color': note.color || '#ffffff' }}><div><strong>{note.pinned && <Pin size={12}/>} {note.title || 'Untitled note'}</strong><small>{showTime(note.updated_at)}</small></div><span>{note.note_type === 'checklist' ? words(note) : note.content?.slice(0, 100) || 'Empty note'}</span><small>{!note.is_owner ? `${note.owner_name} · ${note.can_edit ? 'Can edit' : 'View only'} · ` : ''}{note.note_type === 'checklist' ? 'Checklist' : note.note_type === 'drawing' ? 'Drawing' : 'Note'}</small></button>)}</section>
+    <section className="workspace-reader">{!draft ? <div className="reader-empty"><FileText size={34}/><h3>Select a note</h3><p>Keep an idea, list, or plan close at hand.</p>{error && <p role="alert">{error}</p>}</div> : <><div className="reader-toolbar"><button className="icon-button mobile-back" title="Back to notes" aria-label="Back to notes" onClick={() => select(null)}><ArrowLeft size={18}/></button><span className="save-state">{dirty ? 'Unsaved changes' : draft.id ? 'Saved' : 'New note'}{!draft.can_edit && ' · View only'}</span><div className="button-row"><button className="icon-button" title="Attach a file" aria-label="Attach a file" disabled={!draft.can_edit} onClick={() => fileRef.current?.click()}><Paperclip size={17}/></button><input ref={fileRef} hidden type="file" accept="image/*,.pdf,.txt,.doc,.docx" onChange={attach}/>{draft.is_owner && <button className={`icon-button ${draft.pinned ? 'is-pinned' : ''}`} title="Pin note" aria-label="Pin note" aria-pressed={draft.pinned} onClick={() => change({ pinned: !draft.pinned })}><Pin size={17}/></button>}{draft.id && draft.is_owner && <button className="icon-button" title="Share note" aria-label="Share note" disabled={dirty} onClick={() => setSharing(true)}><Share2 size={17}/></button>}<button className="icon-button" title="More note actions" aria-label="More note actions" onClick={() => setToolsOpen(value => !value)}><MoreHorizontal size={18}/></button>{toolsOpen && <div className="note-tools-popover"><button onClick={() => download('txt')}><Download size={15}/>Download text</button><button onClick={() => download('json')}><Download size={15}/>Export JSON</button><button onClick={print}><Printer size={15}/>Print / PDF</button><button onClick={shareDevice}><Share2 size={15}/>Share from device</button>{draft.id && draft.is_owner && <button onClick={showHistory}><History size={15}/>Version history</button>}{draft.id && draft.is_owner && <button className="danger-text" onClick={remove}><Trash2 size={15}/>Move to Trash</button>}</div>}{draft.can_edit && <button className="button primary" disabled={busy || !draft.title.trim() || (!dirty && draft.id)} onClick={save}>{busy ? 'Saving...' : 'Save'}</button>}</div></div>{error && <div className="form-error" role="alert">{error}{draft.id && <button className="button ghost" onClick={async () => { if (await leave()) { try { setDraft(await api(`/api/notes/${draft.id}`)); setDirty(false); setError('') } catch (err) { setError(err.message) } } }}><RefreshCw size={15}/>Reload latest</button>}</div>}<div className="note-editor" style={{ '--note-surface': draft.color || '#ffffff' }}><input className="note-title" aria-label="Note title" placeholder="Note title" maxLength={160} readOnly={!draft.can_edit} value={draft.title} onChange={event => change({ title: event.target.value })}/><div className="note-editor-controls"><div className="note-type-switch">{NOTE_TYPES.map(([type, label]) => <button type="button" key={type} className={draft.note_type === type ? 'selected' : ''} onClick={() => draft.can_edit && change({ note_type: type })}>{type === 'checklist' ? <CheckSquare size={15}/> : type === 'drawing' ? <Pencil size={15}/> : <FileText size={15}/>} {label}</button>)}</div><div className="note-colors" aria-label="Note color">{NOTE_COLORS.map(([color, label]) => <button type="button" key={color} title={label} aria-label={label} className={draft.color === color ? 'selected' : ''} style={{ background: color }} onClick={() => draft.can_edit && change({ color })}/>)}</div></div>{draft.is_owner && <label className="note-folder-picker">Folder<select aria-label="Note folder" value={draft.folder_id || ''} onChange={event => change({ folder_id: event.target.value ? Number(event.target.value) : null })}><option value="">Unfiled</option>{folders.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><span className="note-page-style">Paper<select aria-label="Page style" value={draft.page_style || 'plain'} onChange={event => change({ page_style: event.target.value })}>{PAGE_STYLES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></span></label>}{draft.note_type === 'checklist' ? <div className="checklist-editor">{(draft.checklist || []).map(item => <div className="checklist-row" key={item.id}><button type="button" className={`check-toggle ${item.done ? 'checked' : ''}`} aria-label={item.done ? 'Mark incomplete' : 'Mark complete'} onClick={() => draft.can_edit && updateChecklist(item.id, { done: !item.done })}>{item.done && <Check size={14}/>}</button><input value={item.text} readOnly={!draft.can_edit} placeholder="List item" onChange={event => updateChecklist(item.id, { text: event.target.value })}/><button type="button" className="icon-button" title="Remove item" aria-label="Remove item" onClick={() => draft.can_edit && removeChecklist(item.id)}><X size={15}/></button></div>)}<button type="button" className="button ghost add-checklist" onClick={addChecklistItem} disabled={!draft.can_edit}><Plus size={15}/>Add item</button></div> : draft.note_type === 'drawing' ? <DrawingPad value={draft.attachment_data || ''} readOnly={!draft.can_edit} onChange={value => change({ attachment_name: value ? 'drawing.png' : null, attachment_type: value ? 'image/png' : null, attachment_data: value || null })}/> : <textarea className={`note-content ${draft.page_style || 'plain'}`} aria-label="Note content" placeholder="Start writing..." maxLength={100000} readOnly={!draft.can_edit} value={draft.content} onChange={event => change({ content: event.target.value })}/>} {draft.attachment_data && draft.note_type !== 'drawing' && <div className="note-attachment"><div><Paperclip size={16}/><strong>{draft.attachment_name || 'Attached file'}</strong><small>{draft.attachment_type || 'File'}</small></div><div className="button-row">{draft.attachment_type?.startsWith('image/') && <img src={draft.attachment_data} alt="Note attachment preview"/>}<a className="button ghost" href={draft.attachment_data} download={draft.attachment_name || 'Budgetly-attachment'}><Download size={15}/>Download</a>{draft.can_edit && <button className="icon-button" title="Remove attachment" aria-label="Remove attachment" onClick={() => change({ attachment_name: null, attachment_type: null, attachment_data: null })}><Trash2 size={15}/></button>}</div></div>}<div className="reader-footer"><span>{words(draft)}</span><span>{draft.updated_at && `Updated ${showTime(draft.updated_at)}`}</span></div></div></>}</section>
+    <Modal open={!!folderEdit} onClose={() => setFolderEdit(null)} title={folderEdit?.id ? 'Rename folder' : 'New folder'}><form className="stack gap-16" onSubmit={saveFolder}><label className="field"><span>Folder name</span><input required maxLength={80} value={folderEdit?.name || ''} onChange={event => setFolderEdit(value => ({ ...value, name: event.target.value }))}/></label><label className="field"><span>Folder color</span><div className="note-colors folder-colors">{NOTE_COLORS.map(([color, label]) => <button type="button" key={color} title={label} aria-label={label} className={folderEdit?.color === color ? 'selected' : ''} style={{ background: color }} onClick={() => setFolderEdit(value => ({ ...value, color }))}/>)}</div></label><button className="button primary" disabled={busy || !folderEdit?.name.trim()}>Save folder</button></form></Modal>
+    <Modal open={sharing} onClose={() => setSharing(false)} title="Share note"><form onSubmit={share} className="stack gap-16"><label className="field"><span>Account email</span><input required type="email" value={invite.email} onChange={event => setInvite({ ...invite, email: event.target.value })}/></label><label className="field"><span>Permission</span><select value={invite.permission} onChange={event => setInvite({ ...invite, permission: event.target.value })}><option value="view">Can view</option><option value="edit">Can edit</option></select></label><button disabled={busy} className="button primary">Share note</button></form><div className="note-shares">{draft?.shares?.map(item => <div key={item.id}><span>{item.email}<small>{item.permission === 'edit' ? 'Can edit' : 'Can view'}</small></span><button className="icon-button" title="Remove access" aria-label={`Remove ${item.email}`} onClick={() => unshare(item)}><Trash2 size={16}/></button></div>)}</div></Modal>
     <Modal open={historyOpen} onClose={() => setHistoryOpen(false)} title="Version history"><div className="note-history">{!history.length ? <p className="muted">No earlier versions yet.</p> : history.map(item => <article key={item.id}><div><strong>Version {item.version}</strong><small>{showTime(item.created_at)}</small></div><p>{item.content || 'Empty note'}</p></article>)}</div></Modal>
   </div>
 }

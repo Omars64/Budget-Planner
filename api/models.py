@@ -145,6 +145,7 @@ class NoteFolder(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     name = Column(String(80), nullable=False)
+    color = Column(String(20), nullable=False, default="#0a4173")
 
 
 class Note(Base):
@@ -155,6 +156,13 @@ class Note(Base):
     title = Column(String(160), nullable=False)
     content = Column(Text, nullable=False, default="")
     pinned = Column(Boolean, nullable=False, default=False)
+    note_type = Column(String(20), nullable=False, default="text")
+    color = Column(String(20), nullable=False, default="#ffffff")
+    page_style = Column(String(20), nullable=False, default="plain")
+    checklist = Column(Text, nullable=False, default="[]")
+    attachment_name = Column(String(180), nullable=True)
+    attachment_type = Column(String(120), nullable=True)
+    attachment_data = Column(Text, nullable=True)
     version = Column(Integer, nullable=False, default=1)
     updated_at = Column(DateTime, nullable=False, default=utc_now)
 

@@ -12,6 +12,7 @@ import './reliability.css'
 import './budgetly.css'
 import './theme.css'
 import './motion.css'
+import './notes-workspace.css'
 
 applyAppearance(readDeviceAppearance())
 

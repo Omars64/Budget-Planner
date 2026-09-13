@@ -19,6 +19,7 @@ router = APIRouter()
 
 class FolderIn(BaseModel):
     name: str = Field(min_length=1, max_length=80)
+    color: str = Field(default="#0a4173", max_length=20)
 
 
 class NoteIn(BaseModel):
@@ -26,6 +27,13 @@ class NoteIn(BaseModel):
     content: str = Field(default="", max_length=100000)
     folder_id: int | None = Field(default=None, gt=0)
     pinned: bool = False
+    note_type: Literal["text", "checklist", "drawing"] = "text"
+    color: str = Field(default="#ffffff", max_length=20)
+    page_style: Literal["plain", "lined", "grid"] = "plain"
+    checklist: list[dict] = Field(default_factory=list, max_length=200)
+    attachment_name: str | None = Field(default=None, max_length=180)
+    attachment_type: str | None = Field(default=None, max_length=120)
+    attachment_data: str | None = Field(default=None, max_length=6000000)
     version: int = Field(default=1, ge=1)
 
 
@@ -101,18 +109,53 @@ def note_access(db, user, note_id, edit=False, owner=False):
     return note
 
 
-def note_payload(db, user, note):
+def clean_color(value, fallback="#ffffff"):
+    value = (value or fallback).strip()
+    if value.startswith("#") and len(value) in {4, 7} and all(char in "0123456789abcdefABCDEF" for char in value[1:]):
+        return value
+    if value in {"paper", "blue", "green", "yellow", "rose", "violet"}:
+        return value
+    return fallback
+
+
+def clean_checklist(items):
+    cleaned = []
+    for index, item in enumerate(items or []):
+        if not isinstance(item, dict):
+            continue
+        text = str(item.get("text", "")).strip()[:500]
+        if not text:
+            continue
+        cleaned.append({"id": str(item.get("id") or index + 1)[:80], "text": text, "done": bool(item.get("done"))})
+    return cleaned[:200]
+
+
+def note_payload(db, user, note, include_attachment=False):
     owner = db.get(User, note.user_id)
     shares = db.query(NoteShare).filter_by(note_id=note.id).all()
     mine = note.user_id == user.id
     access = next((s for s in shares if s.member_id == user.id), None)
-    return {"id": note.id, "title": note.title, "content": note.content,
+    try:
+        checklist = json.loads(getattr(note, "checklist", "[]") or "[]")
+        if not isinstance(checklist, list): checklist = []
+    except (TypeError, ValueError):
+        checklist = []
+    payload = {"id": note.id, "title": note.title, "content": note.content,
             "folder_id": note.folder_id if mine else None, "pinned": note.pinned,
+            "note_type": getattr(note, "note_type", "text"),
+            "color": getattr(note, "color", "#ffffff"),
+            "page_style": getattr(note, "page_style", "plain"),
+            "checklist": checklist,
+            "attachment_name": getattr(note, "attachment_name", None),
+            "attachment_type": getattr(note, "attachment_type", None),
             "version": note.version, "updated_at": note.updated_at.isoformat() + "Z",
             "owner_name": owner.username, "is_owner": mine,
             "can_edit": mine or bool(access and access.permission == "edit"),
             "shares": [{"id": s.id, "email": db.get(User, s.member_id).email,
                         "permission": s.permission} for s in shares] if mine else []}
+    if include_attachment:
+        payload["attachment_data"] = getattr(note, "attachment_data", None)
+    return payload
 
 
 @router.get("/api/note-folders")
@@ -122,7 +165,7 @@ def folders(user=Depends(current_user), db: Session = Depends(get_db)):
 
 @router.post("/api/note-folders", status_code=201)
 def create_folder(payload: FolderIn, user=Depends(current_user), db: Session = Depends(get_db)):
-    row = NoteFolder(user_id=user.id, name=nonblank(payload.name))
+    row = NoteFolder(user_id=user.id, name=nonblank(payload.name), color=clean_color(payload.color, "#0a4173"))
     db.add(row); db.commit(); db.refresh(row)
     return row
 
@@ -131,7 +174,7 @@ def create_folder(payload: FolderIn, user=Depends(current_user), db: Session = D
 def rename_folder(folder_id: int, payload: FolderIn, user=Depends(current_user), db: Session = Depends(get_db)):
     row = db.query(NoteFolder).filter_by(id=folder_id, user_id=user.id).first()
     if not row: raise HTTPException(404, "Folder not found")
-    row.name = nonblank(payload.name); db.commit(); db.refresh(row)
+    row.name = nonblank(payload.name); row.color = clean_color(payload.color, row.color); db.commit(); db.refresh(row)
     return row
 
 
@@ -154,9 +197,21 @@ def notes(user=Depends(current_user), db: Session = Depends(get_db)):
 def create_note(payload: NoteIn, user=Depends(current_user), db: Session = Depends(get_db)):
     if payload.folder_id and not db.query(NoteFolder).filter_by(id=payload.folder_id, user_id=user.id).first():
         raise HTTPException(404, "Folder not found")
-    row = Note(user_id=user.id, title=nonblank(payload.title), content=payload.content, folder_id=payload.folder_id, pinned=payload.pinned)
+    if payload.attachment_data and not payload.attachment_type:
+        raise HTTPException(422, "Please include the attachment type")
+    row = Note(user_id=user.id, title=nonblank(payload.title), content=payload.content, folder_id=payload.folder_id,
+               pinned=payload.pinned, note_type=payload.note_type, color=clean_color(payload.color),
+               page_style=payload.page_style, checklist=json.dumps(clean_checklist(payload.checklist)),
+               attachment_name=payload.attachment_name, attachment_type=payload.attachment_type,
+               attachment_data=payload.attachment_data)
     db.add(row); db.commit(); db.refresh(row)
-    return note_payload(db, user, row)
+    return note_payload(db, user, row, include_attachment=True)
+
+
+@router.get("/api/notes/{note_id}")
+def get_note(note_id: int, user=Depends(current_user), db: Session = Depends(get_db)):
+    row = note_access(db, user, note_id)
+    return note_payload(db, user, row, include_attachment=True)
 
 
 @router.put("/api/notes/{note_id}")
@@ -164,15 +219,21 @@ def update_note(note_id: int, payload: NoteIn, user=Depends(current_user), db: S
     row = note_access(db, user, note_id, edit=True)
     if row.version != payload.version:
         raise HTTPException(409, "This note changed since you opened it. Copy your draft, then reload the latest version.")
+    if payload.attachment_data and not payload.attachment_type:
+        raise HTTPException(422, "Please include the attachment type")
     db.add(NoteRevision(note_id=row.id, title=row.title, content=row.content, version=row.version))
     if row.user_id == user.id:
         if payload.folder_id and not db.query(NoteFolder).filter_by(id=payload.folder_id, user_id=user.id).first():
             raise HTTPException(404, "Folder not found")
         row.folder_id = payload.folder_id; row.pinned = payload.pinned
     row.title = nonblank(payload.title); row.content = payload.content
+    row.note_type = payload.note_type; row.color = clean_color(payload.color)
+    row.page_style = payload.page_style; row.checklist = json.dumps(clean_checklist(payload.checklist))
+    row.attachment_name = payload.attachment_name; row.attachment_type = payload.attachment_type
+    row.attachment_data = payload.attachment_data
     row.version += 1; row.updated_at = utc_now()
     db.commit(); db.refresh(row)
-    return note_payload(db, user, row)
+    return note_payload(db, user, row, include_attachment=True)
 
 
 @router.delete("/api/notes/{note_id}", status_code=204)

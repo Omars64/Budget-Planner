@@ -17,7 +17,7 @@ from typing import Optional
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy import extract, func, or_, text
+from sqlalchemy import extract, func, inspect as sa_inspect, or_, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
@@ -43,6 +43,30 @@ serializer = URLSafeTimedSerializer(APP_SECRET, salt="flowbudget-lock")
 auth_serializer = URLSafeTimedSerializer(APP_SECRET, salt="flowbudget-auth")
 
 
+def ensure_note_columns(connection):
+    """Add note workspace columns to databases created before the Notes upgrade."""
+    tables = {
+        "note_folders": {
+            "color": "VARCHAR(20) NOT NULL DEFAULT '#0a4173'",
+        },
+        "notes": {
+            "note_type": "VARCHAR(20) NOT NULL DEFAULT 'text'",
+            "color": "VARCHAR(20) NOT NULL DEFAULT '#ffffff'",
+            "page_style": "VARCHAR(20) NOT NULL DEFAULT 'plain'",
+            "checklist": "TEXT NOT NULL DEFAULT '[]'",
+            "attachment_name": "VARCHAR(180)",
+            "attachment_type": "VARCHAR(120)",
+            "attachment_data": "TEXT",
+        },
+    }
+    inspector = sa_inspect(connection)
+    for table, columns in tables.items():
+        existing = {column["name"] for column in inspector.get_columns(table)}
+        for name, definition in columns.items():
+            if name not in existing:
+                connection.execute(text(f'ALTER TABLE {table} ADD COLUMN {name} {definition}'))
+
+
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     from .passkeys import migrate_passkeys
@@ -57,6 +81,7 @@ async def lifespan(application: FastAPI):
             if connection.dialect.name == "postgresql":
                 connection.execute(text("SELECT pg_advisory_xact_lock(61420731)"))
             Base.metadata.create_all(bind=connection)
+            ensure_note_columns(connection)
             with Session(bind=connection) as db:
                 seed_database(db, commit=False)
                 migrate_passkeys(db)
@@ -964,8 +989,12 @@ def export_backup(user: User = Depends(current_user), db: Session = Depends(get_
         "debts": [{**{c.name: getattr(d, c.name) for c in Debt.__table__.columns if c.name not in {"created_at", "user_id"}}, "due_date": d.due_date.isoformat() if d.due_date else None} for d in db.query(Debt).filter(Debt.user_id == user.id).all()],
         "settings": {s.key: s.value for s in db.query(AppSetting).filter(AppSetting.user_id == user.id).all() if s.key not in {"pin_hash", "passkey"}},
         "wallet_shares": [{"wallet_id": s.wallet_id, "email": s.invitee_email, "permission": s.permission} for s in db.query(WalletShare).filter_by(owner_id=user.id).all()],
-        "note_folders": [{"id": f.id, "name": f.name} for f in db.query(NoteFolder).filter_by(user_id=user.id).all()],
-        "notes": [{"id": n.id, "title": n.title, "content": n.content, "folder_id": n.folder_id, "pinned": n.pinned} for n in db.query(Note).filter_by(user_id=user.id).all()],
+        "note_folders": [{"id": f.id, "name": f.name, "color": getattr(f, "color", "#0a4173")} for f in db.query(NoteFolder).filter_by(user_id=user.id).all()],
+        "notes": [{"id": n.id, "title": n.title, "content": n.content, "folder_id": n.folder_id, "pinned": n.pinned,
+                   "note_type": getattr(n, "note_type", "text"), "color": getattr(n, "color", "#ffffff"),
+                   "page_style": getattr(n, "page_style", "plain"), "checklist": getattr(n, "checklist", "[]"),
+                   "attachment_name": getattr(n, "attachment_name", None), "attachment_type": getattr(n, "attachment_type", None),
+                   "attachment_data": getattr(n, "attachment_data", None)} for n in db.query(Note).filter_by(user_id=user.id).all()],
     }
     return payload
 
@@ -1049,9 +1078,12 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
         clear_notes(db, user.id)
         folder_map = {}
         for folder in data.get("note_folders", []):
-            row = NoteFolder(user_id=user.id, name=folder["name"]); db.add(row); db.flush(); folder_map[folder["id"]] = row.id
+            row = NoteFolder(user_id=user.id, name=folder["name"], color=folder.get("color", "#0a4173")); db.add(row); db.flush(); folder_map[folder["id"]] = row.id
         for note in data["notes"]:
-            db.add(Note(user_id=user.id, title=note["title"], content=note.get("content", ""), folder_id=folder_map.get(note.get("folder_id")), pinned=bool(note.get("pinned"))))
+            db.add(Note(user_id=user.id, title=note["title"], content=note.get("content", ""), folder_id=folder_map.get(note.get("folder_id")), pinned=bool(note.get("pinned")),
+                       note_type=note.get("note_type", "text"), color=note.get("color", "#ffffff"), page_style=note.get("page_style", "plain"),
+                       checklist=note.get("checklist", "[]") if isinstance(note.get("checklist", "[]"), str) else json.dumps(note.get("checklist", [])),
+                       attachment_name=note.get("attachment_name"), attachment_type=note.get("attachment_type"), attachment_data=note.get("attachment_data")))
     if pin_hash: db.add(AppSetting(user_id=user.id, key="pin_hash", value=pin_hash))
     db.commit()
     return {"ok": True}
