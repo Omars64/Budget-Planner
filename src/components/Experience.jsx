@@ -6,8 +6,10 @@ import { isNativeApp,quietAt,reminderBody,reminderTimes,configureReminder } from
 import {dateKey,clockTime} from '../lib/time'
 import { syncBankSms } from '../lib/bankSms'
 import SecurityPrompt from './SecurityPrompt'
+import { useLocation } from 'react-router-dom'
 
 export default function Experience() {
+  const location = useLocation()
   const { settings, user, notify } = useApp()
   const [pending, setPending] = useState(0)
   useEffect(() => {
@@ -56,18 +58,18 @@ export default function Experience() {
       if (!slot) return
       const reminderKey = `${day}:${slot}`
       try {
-        if (localStorage.getItem(key) === reminderKey) return
-        localStorage.setItem(key, reminderKey)
+        if (window.localStorage.getItem(key) === reminderKey) return
+        window.localStorage.setItem(key, reminderKey)
       } catch { return }
       notify(reminderBody(settings))
-      if ('Notification' in window && Notification.permission === 'granted') {
-        try { new Notification('Budgetly', { body: reminderBody(settings), icon: '/flowbudget-logo.png', tag: 'daily-budget' }) } catch { /* The in-app reminder is still displayed. */ }
+      if ('Notification' in window && window.Notification.permission === 'granted') {
+        try { new window.Notification('Budgetly', { body: reminderBody(settings), icon: '/flowbudget-logo.png', tag: 'daily-budget' }) } catch { /* The in-app reminder is still displayed. */ }
       }
     }
     check()
-    const interval = setInterval(check, 30000)
+    const interval = window.setInterval(check, 30000)
     window.addEventListener('focus', check)
-    return () => { clearInterval(interval); window.removeEventListener('focus', check) }
+    return () => { window.clearInterval(interval); window.removeEventListener('focus', check) }
   }, [settings, user.id, notify])
-  return <><SecurityPrompt/><ResizablePanels/>{pending > 0 && <div className="request-progress" role="status"><LoaderCircle className="request-spinner" size={18}/>Saving...</div>}</>
+  return <><SecurityPrompt/><ResizablePanels/>{pending > 0 && location.pathname !== '/ask-ai' && <div className="request-progress" role="status"><LoaderCircle className="request-spinner" size={18}/>Saving...</div>}</>
 }

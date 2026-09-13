@@ -7,6 +7,7 @@ import Modal from '../components/Modal'
 import OperationsPanel from '../components/OperationsPanel'
 import EmptyState from '../components/EmptyState'
 import SettingsSection from '../components/SettingsSection'
+import AssistantSettings from '../components/AssistantSettings'
 
 const fresh = () => ({ username: '', email: '', password: '', role: 'user', active: true })
 const freshCategory = () => ({ name: '', kind: 'expense', icon: 'circle', color: '#0a4173' })
@@ -81,6 +82,7 @@ export default function Admin() {
 
   return <div className="settings-grid admin-settings">
     <SettingsSection title="Service health"><OperationsPanel/></SettingsSection>
+    <SettingsSection title="Ask Budgetly"><AssistantSettings/></SettingsSection>
     <SettingsSection title="User management">
     <section className="section-intro glass">
       <div>

@@ -4,6 +4,14 @@ from .database import Base
 from .models import utc_now
 
 
+class AssistantConfig(Base):
+    __tablename__ = 'assistant_config'
+    id = Column(Integer, primary_key=True)
+    enabled = Column(Boolean, nullable=False, default=False)
+    updated_by = Column(Integer, nullable=True)
+    updated_at = Column(DateTime, nullable=False, default=utc_now)
+
+
 class AIChat(Base):
     __tablename__ = 'ai_chats'
     id = Column(String(36), primary_key=True)

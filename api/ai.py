@@ -1,5 +1,4 @@
-"""Authenticated Budgetly Help API with durable local conversations."""
-import html
+"""Authenticated Ask Budgetly API with durable private conversations."""
 import json
 import uuid
 from datetime import timedelta
@@ -14,8 +13,9 @@ from .ai_models import AIChat, AITurn
 from .ai_context import scope_wallets, month_range
 from .ai_service import generate, read_record
 from .account_security import limit
+from .ai_settings import assistant_status
 
-router = APIRouter(prefix='/api/ai', tags=['Budgetly Help'])
+router = APIRouter(prefix='/api/ai', tags=['Ask Budgetly'])
 LOCAL_DAILY_LIMIT = 40
 LOCAL_GLOBAL_DAILY_LIMIT = 200
 
@@ -63,7 +63,9 @@ def chat_json(chat, accessible=True):
 
 
 def turn_json(db, turn):
+    usage = json.loads(turn.usage or '{}')
     return {'id': turn.id, 'question': turn.question, 'answer': turn.answer,
+            'provider': usage.get('provider', 'built-in'), 'notice': usage.get('fallback', ''),
             'sources': json.loads(turn.sources), 'suggestions': json.loads(turn.suggestions),
             'status': turn.status, 'error': turn.error, 'research': turn.research,
             'created_at': turn.created_at.isoformat() + 'Z', 'feedback': turn.feedback, 'note_id': turn.note_id,
@@ -75,7 +77,7 @@ def config(user=Depends(current_user), db=Depends(get_db)):
     from .extensions import shared_wallets
     personal = db.query(Wallet).filter_by(user_id=user.id).order_by(Wallet.name).all()
     shared = shared_wallets(user, db)
-    return {'daily_limit': LOCAL_DAILY_LIMIT,
+    return {'daily_limit': LOCAL_DAILY_LIMIT, 'ai_available': assistant_status(db)['available'],
             'wallets': [{'id': w.id, 'name': w.name} for w in personal],
             'shared_wallets': [{'id': w['wallet_id'], 'name': w['name'], 'permission': w['permission']} for w in shared]}
 
@@ -237,8 +239,7 @@ def save_note(turn_id: str, user=Depends(current_user), db=Depends(get_db)):
         db.rollback()
         db.refresh(turn)
         return {'note_id': turn.note_id}
-    content = html.escape(turn.answer).replace('\n', '<br>')
-    row = Note(user_id=user.id, title=('Budgetly Help: ' + turn.question)[:160], content='<p>' + content + '</p>')
+    row = Note(user_id=user.id, title=('Ask Budgetly: ' + turn.question)[:160], content=turn.answer)
     db.add(row)
     db.flush()
     turn.note_id = row.id

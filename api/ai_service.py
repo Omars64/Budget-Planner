@@ -1,12 +1,15 @@
-"""Built-in Budgetly Help answers with safe, server-calculated activity summaries."""
-import json
+"""Ask Budgetly guidance with server-calculated activity and optional admin-controlled AI."""
 import re
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
+import httpx
 from fastapi import HTTPException
 from .ai_context import build_context, transaction_fact, scope_wallets, ledger_query
-from .ai_actions import target, serialize
+from .ai_actions import target
+from .ai_settings import assistant_status
+from .ai_provider import complete
+from .account_security import limit
 
-LIMITED_MESSAGE = "I'm Budgetly Help, a built-in guide. I can explain Budgetly features, basic budgeting, and the activity in the selected wallet and month. I can't answer unrelated questions, current news, or live economic research."
+LIMITED_MESSAGE = "I'm Ask Budgetly. My built-in guide covers Budgetly features, basic budgeting, and your selected activity. I don't have a built-in answer for that question. Try asking about a wallet, category, budget, goal, or how to use the app. I can't look up live news or market prices."
 
 FAQS = [
     (('add transaction', 'new transaction', 'record expense', 'record income'), "Open **Transactions** and select **Add transaction**. On Android, use the round **+** button. Choose Expense, Income, or Transfer, then enter the amount, date, wallet, category, and description before saving."),
@@ -61,7 +64,7 @@ def read_record(db, user, chat, kind, record_id):
 def _decimal(value):
     try:
         return Decimal(str(value or 0))
-    except (ValueError, TypeError):
+    except (InvalidOperation, ValueError, TypeError):
         return Decimal('0')
 
 
@@ -81,7 +84,7 @@ def _activity_answer(facts, question):
             return 'There are no wallets attached to this conversation.'
         rows = '\n'.join(f"- **{w['name']}**: {_money(w['balance'], currency)}" for w in wallets)
         return f"Here are the current wallet balances:\n\n{rows}\n\nThese are current balances, while the selected month is used for transaction totals."
-    category = next((row for row in ledger.get('expense_categories', []) if any(term in lower and term in row['category'].lower() for term in ('food', 'dining', 'shopping', 'transport', 'bills', 'entertainment'))), None)
+    category = _matching_category(facts, question)
     if category and any(word in lower for word in ('spend', 'spent', 'expense', 'cost', 'category')):
         return f"For **{category['category']}** in {facts.get('month', 'the selected month')}, the recorded expenses total **{_money(category['amount'], currency)}**. Use the transaction filter to review the individual records."
     if any(word in lower for word in ('income', 'earned', 'salary')):
@@ -103,14 +106,55 @@ def _activity_answer(facts, question):
 
 
 def _faq_answer(question):
-    lower = question.lower()
-    for keywords, answer in FAQS:
-        if any(keyword in lower for keyword in keywords):
-            return answer
+    lower = re.sub(r'\b(a|an|the|my|our)\b', ' ', question.lower())
+    lower = ' '.join(lower.split())
+    matches = [(len(keyword), answer) for keywords, answer in FAQS for keyword in keywords
+               if re.search(r'\b' + re.escape(keyword) + r'\b', lower)]
+    if matches:
+        return max(matches, key=lambda item: item[0])[1]
     return None
 
 
+def _matching_category(facts, question):
+    words = set(re.findall(r'\w+', question.lower()))
+    rows = list((facts.get('ledger') or {}).get('expense_categories', []))
+    known = {row['category'].lower() for row in rows}
+    rows += [{'category': row['name'], 'amount': '0'} for row in facts.get('categories', [])
+             if row['kind'] == 'expense' and row['name'].lower() not in known]
+    candidates = []
+    for row in rows:
+        terms = set(re.findall(r'\w+', row['category'].lower())) - {'and', 'the', 'other'}
+        score = len(terms & words)
+        if score:
+            candidates.append((score, row))
+    return max(candidates, key=lambda item: item[0])[1] if candidates else None
+
+
+def _roadmap(facts, question):
+    category = _matching_category(facts, question)
+    ledger = facts.get('ledger') or {}
+    currency = facts.get('currency', 'KWD')
+    amount = _decimal(category['amount'] if category else ledger.get('totals', {}).get('expense'))
+    title = category['category'] if category else 'your spending categories'
+    baseline = (f"Your recorded {facts.get('month', '')} spending " +
+                (f"in **{title}**" if category else 'across categories') +
+                f" is **{_money(amount, currency)}**. This is month-to-date, not a full-month forecast.\n\n") if amount else ''
+    return (f"**A four-week roadmap for {title}**\n\n" + baseline +
+        '- **Week 1: Review.** Filter Transactions by month and category. Separate essentials, optional purchases, and repeat charges.\n'
+        '- **Week 2: Choose a limit.** Use a complete typical month as your baseline. Try a manageable reduction, such as 10%, without cutting essentials. Add the chosen limit in Budgets.\n'
+        '- **Week 3: Change one habit.** Pick the biggest avoidable expense in the category, compare alternatives, and check the remaining budget weekly.\n'
+        '- **Week 4: Compare and adjust.** Compare actual spending with the baseline. Keep changes that work and set a realistic limit for next month.\n\n'
+        'No records have been changed. Tell me the category name to focus this plan.' )
+
+
 def _local_answer(facts, question):
+    lower = question.lower()
+    if re.search(r'\b(roadmap|reduce|cut back|spending plan|budget plan)\b', lower):
+        return _roadmap(facts, question)
+    if re.search(r'\b(how do|how can|how to|where can|where do|what is|what are|why)\b', lower):
+        answer = _faq_answer(question)
+        if answer:
+            return answer
     return _activity_answer(facts, question) or _faq_answer(question) or LIMITED_MESSAGE
 
 
@@ -118,7 +162,22 @@ def generate(db, user, chat, question, history, research=False, still_active=lam
     if not still_active():
         raise HTTPException(409, 'Response stopped')
     facts, sources = build_context(db, user, chat)
-    answer = _local_answer(facts, question)
-    # Keep the response deterministic and local. The zero usage record makes this explicit in admin diagnostics.
-    return {'answer': answer[:22000], 'sources': sources[:20], 'suggestions': [], 'drafts': [],
-            'usage': {'input_tokens': 0, 'output_tokens': 0}}
+    result = {'answer': _local_answer(facts, question)[:22000], 'sources': sources[:20],
+              'suggestions': [], 'drafts': [], 'usage': {'provider': 'built-in', 'input_tokens': 0, 'output_tokens': 0}}
+    if assistant_status(db)['available']:
+        try:
+            # Provider limits do not prevent built-in answers from working.
+            limit(db, 'openrouter-minute', 15, 60)
+            limit(db, 'openrouter-day', 50, 86400)
+            if not still_active():
+                raise HTTPException(409, 'Response stopped')
+            if assistant_status(db)['available']:
+                result.update(complete(facts, question, history, '\n'.join(answer for _, answer in FAQS)))
+        except HTTPException as error:
+            if error.status_code != 429:
+                raise
+            result['usage']['fallback'] = 'Free service limit reached. Using built-in guidance.'
+        except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError):
+            # Never return provider error bodies or credentials to the client or logs.
+            result['usage']['fallback'] = 'AI is temporarily unavailable. Using built-in guidance.'
+    return result

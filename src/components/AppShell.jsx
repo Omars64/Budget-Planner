@@ -10,7 +10,7 @@ import { CircleHelp, MessageSquare, NotebookPen } from 'lucide-react'
 
 const nav = [
   ['/', 'Overview', LayoutDashboard],
-  ['/ask-ai', 'Budgetly Help', CircleHelp],
+  ['/ask-ai', 'Ask Budgetly', CircleHelp],
   ['/transactions', 'Transactions', ReceiptText],
   ['/shared-transactions', 'Shared Transactions', Share2],
   ['/calendar', 'Calendar', CalendarDays],
@@ -67,7 +67,7 @@ export default function AppShell({ children }) {
         <div className="button-row top-actions"><button className="button ghost signout-button" title="Sign out" aria-label="Sign out" onClick={lock}><LogOut size={17}/><span>Sign out</span></button>{isLedger && !nativeAndroid && <button className="button primary add-button" onClick={addTransaction}><Plus size={18}/><span>Add transaction</span></button>}</div>
       </header>
       <motion.div className="page-wrap" key={location.pathname} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .28 }}>{children}</motion.div>
-      {!nativeAndroid && <footer className="app-footer">Budgetly v3.0.0 | Powered by Omar Solanki</footer>}
+      {!nativeAndroid && <footer className="app-footer">Budgetly v3.0.5 | Powered by Omar Solanki</footer>}
     </main>
     {isLedger && nativeAndroid && <button className="transaction-fab" aria-label="Add transaction" title="Add transaction" onClick={addTransaction}><Plus size={28}/></button>}
 

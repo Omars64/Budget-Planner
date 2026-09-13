@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowUp, Check, ChevronDown, Copy, Globe, History, LoaderCircle, MessageCircle, NotebookPen, Pencil, Plus, RefreshCw, Settings2, Sparkles, Square, ThumbsDown, ThumbsUp, Trash2, X } from 'lucide-react'
+import { ArrowUp, Check, ChevronDown, Copy, Globe, LoaderCircle, MessageCircle, NotebookPen, PanelLeftClose, PanelLeftOpen, Pencil, Plus, RefreshCw, Settings2, Sparkles, Square, ThumbsDown, ThumbsUp, Trash2, X } from 'lucide-react'
 import { api, jsonBody } from '../lib/api'
 import { dateInput } from '../lib/time'
 import { useApp } from '../App'
 import Modal from '../components/Modal'
 
 const prompts = [
-  'Create a roadmap of how I can reduce my spending on food and dining.',
-  'Explain inflation and how it affects my budget.',
+  'Create a roadmap to reduce my spending across categories.',
+  'Where did my money go this month?',
   'Help me plan my savings and debt repayments.',
   'How do I share a wallet in Budgetly?',
 ]
@@ -53,6 +53,9 @@ export default function AskAI() {
   const [context, setContext] = useState({ scope: initial.current.scope || 'personal', wallet_id: initial.current.walletId || '', month: initial.current.month || dateInput().slice(0, 7) })
   const [contextOpen, setContextOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [historyCollapsed, setHistoryCollapsed] = useState(() => {
+    try { return window.localStorage.getItem('budgetly-chat-history-collapsed') === 'true' } catch { return false }
+  })
   const [rename, setRename] = useState(null)
   const [source, setSource] = useState(null)
   const [error, setError] = useState('')
@@ -84,12 +87,15 @@ export default function AskAI() {
   }, [])
   useEffect(() => {
     mounted.current = true
-    api('/api/ai/config').then(data => { if (mounted.current) setConfig(data) }).catch(err => { if (mounted.current) setError(err.message) })
+    const loadConfig = () => api('/api/ai/config').then(data => { if (mounted.current) setConfig(data) }).catch(err => { if (mounted.current) setError(err.message) })
+    void loadConfig()
+    window.addEventListener('focus', loadConfig)
+    const configTimer = window.setInterval(loadConfig, 60000)
     void loadChats().catch(err => setError(err.message))
     const resize = () => document.documentElement.style.setProperty('--ai-viewport', (window.visualViewport?.height || window.innerHeight) + 'px')
     resize()
     window.visualViewport?.addEventListener('resize', resize)
-    return () => { mounted.current = false; window.visualViewport?.removeEventListener('resize', resize); document.documentElement.style.removeProperty('--ai-viewport') }
+    return () => { mounted.current = false; window.clearInterval(configTimer); window.removeEventListener('focus', loadConfig); window.visualViewport?.removeEventListener('resize', resize); document.documentElement.style.removeProperty('--ai-viewport') }
   }, [loadChats])
   useEffect(() => {
     selection.current = chatId
@@ -119,6 +125,17 @@ export default function AskAI() {
   }, [chatId, pending, loadChat])
   const lastTurn = chat?.turns?.at(-1)
   useEffect(() => {
+    const el = composer.current
+    if (el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 112) + 'px' }
+  }, [question])
+  const toggleHistory = () => {
+    if (window.matchMedia('(max-width: 820px)').matches) { setHistoryOpen(true); return }
+    setHistoryCollapsed(value => {
+      try { window.localStorage.setItem('budgetly-chat-history-collapsed', String(!value)) } catch { /* Storage is optional. */ }
+      return !value
+    })
+  }
+  useEffect(() => {
     const el = messages.current
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'instant' })
   }, [lastTurn?.id, lastTurn?.status, sending])
@@ -126,7 +143,7 @@ export default function AskAI() {
   const send = async (event, retryId = null) => {
     event?.preventDefault()
     if (busyRef.current || (pending && !retryId)) return
-    if (!config) { setError('Budgetly Help is still loading. Please try again in a moment.'); return }
+    if (!config) { setError('Ask Budgetly is still loading. Please try again in a moment.'); return }
     const text = question.trim()
     if (!retryId && !text) { setError('Enter a question before sending.'); composer.current?.focus(); return }
     busyRef.current = true
@@ -221,11 +238,15 @@ export default function AskAI() {
     {hasChats && <button className="button ghost" onClick={() => loadChats(chats.length).catch(err => notify(err.message, 'error'))}>Older conversations</button>}
   </div>
 
-  return <section className="ai-workspace" aria-label="Budgetly Help workspace">
-    <aside className="ai-history"><div className="ai-history-head"><h3>Conversations</h3><button className="icon-button" title="New conversation" aria-label="New conversation" disabled={sending} onClick={() => setContextOpen(true)}><Plus size={20}/></button></div>{historyList}</aside>
+  return <section className={`ai-workspace ${historyCollapsed ? 'history-collapsed' : ''}`} aria-label="Ask Budgetly workspace">
+    <aside className="ai-history" id="conversation-history"><div className="ai-history-head"><h3>Conversations</h3></div>{historyList}</aside>
     <div className="ai-chat-main">
-       <header className="ai-chat-header"><span className="ai-brand-mark"><Sparkles size={20}/></span><div className="ai-chat-title"><h3>{chat?.title || 'Budgetly Help'}</h3><small>App guidance and your selected activity</small></div><button className="icon-button ai-history-mobile" title="Conversations" aria-label="Conversations" onClick={() => setHistoryOpen(true)}><History size={19}/></button><button className="icon-button" title="New conversation" aria-label="Start new conversation" disabled={sending} onClick={() => setContextOpen(true)}><Plus size={20}/></button></header>
-       <div className="ai-context-bar"><button disabled={sending} onClick={() => setContextOpen(true)} title="Choose context for a new conversation"><Settings2 size={15}/>{label}{selectedScope !== 'general' && <span> · {selectedMonth}</span>}<ChevronDown size={14}/></button><small>Local Budgetly guide</small></div>
+      <div className="ai-chat-toolbar">
+        <button className="icon-button" title="Toggle conversations" aria-label="Toggle conversations" aria-expanded={!historyCollapsed || historyOpen} aria-controls="conversation-history" onClick={toggleHistory}>{historyCollapsed ? <PanelLeftOpen size={20}/> : <PanelLeftClose size={20}/>}</button>
+        <button className="ai-context-button" disabled={pending} onClick={() => setContextOpen(true)} title="Choose context for a new conversation"><Settings2 size={16}/><span>{label}{selectedScope !== 'general' && <small>{selectedMonth}</small>}</span><ChevronDown size={14}/></button>
+        <span className="ai-mode">{config?.ai_available ? 'AI enabled by admin' : 'Built-in guide'}</span>
+        <button className="icon-button" title="New conversation" aria-label="New conversation" disabled={pending} onClick={() => setContextOpen(true)}><Plus size={21}/></button>
+      </div>
       <div className="ai-messages" ref={messages} role="log" aria-label="Conversation" aria-live="polite" aria-relevant="additions">
         {loading && <p role="status"><LoaderCircle size={17} className="ai-spinner"/> Loading conversation...</p>}
         {!loading && !chat?.turns?.length && <div className="ai-welcome"><Sparkles size={29}/><h2>What would you like to figure out?</h2><div className="ai-welcome-prompts">{prompts.map(text => <button key={text} onClick={() => { setQuestion(text); composer.current?.focus() }}>{text}<ArrowUp size={16}/></button>)}</div></div>}
@@ -233,7 +254,8 @@ export default function AskAI() {
         {chat?.turns?.map(turn => <article className="ai-turn" key={turn.id}>
           <p className="ai-user-message" dir="auto">{turn.question}</p>
           <div className="ai-answer">
-             <div className="ai-answer-label"><Sparkles size={15}/><strong>Budgetly Help</strong><time dateTime={turn.created_at}>{new Date(turn.created_at).toLocaleString(undefined, { timeZone: 'Asia/Kuwait', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })} (Kuwait)</time></div>
+             <div className="ai-answer-label"><Sparkles size={15}/><strong>{turn.provider === 'openrouter' ? 'Budgetly · AI' : 'Budgetly'}</strong><time dateTime={turn.created_at}>{new Date(turn.created_at).toLocaleString(undefined, { timeZone: 'Asia/Kuwait', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</time></div>
+            {turn.notice && <p className="ai-response-notice">{turn.notice}</p>}
             {turn.status === 'pending' && <p className="ai-thinking" role="status"><LoaderCircle className="ai-spinner" size={17}/>Working on your question...</p>}
             {['failed', 'stopped'].includes(turn.status) && <div className="ai-answer-error"><p>{turn.error || 'Response stopped. Your question is saved.'}</p><button className="button ghost small" disabled={pending} onClick={event => send(event, turn.id)}><RefreshCw size={16}/>Retry</button></div>}
             {turn.answer && <><Answer text={turn.answer}/>
@@ -247,8 +269,8 @@ export default function AskAI() {
       </div>
       <div className="ai-composer-zone">
         {error && <p className="ai-error" role="alert">{error}<button title="Dismiss error" aria-label="Dismiss error" onClick={() => setError('')}><X size={15}/></button></p>}
-        <form className="ai-composer" onSubmit={send}><textarea ref={composer} rows={2} aria-label="Message Budgetly Help" placeholder="Ask about Budgetly or your selected activity..." value={question} maxLength={8000} onChange={e => setQuestion(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && window.matchMedia('(min-width: 821px)').matches) { e.preventDefault(); void send(e) } }}/>{pending ? <button type="button" className="ai-send" title="Stop response" aria-label="Stop response" onClick={stop}><Square size={18}/></button> : <button className="ai-send" title="Send message" aria-label="Send message" disabled={!config || loading || Boolean(chatId && !chat)}><ArrowUp size={21}/></button>}</form>
-        <small>Built-in answers only. Activity figures come from your selected Budgetly records.</small>
+        <form className="ai-composer" onSubmit={send}><textarea ref={composer} rows={1} aria-label="Message Ask Budgetly" placeholder="Ask Budgetly..." value={question} maxLength={8000} onChange={e => setQuestion(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && window.matchMedia('(min-width: 821px)').matches) { e.preventDefault(); void send(e) } }}/>{pending ? <button type="button" className="ai-send" title="Stop response" aria-label="Stop response" onClick={stop}><Square size={18}/></button> : <button className="ai-send" title="Send message" aria-label="Send message" disabled={!question.trim() || !config || loading || Boolean(chatId && !chat)}><ArrowUp size={21}/></button>}</form>
+        <small>{config?.ai_available ? 'Messages and selected activity are sent to OpenRouter. Check important figures.' : 'Built-in guidance · Your selected Budgetly records'}</small>
       </div>
     </div>
 
