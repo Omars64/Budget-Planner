@@ -1,7 +1,6 @@
-"""Authenticated AI API. Conversations, retries, cancellation and confirmations are durable."""
+"""Authenticated Budgetly Help API with durable local conversations."""
 import html
 import json
-import os
 import uuid
 from datetime import timedelta
 from typing import Literal
@@ -9,26 +8,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import or_
 from .database import get_db
-from .index import current_user, setting, set_setting
+from .index import current_user
 from .models import Note, Wallet, utc_now
-from .ai_models import AIChat, AITurn, AIAction
-from .ai_context import scope_wallets, month_range, access_wallet
-from .ai_service import configured, web_enabled, generate, read_record
-from .ai_actions import apply_action, PATHS
+from .ai_models import AIChat, AITurn
+from .ai_context import scope_wallets, month_range
+from .ai_service import generate, read_record
 from .account_security import limit
 
-router = APIRouter(prefix='/api/ai', tags=['Ask AI'])
-
-
-def maximum(name, default):
-    try:
-        return max(1, min(10000, int(os.getenv(name, default))))
-    except ValueError:
-        return default
-
-
-class ConsentIn(BaseModel):
-    enabled: bool
+router = APIRouter(prefix='/api/ai', tags=['Budgetly Help'])
+LOCAL_DAILY_LIMIT = 40
+LOCAL_GLOBAL_DAILY_LIMIT = 200
 
 
 class ChatIn(BaseModel):
@@ -41,15 +30,10 @@ class ChatIn(BaseModel):
 class QuestionIn(BaseModel):
     request_id: uuid.UUID
     question: str = Field(min_length=1, max_length=8000)
-    research: bool = False
 
 
 class RenameIn(BaseModel):
     title: str = Field(min_length=1, max_length=120)
-
-
-class DecisionIn(BaseModel):
-    decision: Literal['confirm', 'dismiss']
 
 
 class FeedbackIn(BaseModel):
@@ -78,18 +62,12 @@ def chat_json(chat, accessible=True):
             'updated_at': chat.updated_at.isoformat() + 'Z', 'accessible': accessible}
 
 
-def action_json(action):
-    return {'id': action.id, 'title': action.title, 'kind': action.kind, 'operation': action.operation,
-            'fields': json.loads(action.payload), 'before': {k: v for k, v in json.loads(action.before).items() if k in json.loads(action.payload)},
-            'status': action.status, 'result_id': action.result_id, 'path': PATHS[action.kind]}
-
-
 def turn_json(db, turn):
     return {'id': turn.id, 'question': turn.question, 'answer': turn.answer,
             'sources': json.loads(turn.sources), 'suggestions': json.loads(turn.suggestions),
             'status': turn.status, 'error': turn.error, 'research': turn.research,
             'created_at': turn.created_at.isoformat() + 'Z', 'feedback': turn.feedback, 'note_id': turn.note_id,
-            'actions': [action_json(a) for a in db.query(AIAction).filter_by(turn_id=turn.id).order_by(AIAction.created_at).all()]}
+            'actions': []}
 
 
 @router.get('/config')
@@ -97,22 +75,9 @@ def config(user=Depends(current_user), db=Depends(get_db)):
     from .extensions import shared_wallets
     personal = db.query(Wallet).filter_by(user_id=user.id).order_by(Wallet.name).all()
     shared = shared_wallets(user, db)
-    return {'configured': configured(), 'provider': 'OpenRouter free models', 'model': os.getenv('OPENROUTER_MODEL', 'openrouter/free'),
-            'consent': setting(db, user.id, 'ai_consent', 'false') == 'true', 'web_search': web_enabled(),
-            'daily_limit': maximum('BUDGETLY_AI_DAILY_LIMIT', 40),
+    return {'daily_limit': LOCAL_DAILY_LIMIT,
             'wallets': [{'id': w.id, 'name': w.name} for w in personal],
             'shared_wallets': [{'id': w['wallet_id'], 'name': w['name'], 'permission': w['permission']} for w in shared]}
-
-
-@router.put('/consent')
-def consent(payload: ConsentIn, user=Depends(current_user), db=Depends(get_db)):
-    set_setting(db, user.id, 'ai_consent', 'true' if payload.enabled else 'false')
-    if not payload.enabled:
-        ids = db.query(AIChat.id).filter_by(user_id=user.id)
-        db.query(AITurn).filter(AITurn.chat_id.in_(ids), AITurn.status == 'pending').update({'status': 'stopped'}, synchronize_session=False)
-        db.query(AIChat).filter_by(user_id=user.id).update({'busy': None})
-    db.commit()
-    return {'consent': payload.enabled}
 
 
 @router.get('/chats')
@@ -184,13 +149,9 @@ def delete_chat(chat_id: str, user=Depends(current_user), db=Depends(get_db)):
 
 
 def run_question(db, user, chat, turn):
-    if setting(db, user.id, 'ai_consent', 'false') != 'true':
-        raise HTTPException(403, 'Accept the AI data notice before sending a question')
-    if turn.research and (chat.scope != 'general' or not web_enabled()):
-        raise HTTPException(422, 'Use General & economy for web research')
     limit(db, f'ai-minute:{user.id}', 6, 60)
-    limit(db, f'ai-day:{user.id}', maximum('BUDGETLY_AI_DAILY_LIMIT', 40), 86400)
-    limit(db, 'ai-global-day', maximum('BUDGETLY_AI_GLOBAL_DAILY_LIMIT', 200), 86400)
+    limit(db, f'ai-day:{user.id}', LOCAL_DAILY_LIMIT, 86400)
+    limit(db, 'ai-global-day', LOCAL_GLOBAL_DAILY_LIMIT, 86400)
     token = str(uuid.uuid4())
     updated = db.query(AIChat).filter(AIChat.id == chat.id, or_(AIChat.busy.is_(None), AIChat.busy_at < utc_now() - timedelta(minutes=3))).update({
         'busy': token, 'busy_at': utc_now(), 'updated_at': utc_now()}, synchronize_session=False)
@@ -208,19 +169,16 @@ def run_question(db, user, chat, turn):
     history = db.query(AITurn).filter(AITurn.chat_id == chat_id, AITurn.status == 'completed', AITurn.id != turn_id).order_by(AITurn.created_at.desc()).limit(16).all()[::-1]
     def active():
         db.expire_all()
-        return bool(db.query(AITurn.id).filter_by(id=turn_id, status='pending', run_token=token).first()) and setting(db, user.id, 'ai_consent', 'false') == 'true'
+        return bool(db.query(AITurn.id).filter_by(id=turn_id, status='pending', run_token=token).first())
     try:
-        result = generate(db, user, chat, turn.question, history, turn.research, active)
+        result = generate(db, user, chat, turn.question, history, False, active)
         db.rollback()
         chat_access(db, user, chat_id)
         if not active():
             return turn_json(db, db.get(AITurn, turn_id))
-        changed = db.query(AITurn).filter_by(id=turn_id, status='pending', run_token=token).update({
+        db.query(AITurn).filter_by(id=turn_id, status='pending', run_token=token).update({
             'status': 'completed', 'answer': result['answer'], 'sources': json.dumps(result['sources']),
             'suggestions': json.dumps(result['suggestions']), 'usage': json.dumps(result['usage'])}, synchronize_session=False)
-        if changed:
-            for draft in result['drafts']:
-                db.add(AIAction(turn_id=turn_id, **draft))
     except HTTPException as error:
         db.rollback()
         db.query(AITurn).filter_by(id=turn_id, status='pending', run_token=token).update({'status': 'failed', 'error': str(error.detail)[:240]}, synchronize_session=False)
@@ -241,10 +199,10 @@ def ask(chat_id: str, payload: QuestionIn, user=Depends(current_user), db=Depend
         raise HTTPException(422, 'Enter a question')
     previous = db.query(AITurn).filter_by(chat_id=chat.id, request_id=str(payload.request_id)).first()
     if previous:
-        if previous.question != payload.question.strip() or previous.research != payload.research:
+        if previous.question != payload.question.strip():
             raise HTTPException(409, 'This request ID already belongs to a different question')
         return turn_json(db, previous)
-    turn = AITurn(chat_id=chat.id, request_id=str(payload.request_id), question=payload.question.strip(), research=payload.research)
+    turn = AITurn(chat_id=chat.id, request_id=str(payload.request_id), question=payload.question.strip(), research=False)
     return run_question(db, user, chat, turn)
 
 
@@ -267,30 +225,6 @@ def stop(chat_id: str, user=Depends(current_user), db=Depends(get_db)):
     return {'stopped': True}
 
 
-@router.post('/actions/{action_id}')
-def decide(action_id: str, payload: DecisionIn, user=Depends(current_user), db=Depends(get_db)):
-    action = db.get(AIAction, action_id)
-    if not action:
-        raise HTTPException(404, 'Proposal not found')
-    _, chat = turn_access(db, user, action.turn_id)
-    if action.status != 'pending':
-        return action_json(action)
-    if payload.decision == 'dismiss':
-        action.status = 'dismissed'
-    else:
-        if action.created_at < utc_now() - timedelta(days=1):
-            raise HTTPException(409, 'This proposal expired. Ask for a fresh proposal.')
-        changed = db.query(AIAction).filter_by(id=action.id, status='pending').update({'status': 'applying'}, synchronize_session=False)
-        if not changed:
-            db.rollback()
-            db.refresh(action)
-            return action_json(action)
-        apply_action(db, user, chat, action)
-    db.commit()
-    db.refresh(action)
-    return action_json(action)
-
-
 @router.post('/turns/{turn_id}/save-note')
 def save_note(turn_id: str, user=Depends(current_user), db=Depends(get_db)):
     turn, chat = turn_access(db, user, turn_id)
@@ -304,7 +238,7 @@ def save_note(turn_id: str, user=Depends(current_user), db=Depends(get_db)):
         db.refresh(turn)
         return {'note_id': turn.note_id}
     content = html.escape(turn.answer).replace('\n', '<br>')
-    row = Note(user_id=user.id, title=('AI: ' + turn.question)[:160], content='<p>' + content + '</p>')
+    row = Note(user_id=user.id, title=('Budgetly Help: ' + turn.question)[:160], content='<p>' + content + '</p>')
     db.add(row)
     db.flush()
     turn.note_id = row.id

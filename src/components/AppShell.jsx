@@ -6,11 +6,11 @@ import { useApp } from '../App'
 import TransactionModal from './TransactionModal'
 import BrandLogo from './BrandLogo'
 import { Capacitor } from '@capacitor/core'
-import { NotebookPen, MessageSquare, Sparkles } from 'lucide-react'
+import { CircleHelp, MessageSquare, NotebookPen } from 'lucide-react'
 
 const nav = [
   ['/', 'Overview', LayoutDashboard],
-  ['/ask-ai', 'Ask AI', Sparkles],
+  ['/ask-ai', 'Budgetly Help', CircleHelp],
   ['/transactions', 'Transactions', ReceiptText],
   ['/shared-transactions', 'Shared Transactions', Share2],
   ['/calendar', 'Calendar', CalendarDays],

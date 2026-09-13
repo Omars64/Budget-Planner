@@ -6,11 +6,11 @@ export default function AskAIEntry({ month }) {
   const [question, setQuestion] = useState('')
   const navigate = useNavigate()
   const open = text => navigate('/ask-ai', { state: { question: text, month } })
-  return <section className="ai-overview-entry" aria-label="Ask AI">
-    <div className="ai-entry-heading"><span className="ai-brand-mark"><Sparkles size={21}/></span><div><h3>Ask AI</h3><p className="muted">A little clarity for your money.</p></div></div>
+  return <section className="ai-overview-entry" aria-label="Budgetly Help">
+    <div className="ai-entry-heading"><span className="ai-brand-mark"><Sparkles size={21}/></span><div><h3>Budgetly Help</h3><p className="muted">Quick answers for your app and activity.</p></div></div>
     <form className="ai-entry-input" onSubmit={event => { event.preventDefault(); open(question) }}>
       <input aria-label="Ask Budgetly a question" placeholder="What's on your mind?" value={question} onChange={e => setQuestion(e.target.value)} maxLength={8000}/>
-      <button className="ai-send" aria-label="Open Ask AI" title="Open Ask AI"><ArrowUp size={20}/></button>
+      <button className="ai-send" aria-label="Open Budgetly Help" title="Open Budgetly Help"><ArrowUp size={20}/></button>
     </form>
     <div className="ai-entry-prompts">
       <button onClick={() => open('Where did my money go this month?')}><ChartNoAxesCombined size={17}/>Explain my spending</button>
