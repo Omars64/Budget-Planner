@@ -136,6 +136,13 @@ export default function AskAI() {
     })
   }
   useEffect(() => {
+    const openFromHeader = () => {
+      if (window.matchMedia('(max-width: 820px)').matches) setHistoryOpen(value => !value)
+    }
+    window.addEventListener('budgetly:toggle-ai-history', openFromHeader)
+    return () => window.removeEventListener('budgetly:toggle-ai-history', openFromHeader)
+  }, [])
+  useEffect(() => {
     const el = messages.current
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'instant' })
   }, [lastTurn?.id, lastTurn?.status, sending])
@@ -239,6 +246,9 @@ export default function AskAI() {
   </div>
 
   return <section className={`ai-workspace ${historyCollapsed ? 'history-collapsed' : ''} ${historyOpen ? 'history-mobile-open' : ''}`} aria-label="Ask Budgetly workspace">
+    {historyOpen && (
+      <button className="ai-history-scrim" aria-label="Close conversations" onClick={() => setHistoryOpen(false)}/>
+    )}
     <aside className="ai-history" id="conversation-history"><div className="ai-history-head"><h3>Conversations</h3><button className="icon-button ai-history-toggle" title={historyCollapsed ? 'Expand conversations' : 'Collapse conversations'} aria-label="Toggle conversations" aria-expanded={!historyCollapsed || historyOpen} aria-controls="conversation-history" onClick={toggleHistory}>{historyCollapsed ? <PanelLeftOpen size={20}/> : <PanelLeftClose size={20}/>}</button></div>{historyList}</aside>
     <div className="ai-chat-main">
       <div className="ai-chat-toolbar">
@@ -279,7 +289,6 @@ export default function AskAI() {
         <p className="muted small">Personal and shared records stay separate. Your existing conversation will remain saved.</p><div className="modal-actions"><button type="button" className="button ghost" onClick={() => setContextOpen(false)}>Cancel</button><button className="button primary" disabled={sending}>Start conversation</button></div>
       </form>
     </Modal>
-    <Modal open={historyOpen} onClose={() => setHistoryOpen(false)} title="Conversations">{historyList}</Modal>
     <Modal open={Boolean(rename)} onClose={() => setRename(null)} title="Rename conversation"><form className="stack gap-16" onSubmit={e => { e.preventDefault(); void mutate(async () => { await api('/api/ai/chats/' + rename.id, { method: 'PATCH', ...jsonBody({ title: rename.title }) }); if (chatId === rename.id) await loadChat(chatId); setRename(null); await loadChats() }) }}><label className="field"><span>Name</span><input required maxLength={120} value={rename?.title || ''} onChange={e => setRename(v => ({ ...v, title: e.target.value }))}/></label><button className="button primary" disabled={acting}>Save name</button></form></Modal>
     <Modal open={Boolean(source)} onClose={() => setSource(null)} title={source?.source?.label || 'Record'}>{source?.loading ? <p>Loading current record...</p> : source && <div className="stack gap-16"><dl className="ai-review-fields">{Object.entries(source.data).filter(([key]) => !key.endsWith('_id') && !['reference', 'id'].includes(key)).map(([key, value]) => <div key={key}><dt>{human(key)}</dt><dd>{readable(value)}</dd></div>)}</dl><button className="button ghost" onClick={() => navigate(source.source.path)}>Open in Budgetly</button></div>}</Modal>
   </section>

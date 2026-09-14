@@ -116,15 +116,14 @@
   .budgetly-v2.has-ai .topbar { padding:6px 12px; min-height:60px; }
   .budgetly-v2.has-ai .topbar h2 { font-size:21px; }
   .ai-workspace { display:block; position:relative; border-top:0; }
-  .ai-history { display:block; position:absolute; inset:0 auto 0 0; z-index:3; width:44px; padding:10px 6px; background:var(--surface); box-shadow:4px 0 16px rgba(0,0,0,.14); transition:width .2s ease; }
-  .ai-history-head { justify-content:center; }
-  .ai-history-head h3,.ai-history .ai-chat-list { display:none; }
-  .ai-workspace.history-mobile-open .ai-history { width:min(82vw,320px); padding:14px; }
+  .ai-history { display:none; position:absolute; inset:0 auto 0 0; z-index:4; width:min(82vw,320px); padding:14px; background:var(--surface); box-shadow:4px 0 16px rgba(0,0,0,.18); }
+  .ai-history-head { justify-content:space-between; }
+  .ai-workspace.history-mobile-open .ai-history { display:block; }
   .ai-workspace.history-mobile-open .ai-history-head { justify-content:space-between; }
   .ai-workspace.history-mobile-open .ai-history-head h3,.ai-workspace.history-mobile-open .ai-history .ai-chat-list { display:block; }
   .ai-workspace.history-mobile-open .ai-history .ai-chat-list { display:grid; }
   .ai-workspace.history-collapsed { grid-template-columns:none; }
-  .ai-history-mobile { display:grid; }
+  .ai-history-scrim { display:block; position:absolute; inset:0; z-index:3; border:0; padding:0; background:rgba(15,24,31,.42); }
   .ai-chat-main { height:100%; }
   .ai-chat-header { padding:10px 14px; gap:8px; }
   .ai-chat-header .ai-brand-mark { display:none; }

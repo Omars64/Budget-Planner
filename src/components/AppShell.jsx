@@ -1,6 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { BarChart3, CalendarDays, Gauge, LayoutDashboard, LogOut, Menu, Mountain, Plus, ReceiptText, Settings, Share2, ShieldCheck, Target, WalletCards, X } from 'lucide-react'
+import { BarChart3, CalendarDays, Gauge, LayoutDashboard, LogOut, Menu, Mountain, PanelLeftOpen, Plus, ReceiptText, Settings, Share2, ShieldCheck, Target, WalletCards, X } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { useApp } from '../App'
 import TransactionModal from './TransactionModal'
@@ -69,6 +69,7 @@ export default function AppShell({ children }) {
       <header className="topbar" role="banner">
         <div className="topbar-left">
           <button className="icon-button mobile-only" onClick={() => setMenu(true)} aria-label="Open menu"><Menu size={20}/></button>
+          {location.pathname === '/ask-ai' && <button className="icon-button mobile-only" title="Open conversations" aria-label="Open conversations" onClick={() => window.dispatchEvent(new window.Event('budgetly:toggle-ai-history'))}><PanelLeftOpen size={20}/></button>}
           <div><p className="eyebrow">{settings.display_name}</p><h2>{title}</h2></div>
         </div>
         <div className="button-row top-actions">{location.pathname === '/' && <button className="button ghost tutorial-button" data-tour="tutorial" title="Tutorial" aria-label="Tutorial" onClick={() => { setMenu(false); setTutorialRequest(value => value + 1) }}><Compass size={18}/><span>Tutorial</span></button>}<button className="button ghost signout-button" title="Sign out" aria-label="Sign out" onClick={lock}><LogOut size={17}/><span>Sign out</span></button>{isLedger && !nativeAndroid && <button data-tour="add-transaction" className="button primary add-button" onClick={addTransaction}><Plus size={18}/><span>Add transaction</span></button>}</div>
