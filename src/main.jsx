@@ -14,6 +14,7 @@ import './theme.css'
 import './motion.css'
 import './notes-workspace.css'
 import './ask-ai.css'
+import './date-time-picker.css'
 
 applyAppearance(readDeviceAppearance())
 

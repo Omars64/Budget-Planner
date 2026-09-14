@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, CalendarClock, Repeat2 } from 'lucide-react'
+import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, Repeat2 } from 'lucide-react'
 import { dateInput, saveDate } from '../lib/time'
+import { parseDateTime } from '../lib/dateTimePicker'
 import { useApp } from '../App'
 import Modal from './Modal'
+import DateTimeField from './DateTimeField'
 import { api, jsonBody, money } from '../lib/api'
 
 const blank = () => ({ type: 'expense', amount: '', description: '', notes: '', date: dateInput(), wallet_id: '', transfer_wallet_id: '', category_id: '', recurring_frequency: 'none', recurring_until: '' })
@@ -47,7 +49,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
     if (submitting.current || loading) return
     if (!(Number(form.amount) > 0)) { setError('Enter an amount greater than zero.'); return }
     if (!form.wallet_id) { setError('Choose a wallet. Create one in Wallets if none is available.'); return }
-    if (!form.date) { setError('Choose a transaction date.'); return }
+    if (!parseDateTime(form.date)) { setError('Choose a valid transaction date and time.'); return }
     if (form.type === 'transfer' && (!form.transfer_wallet_id || String(form.wallet_id) === String(form.transfer_wallet_id))) { setError('Choose a different destination wallet.'); return }
     if (form.recurring_frequency !== 'none' && (!form.recurring_until || form.recurring_until < form.date.slice(0,10))) {
       setAdvanced(true); setError('Choose a repeat-until date on or after the transaction date.'); return
@@ -78,8 +80,8 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
       <label className="amount-input"><span>Amount ({settings.currency})</span><input required type="number" step="0.001" min="0.001" value={form.amount} onChange={e => set('amount',e.target.value)} placeholder="0.000" /></label>
       <label className="field"><span>Description</span><input maxLength="160" value={form.description} onChange={e => set('description',e.target.value)} placeholder="What was this for?"/></label>
 
-      <div className="form-grid two">
-        <label className="field"><span>Date & time</span><div className="input-with-icon"><CalendarClock size={17}/><input required type="datetime-local" value={form.date} onChange={e => set('date',e.target.value)} /></div></label>
+      <DateTimeField value={form.date} onChange={value => set('date',value)} disabled={busy || loading}/>
+      <div className="form-grid two transaction-wallet-fields">
         <label className="field"><span>{form.type === 'transfer' ? 'From wallet' : 'Wallet'}</span><select required value={form.wallet_id} onChange={e => set('wallet_id',e.target.value)}>{wallets.map(w => <option key={w.id} value={w.id}>{w.name} · {money(w.balance,settings.currency)}</option>)}</select></label>
         {form.type === 'transfer' ? <label className="field"><span>To wallet</span><select required value={form.transfer_wallet_id} onChange={e => set('transfer_wallet_id',e.target.value)}><option value="">Select destination</option>{wallets.filter(w => String(w.id) !== String(form.wallet_id)).map(w => <option key={w.id} value={w.id}>{w.name} · {money(w.balance,settings.currency)}</option>)}</select></label> : <label className="field"><span>Category</span><select value={form.category_id} onChange={e => set('category_id',e.target.value)}><option value="">Uncategorized</option>{visibleCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
       </div>

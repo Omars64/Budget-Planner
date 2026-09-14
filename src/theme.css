@@ -70,6 +70,7 @@ body.has-wallpaper .budgetly-v2 .topbar { background:rgba(var(--surface-rgb),.95
 .field,.field input,.field select,.field textarea { min-width:0; }
 .input-with-icon { min-width:0; max-width:100%; }
 .transaction-form .form-grid.two>.field:first-child { grid-column:1/-1; }
+.transaction-form .form-grid.two.transaction-wallet-fields>.field:first-child { grid-column:auto; }
 .check-row { font-size:14px; line-height:1.5; }
 .check-row input { width:20px; height:20px; flex-shrink:0; accent-color:var(--accent); }
 input[role=switch] { appearance:none; width:40px; height:24px; border-radius:12px; background:var(--muted); position:relative; cursor:pointer; }

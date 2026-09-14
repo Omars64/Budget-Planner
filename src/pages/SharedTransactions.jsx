@@ -3,10 +3,12 @@ import { useLocation } from 'react-router-dom'
 import { History, MailPlus, Trash2, Users, Wallet } from 'lucide-react'
 import { format } from 'date-fns'
 import { dateInput, saveDate, displayDate, showTime } from '../lib/time'
+import { parseDateTime } from '../lib/dateTimePicker'
 import { api, jsonBody, money, readCached } from '../lib/api'
 import { useApp } from '../App'
 import EmptyState from '../components/EmptyState'
 import Modal from '../components/Modal'
+import DateTimeField from '../components/DateTimeField'
 import LedgerFilters, { defaultLedgerFilters } from '../components/LedgerFilters'
 import LedgerPagination from '../components/LedgerPagination'
 import useLedger from '../lib/useLedger'
@@ -151,6 +153,7 @@ export default function SharedTransactions() {
     if (savingRef.current) return
     if (!draft.description.trim()) { setFormError('Enter a description.'); return }
     if (!draft.wallet_id || !(Number(draft.amount) > 0) || !draft.date) { setFormError('Choose a wallet, an amount greater than zero, and a date.'); return }
+    if (!parseDateTime(draft.date)) { setFormError('Choose a valid transaction date and time.'); return }
     if (draft.type === 'transfer' && !draft.transfer_wallet_id) { setFormError('Choose a destination wallet.'); return }
     savingRef.current = true; setSaving(true); setFormError('')
     try {
@@ -228,8 +231,8 @@ export default function SharedTransactions() {
         <div className="segment-control"><button type="button" className={draft.type==='expense'?'active':''} onClick={() => setDraft({ ...draft, type:'expense', transfer_wallet_id:'', category_id:'' })}>Expense</button><button type="button" className={draft.type==='income'?'active':''} onClick={() => setDraft({ ...draft, type:'income', transfer_wallet_id:'', category_id:'' })}>Income</button><button type="button" className={draft.type==='transfer'?'active':''} onClick={() => setDraft({ ...draft, type:'transfer', category_id:'' })}>Transfer</button></div>
         <label className="field"><span>Amount</span><input required min="0.001" step="0.001" type="number" value={draft.amount} onChange={e => setDraft({ ...draft, amount: e.target.value })}/></label>
         <label className="field"><span>Description</span><input required maxLength="160" value={draft.description} onChange={e => setDraft({ ...draft, description: e.target.value })}/></label>
+        <DateTimeField value={draft.date} onChange={date => setDraft(current => ({ ...current, date }))} disabled={saving}/>
         <div className="form-grid two">
-          <label className="field"><span>Date & time</span><input required type="datetime-local" value={draft.date} onChange={e => setDraft({ ...draft, date: e.target.value })}/></label>
           {draft.type === 'transfer' ? <label className="field"><span>Destination shared wallet</span><select required value={draft.transfer_wallet_id} onChange={e => setDraft({ ...draft, transfer_wallet_id: e.target.value })}><option value="">Choose destination</option>{transferWallets.map(w => <option key={w.wallet_id} value={w.wallet_id}>{w.name}</option>)}</select></label> : <label className="field"><span>Category</span><select value={draft.category_id} onChange={e => setDraft({ ...draft, category_id: e.target.value })}><option value="">Uncategorized</option>{filteredCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
         </div>
         <details className="form-options"><summary>More options</summary><label className="field"><span>Notes</span><textarea rows="3" value={draft.notes} onChange={e => setDraft({ ...draft, notes: e.target.value })}/></label></details>
