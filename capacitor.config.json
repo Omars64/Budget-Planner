@@ -5,6 +5,10 @@
   "server": { "androidScheme": "https", "cleartext": false },
   "plugins": {
     "CapacitorHttp": { "enabled": true },
-    "LocalNotifications": { "presentationOptions": ["badge", "sound", "banner", "list"] }
+    "LocalNotifications": {
+      "smallIcon": "flowbudget_notification",
+      "iconColor": "#0a4173",
+      "presentationOptions": ["badge", "sound", "banner", "list"]
+    }
   }
 }

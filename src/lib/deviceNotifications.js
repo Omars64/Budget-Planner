@@ -16,6 +16,7 @@ export function reminderBody(settings){
 export const isNativeApp = () => Capacitor.isNativePlatform()
 const reminderIds = [{id:1001}, ...Array.from({length:30},(_,i)=>({id:1100+i}))]
 let reminderQueue = Promise.resolve()
+const androidNotificationBranding = {smallIcon:'flowbudget_notification',largeIcon:'flowbudget_logo',iconColor:'#0a4173'}
 
 export function reminderTimes(settings) {
   const hours = [1,2,3,4,6,8,12,24].includes(settings.reminder_interval_hours) ? settings.reminder_interval_hours : 4
@@ -42,7 +43,7 @@ export function configureReminder(settings, {requestPermission = true} = {}) {
     const body = reminderBody(settings)
     const notifications = body ? reminderTimes(settings).map((time,i)=>{
       const local = new Date(saveDate(dateInput().slice(0,10)+'T'+time))
-      return {id:1100+i,title:'Budgetly',body,channelId:'budgetly-reminders',isExactNotification:false,
+      return {id:1100+i,title:'Budgetly',body,...androidNotificationBranding,channelId:'budgetly-reminders',isExactNotification:false,
         schedule:{on:{hour:local.getHours(),minute:local.getMinutes(),second:0},allowWhileIdle:true}}
     }) : []
     if (Capacitor.getPlatform() === 'android') await LocalNotifications.createChannel({id:'budgetly-reminders',name:'Transaction reminders',importance:4,visibility:0})
@@ -59,11 +60,11 @@ export async function testNotification() {
   if (isNativeApp()) {
     const permission = await LocalNotifications.requestPermissions()
     if (permission.display !== 'granted') throw new Error('Enable Budgetly notifications in device Settings.')
-    await LocalNotifications.schedule({notifications:[{id:1002,title:'Budgetly',body:'Your device notifications are ready.',isExactNotification:false,schedule:{at:new Date(Date.now()+3000)}}]})
+    await LocalNotifications.schedule({notifications:[{id:1002,title:'Budgetly',body:'Your device notifications are ready.',...androidNotificationBranding,isExactNotification:false,schedule:{at:new Date(Date.now()+3000)}}]})
     return
   }
   if(!('Notification' in window))throw new Error('This browser cannot display device notifications. Use the installed mobile app for reminders.')
-  const permission=await Notification.requestPermission()
+  const permission=await window.Notification.requestPermission()
   if(permission!=='granted')throw new Error('Notifications are blocked. Allow notifications in this site\'s browser settings.')
-  try{new Notification('Budgetly',{body:'Your browser notifications are ready while Budgetly is open.',icon:'/flowbudget-logo.png',tag:'flowbudget-test'})}catch{throw new Error('This browser requires an installed mobile app for device notifications.')}
+  try{new window.Notification('Budgetly',{body:'Your browser notifications are ready while Budgetly is open.',icon:'/flowbudget-logo.png',tag:'flowbudget-test'})}catch{throw new Error('This browser requires an installed mobile app for device notifications.')}
 }

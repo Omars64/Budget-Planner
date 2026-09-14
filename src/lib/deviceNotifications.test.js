@@ -24,6 +24,8 @@ it('schedules persistent daily slots without requiring exact-alarm access',async
     expect(row.schedule.at).toBeUndefined()
     expect(row.isExactNotification).toBe(false)
     expect(row.channelId).toBe('budgetly-reminders')
+    expect(row.smallIcon).toBe('flowbudget_notification')
+    expect(row.largeIcon).toBe('flowbudget_logo')
   }
 })
 it('preserves existing schedules when permission is denied and never prompts on resume',async()=>{
