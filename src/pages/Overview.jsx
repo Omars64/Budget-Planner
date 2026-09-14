@@ -8,7 +8,6 @@ import { useApp } from '../App'
 import MetricCard from '../components/MetricCard'
 import ProgressBar from '../components/ProgressBar'
 import EmptyState from '../components/EmptyState'
-import AskAIEntry from '../components/AskAIEntry'
 
 export default function Overview() {
   const { settings, refreshKey } = useApp()
@@ -38,8 +37,6 @@ export default function Overview() {
       <MetricCard label="Expenses" value={fmt(data.expense)} sub="This selected month" icon={ArrowUpRight} tone="negative" delay={.1}/>
       <MetricCard label="Net movement" value={fmt(data.net)} sub={data.net >= 0 ? 'You kept more than you spent' : 'Spending is ahead of income'} icon={Landmark} tone={data.net >= 0 ? 'positive' : 'negative'} delay={.14}/>
     </section>
-
-    <AskAIEntry month={month}/>
 
     <section className="dashboard-grid">
       <div className="panel glass span-2">
