@@ -3,6 +3,7 @@ import { LoaderCircle } from 'lucide-react'
 import { useApp } from '../App'
 import ResizablePanels from './ResizablePanels'
 import { isNativeApp,quietAt,reminderBody,reminderTimes,configureReminder } from '../lib/deviceNotifications'
+import { notificationSettingsChangedEvent, readNotificationSettings } from '../lib/notificationSettings'
 import {dateKey,clockTime} from '../lib/time'
 import { syncBankSms } from '../lib/bankSms'
 import SecurityPrompt from './SecurityPrompt'
@@ -12,6 +13,17 @@ export default function Experience() {
   const location = useLocation()
   const { settings, user, notify } = useApp()
   const [pending, setPending] = useState(0)
+  const [notificationSettings, setNotificationSettings] = useState(() => readNotificationSettings(settings, user.id))
+  useEffect(() => {
+    const sync = () => setNotificationSettings(readNotificationSettings(settings, user.id))
+    sync()
+    window.addEventListener(notificationSettingsChangedEvent, sync)
+    window.addEventListener('focus', sync)
+    return () => {
+      window.removeEventListener(notificationSettingsChangedEvent, sync)
+      window.removeEventListener('focus', sync)
+    }
+  }, [settings, user.id])
   useEffect(() => {
     const sync = () => { void syncBankSms(user.id).catch(e => notify(e.message, 'error')) }
     sync()
@@ -42,34 +54,34 @@ export default function Experience() {
   }, [notify])
   useEffect(() => {
     if(isNativeApp()){
-      const sync = () => {void configureReminder(settings,{requestPermission:false}).catch(e=>notify(e.message,'error'))}
+      const sync = () => {void configureReminder(notificationSettings,{requestPermission:false}).catch(e=>notify(e.message,'error'))}
       sync()
       window.addEventListener('focus',sync)
       return () => window.removeEventListener('focus',sync)
     }
-    if (!settings.reminders_enabled) return
+    if (!notificationSettings.reminders_enabled) return
     const check = () => {
       const now = new Date()
       const day = dateKey(now)
       const time = clockTime(now)
-      if(quietAt(settings,time)||!reminderBody(settings))return
+      if(quietAt(notificationSettings,time)||!reminderBody(notificationSettings))return
       const key = `flowbudget-reminder-${user.id}`
-      const slot = reminderTimes(settings).filter(t=>t<=time).at(-1)
+      const slot = reminderTimes(notificationSettings).filter(t=>t<=time).at(-1)
       if (!slot) return
       const reminderKey = `${day}:${slot}`
       try {
         if (window.localStorage.getItem(key) === reminderKey) return
         window.localStorage.setItem(key, reminderKey)
       } catch { return }
-      notify(reminderBody(settings))
+      notify(reminderBody(notificationSettings))
       if ('Notification' in window && window.Notification.permission === 'granted') {
-        try { new window.Notification('Budgetly', { body: reminderBody(settings), icon: '/flowbudget-logo.png', tag: 'daily-budget' }) } catch { /* The in-app reminder is still displayed. */ }
+        try { new window.Notification('Budgetly', { body: reminderBody(notificationSettings), icon: '/flowbudget-logo.png', tag: 'daily-budget' }) } catch { /* The in-app reminder is still displayed. */ }
       }
     }
     check()
     const interval = window.setInterval(check, 30000)
     window.addEventListener('focus', check)
     return () => { window.clearInterval(interval); window.removeEventListener('focus', check) }
-  }, [settings, user.id, notify])
+  }, [notificationSettings, user.id, notify])
   return <><SecurityPrompt/><ResizablePanels/>{pending > 0 && location.pathname !== '/ask-ai' && <div className="request-progress" role="status"><LoaderCircle className="request-spinner" size={18}/>Saving...</div>}</>
 }

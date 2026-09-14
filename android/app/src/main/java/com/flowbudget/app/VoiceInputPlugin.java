@@ -27,6 +27,11 @@ import java.util.ArrayList;
 public class VoiceInputPlugin extends Plugin {
     private SpeechRecognizer recognizer;
     private PluginCall pendingCall;
+    private boolean stopRequested;
+    private boolean restartPosted;
+    private String language = "en-US";
+    private String partialText = "";
+    private final StringBuilder capturedText = new StringBuilder();
 
     @PluginMethod
     public void listen(PluginCall call) {
@@ -60,42 +65,85 @@ public class VoiceInputPlugin extends Plugin {
                 call.reject("Voice input is already listening.");
                 return;
             }
-            try {
-                pendingCall = call;
-                recognizer = SpeechRecognizer.createSpeechRecognizer(getContext());
-                recognizer.setRecognitionListener(new RecognitionListener() {
-                    @Override public void onResults(Bundle results) {
-                        ArrayList<String> matches = results == null ? null : results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
-                        String text = matches == null || matches.isEmpty() ? "" : matches.get(0).trim();
-                        if (text.isEmpty()) finishFailure("No speech was detected. Try again.");
-                        else finishSuccess(text);
-                    }
-                    @Override public void onError(int error) { finishFailure(errorMessage(error)); }
-                    @Override public void onReadyForSpeech(Bundle params) {}
-                    @Override public void onBeginningOfSpeech() {}
-                    @Override public void onRmsChanged(float rmsdB) {}
-                    @Override public void onBufferReceived(byte[] buffer) {}
-                    @Override public void onEndOfSpeech() {}
-                    @Override public void onPartialResults(Bundle partialResults) {}
-                    @Override public void onEvent(int eventType, Bundle params) {}
-                });
-                Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-                intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-                intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, call.getString("language", "en-US"));
-                intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false);
-                recognizer.startListening(intent);
-            } catch (Exception error) {
-                finishFailure("Voice input could not be started. Try again.");
-            }
+            pendingCall = call;
+            language = call.getString("language", "en-US");
+            stopRequested = false;
+            restartPosted = false;
+            partialText = "";
+            capturedText.setLength(0);
+            startRecognizer();
         });
+    }
+
+    private void startRecognizer() {
+        if (pendingCall == null || stopRequested) return;
+        try {
+            recognizer = SpeechRecognizer.createSpeechRecognizer(getContext());
+            recognizer.setRecognitionListener(new RecognitionListener() {
+                @Override public void onResults(Bundle results) {
+                    String text = firstMatch(results);
+                    if (!text.isEmpty()) capturedText.append(capturedText.length() == 0 ? "" : " ").append(text);
+                    partialText = "";
+                    if (stopRequested) finishFromSpeech();
+                    else scheduleRestart();
+                }
+                @Override public void onError(int error) {
+                    if (stopRequested) finishFromSpeech();
+                    else if (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT || error == SpeechRecognizer.ERROR_CLIENT) scheduleRestart();
+                    else finishFailure(errorMessage(error));
+                }
+                @Override public void onReadyForSpeech(Bundle params) {}
+                @Override public void onBeginningOfSpeech() {}
+                @Override public void onRmsChanged(float rmsdB) {}
+                @Override public void onBufferReceived(byte[] buffer) {}
+                @Override public void onEndOfSpeech() {}
+                @Override public void onPartialResults(Bundle partialResults) { partialText = firstMatch(partialResults); }
+                @Override public void onEvent(int eventType, Bundle params) {}
+            });
+            Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+            intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+            intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, language);
+            intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
+            intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 10000L);
+            intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 10000L);
+            intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 1000L);
+            recognizer.startListening(intent);
+        } catch (Exception error) {
+            finishFailure("Voice input could not be started. Try again.");
+        }
+    }
+
+    private void scheduleRestart() {
+        if (pendingCall == null || stopRequested || restartPosted) return;
+        restartPosted = true;
+        clearRecognizerOnly();
+        getActivity().getWindow().getDecorView().postDelayed(() -> {
+            restartPosted = false;
+            startRecognizer();
+        }, 150);
     }
 
     @PluginMethod
     public void stop(PluginCall call) {
         getActivity().runOnUiThread(() -> {
-            if (recognizer != null) recognizer.cancel();
+            stopRequested = true;
+            restartPosted = false;
+            if (recognizer != null) recognizer.stopListening();
+            else finishFromSpeech();
             call.resolve();
         });
+    }
+
+    private String firstMatch(Bundle results) {
+        ArrayList<String> matches = results == null ? null : results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+        return matches == null || matches.isEmpty() ? "" : matches.get(0).trim();
+    }
+
+    private void finishFromSpeech() {
+        String text = capturedText.toString().trim();
+        if (!partialText.isEmpty()) text = (text + " " + partialText).trim();
+        if (text.isEmpty()) finishFailure("No speech was detected. Try again.");
+        else finishSuccess(text);
     }
 
     private void finishSuccess(String text) {
@@ -115,11 +163,20 @@ public class VoiceInputPlugin extends Plugin {
     }
 
     private void clearRecognizer() {
+        clearRecognizerOnly();
+        pendingCall = null;
+        stopRequested = false;
+        restartPosted = false;
+        partialText = "";
+        capturedText.setLength(0);
+    }
+
+    private void clearRecognizerOnly() {
         if (recognizer != null) {
+            recognizer.setRecognitionListener(null);
             recognizer.destroy();
             recognizer = null;
         }
-        pendingCall = null;
     }
 
     private String errorMessage(int error) {

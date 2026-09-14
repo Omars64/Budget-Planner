@@ -36,29 +36,81 @@ export async function listenForVoice({ language = 'en-US' } = {}) {
 
   const Recognition = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition)
   if (!Recognition) throw new Error('Voice input is not available in this browser. Try Chrome, Edge, or the Budgetly Android app.')
+  if (activeRecognition) throw new Error('Voice input is already listening.')
 
   return new Promise((resolve, reject) => {
-    const recognition = new Recognition()
-    let settled = false
-    activeRecognition = recognition
+    const session = {
+      recognition: null,
+      restartTimer: null,
+      finalParts: [],
+      interim: '',
+      stopRequested: false,
+      settled: false,
+    }
+    const text = () => [...session.finalParts, session.interim].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim()
     const finish = (callback, value) => {
-      if (settled) return
-      settled = true
-      if (activeRecognition === recognition) activeRecognition = null
+      if (session.settled) return
+      session.settled = true
+      if (session.restartTimer) window.clearTimeout(session.restartTimer)
+      if (activeRecognition === session) activeRecognition = null
       callback(value)
     }
-    recognition.lang = language
-    recognition.continuous = false
-    recognition.interimResults = false
-    recognition.maxAlternatives = 1
-    recognition.onresult = event => {
-      const text = event.results?.[0]?.[0]?.transcript?.trim() || ''
-      if (!text) finish(reject, new Error('No speech was detected. Try again.'))
-      else finish(resolve, text)
+    const finishFromSpeech = () => {
+      const value = text()
+      if (value) finish(resolve, value)
+      else finish(reject, new Error('No speech was detected. Try again.'))
     }
-    recognition.onerror = event => finish(reject, new Error(voiceError(event)))
-    recognition.onend = () => finish(reject, new Error('No speech was detected. Try again.'))
-    try { recognition.start() } catch (error) { finish(reject, new Error(voiceError(error))) }
+    const scheduleRestart = () => {
+      if (session.settled || session.stopRequested || session.restartTimer) return
+      session.restartTimer = window.setTimeout(() => {
+        session.restartTimer = null
+        startRecognition()
+      }, 120)
+    }
+    const startRecognition = () => {
+      if (session.settled || session.stopRequested) return
+      let recognition
+      try { recognition = new Recognition() } catch (error) { finish(reject, new Error(voiceError(error))); return }
+      session.recognition = recognition
+      recognition.lang = language
+      recognition.continuous = true
+      recognition.interimResults = true
+      recognition.maxAlternatives = 1
+      recognition.onresult = event => {
+        let interim = ''
+        for (let index = event.resultIndex || 0; index < event.results.length; index += 1) {
+          const result = event.results[index]
+          const transcript = result?.[0]?.transcript?.trim() || ''
+          if (result.isFinal && transcript) session.finalParts.push(transcript)
+          else if (transcript) interim += `${transcript} `
+        }
+        session.interim = interim.trim()
+      }
+      recognition.onerror = event => {
+        const code = String(event?.error || '').toLowerCase()
+        if (session.stopRequested) { finishFromSpeech(); return }
+        if (code === 'no-speech' || code === 'aborted') { scheduleRestart(); return }
+        finish(reject, new Error(voiceError(event)))
+      }
+      recognition.onend = () => {
+        session.recognition = null
+        if (session.stopRequested) finishFromSpeech()
+        else scheduleRestart()
+      }
+      try { recognition.start() } catch (error) { finish(reject, new Error(voiceError(error))) }
+    }
+    session.stop = () => {
+      session.stopRequested = true
+      if (session.restartTimer) window.clearTimeout(session.restartTimer)
+      if (session.recognition) {
+        try { session.recognition.stop() } catch { finishFromSpeech() }
+      } else finishFromSpeech()
+      window.setTimeout(() => {
+        if (session.stopRequested && !session.settled) finishFromSpeech()
+      }, 500)
+    }
+    activeRecognition = session
+    startRecognition()
   })
 }
 
@@ -67,7 +119,7 @@ export async function stopVoiceInput() {
     try { await VoiceInput.stop() } catch { /* The recognition result will settle the original call. */ }
     return
   }
-  try { activeRecognition?.abort() } catch { /* The browser may already have ended recognition. */ }
+  try { activeRecognition?.stop?.() } catch { /* The browser may already have ended recognition. */ }
 }
 
 const escapeRegExp = value => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')

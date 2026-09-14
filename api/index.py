@@ -92,7 +92,7 @@ async def lifespan(application: FastAPI):
     yield
 
 
-app = FastAPI(title="Budgetly API", version="3.7.0", lifespan=lifespan)
+app = FastAPI(title="Budgetly API", version="3.8.0", lifespan=lifespan)
 
 
 @app.middleware("http")
@@ -645,10 +645,13 @@ def get_settings(user: User = Depends(current_user), db: Session = Depends(get_d
 
 @app.put("/api/settings")
 def update_settings(payload: SettingsPayload, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    for k, v in payload.model_dump().items():
+    # Settings saves can be partial. Only persist fields present in the request;
+    # schema defaults must not reset device-local notification preferences.
+    for k in payload.model_fields_set:
+        v = getattr(payload, k)
         set_setting(db, user.id, k, json.dumps(v) if isinstance(v,list) else str(v).lower() if isinstance(v, bool) else str(v))
     db.commit()
-    return payload.model_dump()
+    return payload.model_dump(include=payload.model_fields_set)
 
 
 @app.get("/api/wallets")
