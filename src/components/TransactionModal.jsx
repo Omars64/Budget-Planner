@@ -6,11 +6,13 @@ import { useApp } from '../App'
 import Modal from './Modal'
 import DateTimeField from './DateTimeField'
 import { api, jsonBody, money } from '../lib/api'
+import VoiceInputButton from './VoiceInputButton'
+import { parseVoiceTransaction } from '../lib/voiceInput'
 
 const blank = () => ({ type: 'expense', amount: '', description: '', notes: '', date: dateInput(), wallet_id: '', transfer_wallet_id: '', category_id: '', recurring_frequency: 'none', recurring_until: '' })
 
 export default function TransactionModal({ open, onClose, onSaved, editing = null }) {
-  const {user, settings} = useApp()
+  const {user, settings, notify} = useApp()
   const draftKey = `flowbudget_tx_draft_${user.id}`
   const [form, setForm] = useState(blank())
   const [wallets, setWallets] = useState([])
@@ -44,6 +46,12 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
   const visibleCategories = useMemo(() => categories.filter(c => c.kind === form.type), [categories, form.type])
   const set = (k,v) => setForm(f => {const next={...f,[k]:v};if(!editing){try{sessionStorage.setItem(draftKey,JSON.stringify(next))}catch{/* Storage may be disabled. */}}return next})
 
+  const applyVoice = transcript => {
+    const parsed = parseVoiceTransaction(transcript, { wallets, categories })
+    setForm(current => ({ ...current, ...parsed, amount: parsed.amount || current.amount, description: parsed.description || current.description, notes: parsed.notes || current.notes, date: parsed.date || current.date, wallet_id: parsed.wallet_id || current.wallet_id, transfer_wallet_id: parsed.type === 'transfer' ? parsed.transfer_wallet_id || current.transfer_wallet_id : '', category_id: parsed.type === 'transfer' ? '' : parsed.category_id || current.category_id }))
+    notify?.('Voice captured. Review the fields before saving.')
+  }
+
   const submit = async e => {
     e.preventDefault()
     if (submitting.current || loading) return
@@ -76,6 +84,8 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
         <button type="button" className={form.type === 'income' ? 'active' : ''} onClick={() => {set('type','income');set('category_id','')}}><ArrowDownLeft size={17}/>Income</button>
         <button type="button" className={form.type === 'transfer' ? 'active' : ''} onClick={() => set('type','transfer')}><ArrowRightLeft size={17}/>Transfer</button>
       </div>
+
+      <VoiceInputButton disabled={busy || loading} onTranscript={applyVoice} onError={message => setError(message)}/>
 
       <label className="amount-input"><span>Amount ({settings.currency})</span><input required type="number" step="0.001" min="0.001" value={form.amount} onChange={e => set('amount',e.target.value)} placeholder="0.000" /></label>
       <label className="field"><span>Description</span><input maxLength="160" value={form.description} onChange={e => set('description',e.target.value)} placeholder="What was this for?"/></label>

@@ -7,6 +7,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(BankSmsPlugin.class);
         registerPlugin(PasskeysPlugin.class);
         registerPlugin(BudgetlyRemindersPlugin.class);
+        registerPlugin(VoiceInputPlugin.class);
         super.onCreate(state);
     }
 }

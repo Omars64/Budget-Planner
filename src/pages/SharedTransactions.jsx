@@ -13,6 +13,8 @@ import LedgerFilters, { defaultLedgerFilters } from '../components/LedgerFilters
 import LedgerPagination from '../components/LedgerPagination'
 import useLedger from '../lib/useLedger'
 import LedgerRow, { TransactionDetails } from '../components/LedgerRow'
+import VoiceInputButton from '../components/VoiceInputButton'
+import { parseVoiceTransaction } from '../lib/voiceInput'
 
 const nowLocal = () => {
   return dateInput()
@@ -174,6 +176,12 @@ export default function SharedTransactions() {
     finally { savingRef.current = false; setSaving(false) }
   }
 
+  const applyVoice = transcript => {
+    const parsed = parseVoiceTransaction(transcript, { wallets: editableWallets, categories })
+    setDraft(current => ({ ...current, ...parsed, amount: parsed.amount || current.amount, description: parsed.description || current.description, notes: parsed.notes || current.notes, date: parsed.date || current.date, wallet_id: parsed.wallet_id || current.wallet_id, transfer_wallet_id: parsed.type === 'transfer' ? parsed.transfer_wallet_id || current.transfer_wallet_id : '', category_id: parsed.type === 'transfer' ? '' : parsed.category_id || current.category_id }))
+    notify('Voice captured. Review the shared transaction before saving.')
+  }
+
   const removeTx = async tx => {
     if (!await confirm(`Delete “${tx.description}”? This affects everyone sharing the wallet.`)) return
     try { await api(`/api/shared/transactions/${tx.id}`, { method: 'DELETE' }); setSelected(null); refresh(); notify('Shared transaction deleted') }
@@ -229,6 +237,7 @@ export default function SharedTransactions() {
       <form className="stack gap-16 transaction-form" onSubmit={saveTx}>
         <label className="field"><span>Shared wallet</span><select required value={draft.wallet_id} onChange={e => setDraft({ ...draft, wallet_id: e.target.value, transfer_wallet_id: '', category_id: '' })}>{editableWallets.map(w => <option key={w.wallet_id} value={w.wallet_id}>{w.name} · {w.owner_name || w.owner_email}</option>)}</select></label>
         <div className="segment-control"><button type="button" className={draft.type==='expense'?'active':''} onClick={() => setDraft({ ...draft, type:'expense', transfer_wallet_id:'', category_id:'' })}>Expense</button><button type="button" className={draft.type==='income'?'active':''} onClick={() => setDraft({ ...draft, type:'income', transfer_wallet_id:'', category_id:'' })}>Income</button><button type="button" className={draft.type==='transfer'?'active':''} onClick={() => setDraft({ ...draft, type:'transfer', category_id:'' })}>Transfer</button></div>
+        <VoiceInputButton disabled={saving} onTranscript={applyVoice} onError={message => setFormError(message)}/>
         <label className="field"><span>Amount</span><input required min="0.001" step="0.001" type="number" value={draft.amount} onChange={e => setDraft({ ...draft, amount: e.target.value })}/></label>
         <label className="field"><span>Description</span><input required maxLength="160" value={draft.description} onChange={e => setDraft({ ...draft, description: e.target.value })}/></label>
         <DateTimeField value={draft.date} onChange={date => setDraft(current => ({ ...current, date }))} disabled={saving}/>
