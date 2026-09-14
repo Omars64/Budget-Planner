@@ -18,9 +18,12 @@
 .budgetly-v2.has-ai .page-wrap { flex:1; width:100%; min-height:0; min-width:0; margin:0 auto; padding:0; display:flex; }
 .budgetly-v2.has-ai .app-footer { flex-shrink:0; padding:4px 8px; font-size:10px; line-height:16px; }
 .ai-workspace { display:grid; grid-template-columns:248px minmax(0,1fr); width:100%; min-width:0; min-height:0; background:var(--surface); overflow:hidden; }
-.ai-workspace.history-collapsed { grid-template-columns:minmax(0,1fr); }
-.ai-workspace.history-collapsed .ai-history { display:none; }
+.ai-workspace.history-collapsed { grid-template-columns:48px minmax(0,1fr); }
 .ai-history { min-width:0; overflow:auto; border-right:1px solid var(--line); padding:18px 16px; }
+.ai-history-toggle { flex-shrink:0; }
+.ai-workspace.history-collapsed .ai-history { padding:12px 6px; }
+.ai-workspace.history-collapsed .ai-history-head { justify-content:center; }
+.ai-workspace.history-collapsed .ai-history-head h3,.ai-workspace.history-collapsed .ai-chat-list { display:none; }
 .ai-history-head,.ai-chat-header { display:flex; align-items:center; gap:10px; justify-content:space-between; }
 .budgetly-v2 .ai-history-head h3 { font-size:15px; margin:0; padding:6px 4px; }
 .ai-chat-list { display:grid; gap:4px; margin-top:15px; }
@@ -112,8 +115,15 @@
   .budgetly-v2.has-ai .main-area { margin-left:0; padding:env(safe-area-inset-top) 0 0; }
   .budgetly-v2.has-ai .topbar { padding:6px 12px; min-height:60px; }
   .budgetly-v2.has-ai .topbar h2 { font-size:21px; }
-  .ai-workspace { display:block; border-top:0; }
-  .ai-history { display:none; }
+  .ai-workspace { display:block; position:relative; border-top:0; }
+  .ai-history { display:block; position:absolute; inset:0 auto 0 0; z-index:3; width:44px; padding:10px 6px; background:var(--surface); box-shadow:4px 0 16px rgba(0,0,0,.14); transition:width .2s ease; }
+  .ai-history-head { justify-content:center; }
+  .ai-history-head h3,.ai-history .ai-chat-list { display:none; }
+  .ai-workspace.history-mobile-open .ai-history { width:min(82vw,320px); padding:14px; }
+  .ai-workspace.history-mobile-open .ai-history-head { justify-content:space-between; }
+  .ai-workspace.history-mobile-open .ai-history-head h3,.ai-workspace.history-mobile-open .ai-history .ai-chat-list { display:block; }
+  .ai-workspace.history-mobile-open .ai-history .ai-chat-list { display:grid; }
+  .ai-workspace.history-collapsed { grid-template-columns:none; }
   .ai-history-mobile { display:grid; }
   .ai-chat-main { height:100%; }
   .ai-chat-header { padding:10px 14px; gap:8px; }

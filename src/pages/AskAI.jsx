@@ -129,7 +129,7 @@ export default function AskAI() {
     if (el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 112) + 'px' }
   }, [question])
   const toggleHistory = () => {
-    if (window.matchMedia('(max-width: 820px)').matches) { setHistoryOpen(true); return }
+    if (window.matchMedia('(max-width: 820px)').matches) { setHistoryOpen(value => !value); return }
     setHistoryCollapsed(value => {
       try { window.localStorage.setItem('budgetly-chat-history-collapsed', String(!value)) } catch { /* Storage is optional. */ }
       return !value
@@ -238,11 +238,10 @@ export default function AskAI() {
     {hasChats && <button className="button ghost" onClick={() => loadChats(chats.length).catch(err => notify(err.message, 'error'))}>Older conversations</button>}
   </div>
 
-  return <section className={`ai-workspace ${historyCollapsed ? 'history-collapsed' : ''}`} aria-label="Ask Budgetly workspace">
-    <aside className="ai-history" id="conversation-history"><div className="ai-history-head"><h3>Conversations</h3></div>{historyList}</aside>
+  return <section className={`ai-workspace ${historyCollapsed ? 'history-collapsed' : ''} ${historyOpen ? 'history-mobile-open' : ''}`} aria-label="Ask Budgetly workspace">
+    <aside className="ai-history" id="conversation-history"><div className="ai-history-head"><h3>Conversations</h3><button className="icon-button ai-history-toggle" title={historyCollapsed ? 'Expand conversations' : 'Collapse conversations'} aria-label="Toggle conversations" aria-expanded={!historyCollapsed || historyOpen} aria-controls="conversation-history" onClick={toggleHistory}>{historyCollapsed ? <PanelLeftOpen size={20}/> : <PanelLeftClose size={20}/>}</button></div>{historyList}</aside>
     <div className="ai-chat-main">
       <div className="ai-chat-toolbar">
-        <button className="icon-button" title="Toggle conversations" aria-label="Toggle conversations" aria-expanded={!historyCollapsed || historyOpen} aria-controls="conversation-history" onClick={toggleHistory}>{historyCollapsed ? <PanelLeftOpen size={20}/> : <PanelLeftClose size={20}/>}</button>
         <button className="ai-context-button" disabled={pending} onClick={() => setContextOpen(true)} title="Choose context for a new conversation"><Settings2 size={16}/><span>{label}{selectedScope !== 'general' && <small>{selectedMonth}</small>}</span><ChevronDown size={14}/></button>
         <span className="ai-mode">{config?.ai_available ? 'AI enabled by admin' : 'Built-in guide'}</span>
         <button className="icon-button" title="New conversation" aria-label="New conversation" disabled={pending} onClick={() => setContextOpen(true)}><Plus size={21}/></button>

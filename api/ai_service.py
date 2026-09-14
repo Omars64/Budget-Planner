@@ -11,6 +11,21 @@ from .account_security import limit
 
 LIMITED_MESSAGE = "I'm Ask Budgetly. My built-in guide covers Budgetly features, basic budgeting, and your selected activity. I don't have a built-in answer for that question. Try asking about a wallet, category, budget, goal, or how to use the app. I can't look up live news or market prices."
 
+
+def _provider_notice(error):
+    """Explain a provider failure without returning its response body or secret data."""
+    if isinstance(error, httpx.HTTPStatusError):
+        status = error.response.status_code
+        if status in (401, 403):
+            return 'OpenAI rejected the API key. Check OPENAI_API_KEY, the selected OpenAI project, and that the key is active. Using built-in guidance.'
+        if status == 429:
+            return 'OpenAI rejected the request because of a usage, quota, or billing limit. Check the OpenAI project billing and limits. Using built-in guidance.'
+        if 400 <= status < 500:
+            return f'OpenAI rejected the request ({status}). Check the model and project settings. Using built-in guidance.'
+        if status >= 500:
+            return 'OpenAI is temporarily unavailable. Using built-in guidance.'
+    return 'OpenAI is temporarily unavailable. Using built-in guidance.'
+
 FAQS = [
     (('add transaction', 'new transaction', 'record expense', 'record income'), "Open **Transactions** and select **Add transaction**. On Android, use the round **+** button. Choose Expense, Income, or Transfer, then enter the amount, date, wallet, category, and description before saving."),
     (('shared transaction', 'share wallet', 'shared wallet', 'invite user'), "Open **Shared transactions**, choose **Share a wallet**, select a wallet, and invite the registered user by email. View, Add, and Edit permissions control what that person can do. The wallet owner keeps control of sharing and deletion."),
@@ -177,7 +192,10 @@ def generate(db, user, chat, question, history, research=False, still_active=lam
             if error.status_code != 429:
                 raise
             result['usage']['fallback'] = 'AI request limit reached. Using built-in guidance.'
-        except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError):
+        except httpx.HTTPStatusError as error:
             # Never return provider error bodies or credentials to the client or logs.
-            result['usage']['fallback'] = 'AI is temporarily unavailable. Using built-in guidance.'
+            result['usage']['fallback'] = _provider_notice(error)
+        except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError) as error:
+            # Never return provider error bodies or credentials to the client or logs.
+            result['usage']['fallback'] = _provider_notice(error)
     return result
