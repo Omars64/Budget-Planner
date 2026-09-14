@@ -13,18 +13,8 @@ LIMITED_MESSAGE = "I'm Ask Budgetly. My built-in guide covers Budgetly features,
 
 
 def _provider_notice(error):
-    """Explain a provider failure without returning its response body or secret data."""
-    if isinstance(error, httpx.HTTPStatusError):
-        status = error.response.status_code
-        if status in (401, 403):
-            return 'OpenAI rejected the API key. Check OPENAI_API_KEY, the selected OpenAI project, and that the key is active. Using built-in guidance.'
-        if status == 429:
-            return 'OpenAI rejected the request because of a usage, quota, or billing limit. Check the OpenAI project billing and limits. Using built-in guidance.'
-        if 400 <= status < 500:
-            return f'OpenAI rejected the request ({status}). Check the model and project settings. Using built-in guidance.'
-        if status >= 500:
-            return 'OpenAI is temporarily unavailable. Using built-in guidance.'
-    return 'OpenAI is temporarily unavailable. Using built-in guidance.'
+    """Keep provider diagnostics out of the user-facing conversation."""
+    return 'AI currently unavailable. Using built-in guidance.'
 
 FAQS = [
     (('add transaction', 'new transaction', 'record expense', 'record income'), "Open **Transactions** and select **Add transaction**. On Android, use the round **+** button. Choose Expense, Income, or Transfer, then enter the amount, date, wallet, category, and description before saving."),

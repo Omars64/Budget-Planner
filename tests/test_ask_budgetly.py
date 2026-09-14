@@ -88,7 +88,7 @@ def test_enabled_routing_and_outage_fallback(setup):
     provider.side_effect = httpx.ConnectError('sensitive upstream error')
     result = client.post(f'/api/ai/chats/{chat}/messages', json={'request_id': str(uuid.uuid4()), 'question': 'How do I create a budget?'}).json()
     assert result['status'] == 'completed' and result['provider'] == 'built-in'
-    assert 'temporarily unavailable' in result['notice']
+    assert result['notice'] == 'AI currently unavailable. Using built-in guidance.'
     assert 'sensitive' not in json.dumps(result)
     db.get(AssistantConfig, 1).enabled = False; db.commit()
     provider.reset_mock()
