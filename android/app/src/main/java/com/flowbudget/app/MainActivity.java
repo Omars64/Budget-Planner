@@ -6,6 +6,7 @@ public class MainActivity extends BridgeActivity {
     @Override public void onCreate(android.os.Bundle state) {
         registerPlugin(BankSmsPlugin.class);
         registerPlugin(PasskeysPlugin.class);
+        registerPlugin(BudgetlyRemindersPlugin.class);
         super.onCreate(state);
     }
 }

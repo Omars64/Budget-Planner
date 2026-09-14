@@ -1,8 +1,8 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import { LocalNotifications } from '@capacitor/local-notifications'
-import { cancelReminder, configureReminder, reminderTimes } from './deviceNotifications'
+import { cancelReminder, configureReminder, nextReminderAt, reminderTimes } from './deviceNotifications'
 
-vi.mock('@capacitor/core',()=>({Capacitor:{isNativePlatform:()=>true,getPlatform:()=> 'android'}}))
+vi.mock('@capacitor/core',()=>({Capacitor:{isNativePlatform:()=>true,getPlatform:()=> 'android'},registerPlugin:()=>({configure:vi.fn()})}))
 vi.mock('@capacitor/local-notifications',()=>({LocalNotifications:{cancel:vi.fn(),schedule:vi.fn(),createChannel:vi.fn(),checkPermissions:vi.fn(),requestPermissions:vi.fn()}}))
 beforeEach(()=>{
   vi.clearAllMocks()
@@ -14,19 +14,13 @@ it('defaults to four-hour reminders and respects overnight quiet hours',()=>{
   expect(reminderTimes({reminder_time:'08:30',quiet_hours_enabled:true,quiet_start:'22:00',quiet_end:'08:00'})).toEqual(['08:30','12:30','16:30','20:30'])
   expect(reminderTimes({reminder_time:'09:00',reminder_interval_hours:24})).toEqual(['09:00'])
 })
-it('schedules persistent daily slots without requiring exact-alarm access',async()=>{
+it('calculates the next reminder in Kuwait time',()=>{
+  expect(nextReminderAt({reminder_time:'08:00',reminder_interval_hours:4},new Date('2026-09-14T04:00:00.000Z'))).toBe('2026-09-14T05:00:00.000Z')
+})
+it('schedules persistent Android reminders through the wake-capable native scheduler',async()=>{
   await configureReminder({reminders_enabled:true,reminder_time:'08:00',reminder_interval_hours:4})
-  const rows=LocalNotifications.schedule.mock.calls[0][0].notifications
-  expect(rows).toHaveLength(6)
-  expect(new Set(rows.map(row=>row.id)).size).toBe(6)
-  for(const row of rows){
-    expect(row.schedule.on).toEqual({hour:expect.any(Number),minute:0,second:0})
-    expect(row.schedule.at).toBeUndefined()
-    expect(row.isExactNotification).toBe(false)
-    expect(row.channelId).toBe('budgetly-reminders')
-    expect(row.smallIcon).toBe('flowbudget_notification')
-    expect(row.largeIcon).toBe('flowbudget_logo')
-  }
+  expect(LocalNotifications.cancel).toHaveBeenCalled()
+  expect(LocalNotifications.schedule).not.toHaveBeenCalled()
 })
 it('preserves existing schedules when permission is denied and never prompts on resume',async()=>{
   LocalNotifications.requestPermissions.mockResolvedValue({display:'denied'})

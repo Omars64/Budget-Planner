@@ -1,6 +1,6 @@
-import { Capacitor } from '@capacitor/core'
+import { Capacitor, registerPlugin } from '@capacitor/core'
 import { LocalNotifications } from '@capacitor/local-notifications'
-import {dateInput,saveDate} from './time'
+import {clockTime,dateInput,saveDate} from './time'
 
 export function quietAt(settings,time){
   if(!settings.quiet_hours_enabled)return false
@@ -17,6 +17,7 @@ export const isNativeApp = () => Capacitor.isNativePlatform()
 const reminderIds = [{id:1001}, ...Array.from({length:30},(_,i)=>({id:1100+i}))]
 let reminderQueue = Promise.resolve()
 const androidNotificationBranding = {smallIcon:'flowbudget_notification',largeIcon:'flowbudget_logo',iconColor:'#0a4173'}
+const BudgetlyReminders = registerPlugin('BudgetlyReminders')
 
 export function reminderTimes(settings) {
   const hours = [1,2,3,4,6,8,12,24].includes(settings.reminder_interval_hours) ? settings.reminder_interval_hours : 4
@@ -27,12 +28,28 @@ export function reminderTimes(settings) {
   }).sort().filter(time=>!quietAt(settings,time))
 }
 
+export function nextReminderAt(settings, now = new Date()) {
+  const times = reminderTimes(settings)
+  if (!times.length) return ''
+  const today = dateInput(now).slice(0, 10)
+  const current = clockTime(now)
+  let day = today
+  let time = times.find(value => value > current)
+  if (!time) {
+    day = dateInput(new Date(now.getTime() + 24 * 60 * 60 * 1000)).slice(0, 10)
+    time = times[0]
+  }
+  return saveDate(`${day}T${time}`)
+}
+
 export function configureReminder(settings, {requestPermission = true} = {}) {
   // Serialize settings saves, resume events and sign-out so schedules cannot overlap.
   const run = async () => {
     if (!isNativeApp()) return false
+    const android = isNativeApp() && Capacitor.getPlatform() === 'android'
     if (!settings.reminders_enabled) {
       await LocalNotifications.cancel({notifications:reminderIds})
+      if (android) await BudgetlyReminders.configure({enabled:false})
       return true
     }
     const permission = await (requestPermission ? LocalNotifications.requestPermissions() : LocalNotifications.checkPermissions())
@@ -41,6 +58,16 @@ export function configureReminder(settings, {requestPermission = true} = {}) {
       return false
     }
     const body = reminderBody(settings)
+    const times = reminderTimes(settings)
+    if (android) {
+      await LocalNotifications.cancel({notifications:reminderIds})
+      if (!body || !times.length) {
+        await BudgetlyReminders.configure({enabled:false})
+        return true
+      }
+      await BudgetlyReminders.configure({enabled:true,body,times,firstAt:nextReminderAt(settings)})
+      return true
+    }
     const notifications = body ? reminderTimes(settings).map((time,i)=>{
       const local = new Date(saveDate(dateInput().slice(0,10)+'T'+time))
       return {id:1100+i,title:'Budgetly',body,...androidNotificationBranding,channelId:'budgetly-reminders',isExactNotification:false,
