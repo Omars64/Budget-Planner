@@ -167,8 +167,8 @@ def generate(db, user, chat, question, history, research=False, still_active=lam
     if assistant_status(db)['available']:
         try:
             # Provider limits do not prevent built-in answers from working.
-            limit(db, 'openrouter-minute', 15, 60)
-            limit(db, 'openrouter-day', 50, 86400)
+            limit(db, 'openai-minute', 15, 60)
+            limit(db, 'openai-day', 50, 86400)
             if not still_active():
                 raise HTTPException(409, 'Response stopped')
             if assistant_status(db)['available']:
@@ -176,7 +176,7 @@ def generate(db, user, chat, question, history, research=False, still_active=lam
         except HTTPException as error:
             if error.status_code != 429:
                 raise
-            result['usage']['fallback'] = 'Free service limit reached. Using built-in guidance.'
+            result['usage']['fallback'] = 'AI request limit reached. Using built-in guidance.'
         except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError):
             # Never return provider error bodies or credentials to the client or logs.
             result['usage']['fallback'] = 'AI is temporarily unavailable. Using built-in guidance.'

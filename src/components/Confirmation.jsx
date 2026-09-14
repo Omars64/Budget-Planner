@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
+import { useScrollLock } from '../lib/scrollLock'
 
 export function useConfirmation() {
   const [message, setMessage] = useState('')
   const resolve = useRef(null)
   const dialog = useRef(null)
+  useScrollLock(Boolean(message))
   const confirm = useCallback(message => new Promise(done => {
     resolve.current?.(false)
     resolve.current = done

@@ -1,10 +1,10 @@
-"""A single free-only OpenRouter boundary, with no alternate provider or paid fallback."""
+"""One server-only OpenAI endpoint and a fixed GPT-4o mini model."""
 import json
 import os
 import httpx
-from .ai_settings import FREE_MODEL
+from .ai_settings import MODEL
 
-ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions'
+ENDPOINT = 'https://api.openai.com/v1/chat/completions'
 
 
 def complete(facts, question, history, guide):
@@ -33,19 +33,18 @@ def complete(facts, question, history, guide):
         messages.extend([{'role': 'user', 'content': turn.question[:2000]},
                          {'role': 'assistant', 'content': turn.answer[:3000]}])
     messages.append({'role': 'user', 'content': question})
-    # Fixed destination, model and zero-price ceiling. Environment cannot enable a paid route.
+    # No automatic retries, alternate models, web tools or provider redirects.
     with httpx.Client(timeout=httpx.Timeout(35, connect=8), follow_redirects=False) as client:
         response = client.post(ENDPOINT, headers={
-            'Authorization': 'Bearer ' + os.environ['OPENROUTER_API_KEY'].strip(),
-            'Content-Type': 'application/json', 'X-Title': 'Budgetly',
-        }, json={'model': FREE_MODEL, 'messages': messages, 'max_tokens': 1800,
-                 'provider': {'max_price': {'prompt': 0, 'completion': 0}}})
+            'Authorization': 'Bearer ' + os.environ['OPENAI_API_KEY'].strip(),
+            'Content-Type': 'application/json',
+        }, json={'model': MODEL, 'messages': messages, 'max_completion_tokens': 1800, 'store': False})
         response.raise_for_status()
         data = response.json()
     answer = data['choices'][0]['message']['content']
     if not isinstance(answer, str) or not answer.strip():
         raise ValueError('Empty provider response')
     return {'answer': answer.strip()[:22000], 'usage': {
-        'provider': 'openrouter', 'model': FREE_MODEL,
+        'provider': 'openai', 'model': MODEL,
         'input_tokens': int(data.get('usage', {}).get('prompt_tokens') or 0),
         'output_tokens': int(data.get('usage', {}).get('completion_tokens') or 0)}}

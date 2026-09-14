@@ -27,9 +27,9 @@ def setup(monkeypatch):
         db.add(Wallet(user_id=user.id, name='Main', initial_balance=10)); db.commit()
         app.dependency_overrides[get_db] = lambda: db
         app.dependency_overrides[current_user] = lambda: user
-        monkeypatch.setenv('OPENROUTER_API_KEY', 'test-only-not-a-real-key')
-        monkeypatch.setenv('OPENROUTER_MODEL', 'openrouter/free')
-        provider = Mock(return_value={'answer': 'A suggested plan.', 'usage': {'provider': 'openrouter'}})
+        monkeypatch.setenv('OPENAI_API_KEY', 'test-only-not-a-real-key')
+        monkeypatch.setenv('OPENAI_MODEL', 'gpt-4o-mini')
+        provider = Mock(return_value={'answer': 'A suggested plan.', 'usage': {'provider': 'openai'}})
         monkeypatch.setattr(ai_service, 'complete', provider)
         client = TestClient(app)
         yield client, db, user, provider
@@ -54,7 +54,7 @@ def test_admin_switch_reauth_roles_and_default_off(setup, monkeypatch):
     user.role = 'admin'; db.commit()
     assert client.put('/api/admin/assistant', json={'enabled': True}).json()['available'] is True
     assert client.get('/api/ai/config').json()['ai_available'] is True
-    monkeypatch.setenv('OPENROUTER_MODEL', 'paid/model')
+    monkeypatch.setenv('OPENAI_MODEL', 'another/model')
     assert client.put('/api/admin/assistant', json={'enabled': True}).status_code == 422
     assert client.get('/api/ai/config').json()['ai_available'] is False
     assert client.put('/api/admin/assistant', json={'enabled': False}).status_code == 200
@@ -83,7 +83,7 @@ def test_enabled_routing_and_outage_fallback(setup):
     db.add(AssistantConfig(id=1, enabled=True)); db.commit()
     chat = create(client, 'general')
     result = client.post(f'/api/ai/chats/{chat}/messages', json={'request_id': str(uuid.uuid4()), 'question': 'Explain budgeting.'}).json()
-    assert result['provider'] == 'openrouter'
+    assert result['provider'] == 'openai'
     assert set(provider.call_args.args[0]) == {'as_of', 'currency', 'scope', 'month'}
     provider.side_effect = httpx.ConnectError('sensitive upstream error')
     result = client.post(f'/api/ai/chats/{chat}/messages', json={'request_id': str(uuid.uuid4()), 'question': 'How do I create a budget?'}).json()
@@ -120,15 +120,43 @@ def test_roadmaps_support_custom_categories(category):
     assert 'Food' not in answer or category == 'Food & Dining'
 
 
-def test_free_only_request_contract(monkeypatch):
-    monkeypatch.setenv('OPENROUTER_API_KEY', 'test-key')
+def test_openai_request_contract(monkeypatch):
+    monkeypatch.setenv('OPENAI_API_KEY', 'test-key')
     real_client = httpx.Client
     def handle(request):
-        assert str(request.url) == 'https://openrouter.ai/api/v1/chat/completions'
+        assert str(request.url) == 'https://api.openai.com/v1/chat/completions'
         payload = json.loads(request.content)
-        assert payload['model'] == 'openrouter/free'
-        assert payload['provider']['max_price'] == {'prompt': 0, 'completion': 0}
-        assert 'models' not in payload and 'tools' not in payload
-        return httpx.Response(200, json={'choices': [{'message': {'content': 'Free response'}}]})
+        assert payload['model'] == 'gpt-4o-mini'
+        assert payload['max_completion_tokens'] == 1800 and payload['store'] is False
+        assert request.headers['authorization'] == 'Bearer test-key'
+        assert not {'models', 'tools', 'provider'}.intersection(payload)
+        return httpx.Response(200, json={'choices': [{'message': {'content': 'Test response'}}]})
     monkeypatch.setattr(ai_provider.httpx, 'Client', lambda **kwargs: real_client(transport=httpx.MockTransport(handle), **kwargs))
-    assert ai_provider.complete({}, 'Explain budgeting', [], 'Guide')['answer'] == 'Free response'
+    assert ai_provider.complete({}, 'Explain budgeting', [], 'Guide')['answer'] == 'Test response'
+
+
+def test_missing_key_never_calls_provider(setup, monkeypatch):
+    client, db, user, provider = setup
+    db.add(AssistantConfig(id=1, enabled=True)); db.commit()
+    monkeypatch.delenv('OPENAI_API_KEY')
+    chat = create(client)
+    result = client.post(f'/api/ai/chats/{chat}/messages', json={'request_id': str(uuid.uuid4()), 'question': 'Explain budgeting.'}).json()
+    assert result['provider'] == 'built-in'
+    provider.assert_not_called()
+
+
+def test_tutorial_completion_is_account_scoped_and_survives_settings_save(setup):
+    client, db, user, _ = setup
+    assert client.get('/api/tutorial').json() == {'status': 'not_started'}
+    assert client.put('/api/tutorial', json={'status': 'skipped'}).json() == {'status': 'skipped'}
+    settings = client.get('/api/settings').json()
+    assert client.put('/api/settings', json=settings).status_code == 200
+    assert client.get('/api/tutorial').json()['status'] == 'skipped'
+    assert client.put('/api/tutorial', json={'status': 'completed'}).status_code == 200
+    assert client.put('/api/tutorial', json={'status': 'invalid'}).status_code == 422
+    other = User(username='Other', email='tutorial-other@example.com', password_hash='unused')
+    db.add(other); db.commit()
+    app.dependency_overrides[current_user] = lambda: other
+    assert client.get('/api/tutorial').json()['status'] == 'not_started'
+    app.dependency_overrides[current_user] = lambda: user
+    assert client.get('/api/tutorial').json()['status'] == 'completed'

@@ -1,12 +1,15 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { BarChart3, CalendarDays, Gauge, LayoutDashboard, LogOut, Menu, Mountain, Plus, ReceiptText, Settings, Share2, ShieldCheck, Target, WalletCards, X } from 'lucide-react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useApp } from '../App'
 import TransactionModal from './TransactionModal'
 import BrandLogo from './BrandLogo'
 import { Capacitor } from '@capacitor/core'
 import { CircleHelp, MessageSquare, NotebookPen } from 'lucide-react'
+import { Compass } from 'lucide-react'
+import AppTutorial from './AppTutorial'
+import { useContainedScroll, useScrollLock } from '../lib/scrollLock'
 
 const nav = [
   ['/', 'Overview', LayoutDashboard],
@@ -27,6 +30,10 @@ const nav = [
 export default function AppShell({ children }) {
   const [menu, setMenu] = useState(false)
   const [txModal, setTxModal] = useState(false)
+  const [tutorialRequest, setTutorialRequest] = useState(0)
+  const sidebar = useRef(null)
+  useScrollLock(menu)
+  useContainedScroll(sidebar)
   const { user, settings, appearance, refresh, notify, lock } = useApp()
   const location = useLocation()
   const visibleNav = user?.role === 'admin' ? [...nav, ['/admin', 'Admin', ShieldCheck]] : nav
@@ -38,7 +45,7 @@ export default function AppShell({ children }) {
     : setTxModal(true)
 
   return <div className={`app-shell budgetly-v2 ${nativeAndroid ? 'native-android' : 'browser-app'} ${isLedger ? 'has-ledger' : ''} ${location.pathname === '/ask-ai' ? 'has-ai' : ''}`}>
-    <aside className={`sidebar glass ${menu ? 'open' : ''}`}>
+    <aside ref={sidebar} className={`sidebar glass ${menu ? 'open' : ''}`}>
       <div className="sidebar-head">
         <div className="brand">
           <BrandLogo />
@@ -64,12 +71,12 @@ export default function AppShell({ children }) {
           <button className="icon-button mobile-only" onClick={() => setMenu(true)} aria-label="Open menu"><Menu size={20}/></button>
           <div><p className="eyebrow">{settings.display_name}</p><h2>{title}</h2></div>
         </div>
-        <div className="button-row top-actions"><button className="button ghost signout-button" title="Sign out" aria-label="Sign out" onClick={lock}><LogOut size={17}/><span>Sign out</span></button>{isLedger && !nativeAndroid && <button className="button primary add-button" onClick={addTransaction}><Plus size={18}/><span>Add transaction</span></button>}</div>
+        <div className="button-row top-actions">{location.pathname === '/' && <button className="button ghost tutorial-button" data-tour="tutorial" title="Tutorial" aria-label="Tutorial" onClick={() => { setMenu(false); setTutorialRequest(value => value + 1) }}><Compass size={18}/><span>Tutorial</span></button>}<button className="button ghost signout-button" title="Sign out" aria-label="Sign out" onClick={lock}><LogOut size={17}/><span>Sign out</span></button>{isLedger && !nativeAndroid && <button data-tour="add-transaction" className="button primary add-button" onClick={addTransaction}><Plus size={18}/><span>Add transaction</span></button>}</div>
       </header>
-      <motion.div className="page-wrap" key={location.pathname} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .28 }}>{children}</motion.div>
+      <motion.div className="page-wrap" data-tour-page={location.pathname} key={location.pathname} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .28 }}>{children}</motion.div>
       <footer className="app-footer">Budgetly v3.0.6 | Powered by Omar Solanki</footer>
     </main>
-    {isLedger && nativeAndroid && <button className="transaction-fab" aria-label="Add transaction" title="Add transaction" onClick={addTransaction}><Plus size={28}/></button>}
+    {isLedger && nativeAndroid && <button data-tour="add-transaction" className="transaction-fab" aria-label="Add transaction" title="Add transaction" onClick={addTransaction}><Plus size={28}/></button>}
 
     <nav className="mobile-nav glass">
       {visibleNav.filter(([to]) => ['/', '/transactions', '/shared-transactions', '/wallets'].includes(to)).map(([to, label, Icon]) => <NavLink key={to} to={to} end={to === '/'} className={({isActive}) => isActive ? 'active' : ''}><Icon size={19}/><span>{label === 'Shared Transactions' ? 'Shared' : label}</span></NavLink>)}
@@ -77,5 +84,6 @@ export default function AppShell({ children }) {
     </nav>
 
     <TransactionModal open={txModal} onClose={() => setTxModal(false)} onSaved={() => { setTxModal(false); refresh(); notify('Transaction saved') }} />
+    <AppTutorial request={tutorialRequest}/>
   </div>
 }

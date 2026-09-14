@@ -11,6 +11,7 @@ import { configureReminder, isNativeApp } from '../lib/deviceNotifications'
 import { biometricSupported, disableBiometric, setupBiometric, cancelBiometric, passwordOnlyEnabled } from '../lib/biometric'
 import DeviceSignInPreference from '../components/DeviceSignInPreference'
 import PasswordInput from '../components/PasswordInput'
+import AccentPicker from '../components/AccentPicker'
 
 const imageData = async (file, maxBytes, label) => {
   if (!file) throw new Error(`Choose a ${label.toLowerCase()} first`)
@@ -75,7 +76,7 @@ export default function Settings(){
       <label className="field"><span>Appearance</span><select aria-label="Appearance" value={form.theme || 'light'} onChange={e => setForm({...form, theme:e.target.value})}><option value="light">Light</option><option value="dark">Dark</option><option value="system">Match device</option></select></label>
       <label className="field"><span>Font</span><select aria-label="Font" value={form.font_family || 'system'} onChange={e => setForm({...form, font_family:e.target.value})}><option value="system">System</option><option value="arial">Arial</option><option value="georgia">Georgia</option><option value="verdana">Verdana</option></select></label>
       <label className="field"><span>Text colour</span><select aria-label="Text colour" value={form.text_color || 'ink'} onChange={e => setForm({...form, text_color:e.target.value})}><option value="ink">Ink</option><option value="charcoal">Charcoal</option><option value="forest">Forest</option></select></label>
-      <label className="field"><span>Accent colour</span><input aria-label="Accent colour" type="color" value={form.accent_color || '#0a4173'} onChange={e => setForm({...form, accent_color:e.target.value})}/></label>
+      <AccentPicker value={form.accent_color || '#0a4173'} onChange={color => setForm(current => ({...current, accent_color:color}))}/>
       <label className="check-row"><input type="checkbox" checked={!!form.reminders_enabled} onChange={e => setForm({...form, reminders_enabled:e.target.checked})}/><span>Transaction reminders</span></label>
       {form.reminders_enabled && <><label className="field"><span>Repeat every</span><select value={form.reminder_interval_hours || 4} onChange={e=>setForm({...form,reminder_interval_hours:Number(e.target.value)})}>{[1,2,3,4,6,8,12,24].map(hours=><option key={hours} value={hours}>{hours===24?'Once a day':`${hours} hour${hours===1?'':'s'}`}</option>)}</select></label><label className="field"><span>First reminder (Kuwait)</span><input required type="time" value={form.reminder_time || '20:00'} onChange={e => setForm({...form, reminder_time:e.target.value})}/></label><NotificationPreferences form={form} setForm={setForm}/></>}
       <button className="button primary"><Save/>Save preferences</button>

@@ -19,7 +19,7 @@ export default function AssistantSettings() {
     lock.current = true
     setBusy(true)
     try {
-      if (!status.enabled && !await confirm('Enable AI for everyone? New messages, recent chat context, and selected wallet activity will be sent to OpenRouter and its free-model provider. No payments or record changes are performed.')) return
+      if (!status.enabled && !await confirm('Enable paid AI for everyone? Messages, recent chat context, and selected wallet activity will be sent to OpenAI GPT-4o mini. Usage is billed to the OpenAI organization/project owning the configured API key, separately from ChatGPT. No bank payments or record changes are performed.')) return
       setStatus(await api('/api/admin/assistant', { method: 'PUT', ...jsonBody({ enabled: !status.enabled }) }))
       setError('')
       notify(status.enabled ? 'AI disabled. Built-in guidance remains available.' : 'AI enabled for Ask Budgetly')
@@ -31,7 +31,9 @@ export default function AssistantSettings() {
     {error && <p className="form-error" role="alert">{error}</p>}
     {!status && !error && <p role="status">Loading configuration...</p>}
     {status && <p className="muted">{status.configured ? 'API key configured.' : 'API key not configured.'} Model: <code>{status.model}</code>. {status.available ? 'AI is available.' : 'Built-in guidance is active.'}</p>}
-    {status && !status.model_valid && <p role="alert">Set OPENROUTER_MODEL to openrouter/free and redeploy. Other models are blocked.</p>}
-    <p className="muted">Only administrators can change this setting. Free service limits or outages fall back to built-in answers. Disabling stops new AI requests; a request already sent may finish.</p>
+    {status && !status.model_valid && <p role="alert">Set OPENAI_MODEL to gpt-4o-mini and redeploy. Other models are blocked.</p>}
+    <p className="muted">OpenAI API usage is paid by the organization/project owning the server API key. A ChatGPT subscription does not cover it. Budgetly permits up to 50 AI requests per day across all users and up to 1,800 output tokens per answer.</p>
+    <p className="muted">Only administrators can change this setting. Limits or outages fall back to built-in answers. Disabling stops new AI requests; an already-sent request can still finish and incur charges.</p>
+    <div className="button-row"><a href="https://platform.openai.com/usage" target="_blank" rel="noreferrer">API usage</a><a href="https://platform.openai.com/settings/organization/billing/overview" target="_blank" rel="noreferrer">Billing</a></div>
   </div>
 }

@@ -15,6 +15,8 @@ import './motion.css'
 import './notes-workspace.css'
 import './ask-ai.css'
 import './date-time-picker.css'
+import 'driver.js/dist/driver.css'
+import './interaction.css'
 
 applyAppearance(readDeviceAppearance())
 

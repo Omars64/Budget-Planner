@@ -254,7 +254,7 @@ export default function AskAI() {
         {chat?.turns?.map(turn => <article className="ai-turn" key={turn.id}>
           <p className="ai-user-message" dir="auto">{turn.question}</p>
           <div className="ai-answer">
-             <div className="ai-answer-label"><Sparkles size={15}/><strong>{turn.provider === 'openrouter' ? 'Budgetly · AI' : 'Budgetly'}</strong><time dateTime={turn.created_at}>{new Date(turn.created_at).toLocaleString(undefined, { timeZone: 'Asia/Kuwait', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</time></div>
+             <div className="ai-answer-label"><Sparkles size={15}/><strong>{turn.provider && turn.provider !== 'built-in' ? 'Budgetly · AI' : 'Budgetly'}</strong><time dateTime={turn.created_at}>{new Date(turn.created_at).toLocaleString(undefined, { timeZone: 'Asia/Kuwait', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</time></div>
             {turn.notice && <p className="ai-response-notice">{turn.notice}</p>}
             {turn.status === 'pending' && <p className="ai-thinking" role="status"><LoaderCircle className="ai-spinner" size={17}/>Working on your question...</p>}
             {['failed', 'stopped'].includes(turn.status) && <div className="ai-answer-error"><p>{turn.error || 'Response stopped. Your question is saved.'}</p><button className="button ghost small" disabled={pending} onClick={event => send(event, turn.id)}><RefreshCw size={16}/>Retry</button></div>}
@@ -270,7 +270,7 @@ export default function AskAI() {
       <div className="ai-composer-zone">
         {error && <p className="ai-error" role="alert">{error}<button title="Dismiss error" aria-label="Dismiss error" onClick={() => setError('')}><X size={15}/></button></p>}
         <form className="ai-composer" onSubmit={send}><textarea ref={composer} rows={1} aria-label="Message Ask Budgetly" placeholder="Ask Budgetly..." value={question} maxLength={8000} onChange={e => setQuestion(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && window.matchMedia('(min-width: 821px)').matches) { e.preventDefault(); void send(e) } }}/>{pending ? <button type="button" className="ai-send" title="Stop response" aria-label="Stop response" onClick={stop}><Square size={18}/></button> : <button className="ai-send" title="Send message" aria-label="Send message" disabled={!question.trim() || !config || loading || Boolean(chatId && !chat)}><ArrowUp size={21}/></button>}</form>
-        <small>{config?.ai_available ? 'Messages and selected activity are sent to OpenRouter. Check important figures.' : 'Built-in guidance · Your selected Budgetly records'}</small>
+        <small>{config?.ai_available ? 'Messages and selected activity are sent to OpenAI. Check important figures.' : 'Built-in guidance · Your selected Budgetly records'}</small>
       </div>
     </div>
 

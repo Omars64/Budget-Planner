@@ -1,18 +1,23 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { X } from 'lucide-react'
 import { useEffect, useId, useRef } from 'react'
+import { useScrollLock } from '../lib/scrollLock'
+
+const activeDialogs = []
 
 export default function Modal({ open, onClose, title, subtitle, children, size = 'medium' }) {
   const titleId = useId()
   const dialog = useRef(null)
   const close = useRef(onClose)
   close.current = onClose
+  useScrollLock(open)
   useEffect(() => {
     if (!open) return
+    activeDialogs.push(dialog)
     const previous = document.activeElement
     const frame = window.requestAnimationFrame(() => dialog.current?.focus())
     const keydown = event => {
-      if (document.querySelector('dialog[open]')) return
+      if (document.querySelector('dialog[open]') || document.body.classList.contains('driver-active') || activeDialogs.at(-1) !== dialog) return
       if (event.key === 'Escape') { event.preventDefault(); close.current() }
       if (event.key !== 'Tab' || !dialog.current) return
       const focusable = [...dialog.current.querySelectorAll('button, input, select, textarea, a[href], summary')].filter(el => !el.disabled && el.getClientRects().length)
@@ -22,7 +27,7 @@ export default function Modal({ open, onClose, title, subtitle, children, size =
       else if (!event.shiftKey && (document.activeElement === last || document.activeElement === dialog.current)) { event.preventDefault(); first.focus() }
     }
     document.addEventListener('keydown', keydown)
-    return () => { window.cancelAnimationFrame(frame); document.removeEventListener('keydown', keydown); if (previous?.isConnected) previous.focus() }
+    return () => { activeDialogs.splice(activeDialogs.indexOf(dialog), 1); window.cancelAnimationFrame(frame); document.removeEventListener('keydown', keydown); if (previous?.isConnected) previous.focus({ preventScroll: true }) }
   }, [open])
   return <AnimatePresence>
     {open && <motion.div className="modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={e => e.target === e.currentTarget && onClose()}>
