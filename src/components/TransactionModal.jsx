@@ -7,7 +7,7 @@ import Modal from './Modal'
 import DateTimeField from './DateTimeField'
 import { api, jsonBody, money } from '../lib/api'
 import VoiceInputButton from './VoiceInputButton'
-import { parseVoiceTransaction } from '../lib/voiceInput'
+import { applyVoiceTransaction } from '../lib/voiceInput'
 
 const blank = () => ({ type: 'expense', amount: '', description: '', notes: '', date: dateInput(), wallet_id: '', transfer_wallet_id: '', category_id: '', recurring_frequency: 'none', recurring_until: '' })
 
@@ -20,6 +20,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [voiceActive, setVoiceActive] = useState(false)
   const [advanced, setAdvanced] = useState(false)
   const submitting = useRef(false)
 
@@ -47,14 +48,16 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
   const set = (k,v) => setForm(f => {const next={...f,[k]:v};if(!editing){try{sessionStorage.setItem(draftKey,JSON.stringify(next))}catch{/* Storage may be disabled. */}}return next})
 
   const applyVoice = transcript => {
-    const parsed = parseVoiceTransaction(transcript, { wallets, categories })
-    setForm(current => ({ ...current, ...parsed, amount: parsed.amount || current.amount, description: parsed.description || current.description, notes: parsed.notes || current.notes, date: parsed.date || current.date, wallet_id: parsed.wallet_id || current.wallet_id, transfer_wallet_id: parsed.type === 'transfer' ? parsed.transfer_wallet_id || current.transfer_wallet_id : '', category_id: parsed.type === 'transfer' ? '' : parsed.category_id || current.category_id }))
-    notify?.('Voice captured. Review the fields before saving.')
+    const result = applyVoiceTransaction(transcript, form, { wallets, categories })
+    setForm(result.draft)
+    if (!editing) { try { sessionStorage.setItem(draftKey,JSON.stringify(result.draft)) } catch { /* Storage may be disabled. */ } }
+    setError(result.issues.join(' ') || (result.changed ? '' : 'No transaction fields recognized. Please try again.'))
+    if (result.changed) notify?.('Voice applied. Review the fields before saving.')
   }
 
   const submit = async e => {
     e.preventDefault()
-    if (submitting.current || loading) return
+    if (submitting.current || loading || voiceActive) return
     if (!(Number(form.amount) > 0)) { setError('Enter an amount greater than zero.'); return }
     if (!form.wallet_id) { setError('Choose a wallet. Create one in Wallets if none is available.'); return }
     if (!parseDateTime(form.date)) { setError('Choose a valid transaction date and time.'); return }
@@ -85,7 +88,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
         <button type="button" className={form.type === 'transfer' ? 'active' : ''} onClick={() => set('type','transfer')}><ArrowRightLeft size={17}/>Transfer</button>
       </div>
 
-      <VoiceInputButton disabled={busy || loading} onTranscript={applyVoice} onError={message => setError(message)}/>
+      <VoiceInputButton disabled={busy || loading || !open} onActiveChange={setVoiceActive} onTranscript={applyVoice} onError={message => setError(message)}/>
 
       <label className="amount-input"><span>Amount ({settings.currency})</span><input required type="number" step="0.001" min="0.001" value={form.amount} onChange={e => set('amount',e.target.value)} placeholder="0.000" /></label>
       <label className="field"><span>Description</span><input maxLength="160" value={form.description} onChange={e => set('description',e.target.value)} placeholder="What was this for?"/></label>
@@ -103,7 +106,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
         <label className="field"><span>Notes (optional)</span><textarea rows="3" value={form.notes} onChange={e => set('notes', e.target.value)}/></label>
       </div></details>
       {error && <div className="form-error" role="alert">{error}</div>}
-      <div className="modal-actions"><button type="button" className="button ghost" disabled={busy} onClick={onClose}>Cancel</button><button className="button primary" disabled={busy || loading}>{loading ? 'Loading wallets...' : busy ? 'Saving…' : editing ? 'Save changes' : 'Add transaction'}</button></div>
+      <div className="modal-actions"><button type="button" className="button ghost" disabled={busy} onClick={onClose}>Cancel</button><button className="button primary" disabled={busy || loading || voiceActive}>{loading ? 'Loading wallets...' : busy ? 'Saving…' : editing ? 'Save changes' : 'Add transaction'}</button></div>
     </form>
   </Modal>
 }

@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest'
-import { parseVoiceTransaction } from './voiceInput'
+import { applyVoiceTransaction, parseVoiceTransaction } from './voiceInput'
 
 vi.mock('@capacitor/core', () => ({
   Capacitor: { isNativePlatform: () => false, getPlatform: () => 'web' },
@@ -31,4 +31,18 @@ it('accepts conversational amount wording', () => {
   expect(parseVoiceTransaction('The amount was around two point five for a taxi from Cash', {
     wallets: [{ id: 4, name: 'Cash' }],
   })).toMatchObject({ amount: 2.5, description: 'taxi', wallet_id: 4 })
+})
+
+it('keeps an explicit category out of the description', () => {
+  expect(parseVoiceTransaction('Add transaction two point two five for breakfast for category Food and Dining', {
+    categories: [{ id: 9, name: 'Food & Dining', kind: 'expense' }],
+  })).toMatchObject({ type: 'expense', amount: 2.25, description: 'breakfast', category_id: 9 })
+})
+
+it('applies a follow-up recording as a patch to the current draft', () => {
+  expect(applyVoiceTransaction('change category to Transport', {
+    type: 'expense', amount: '2.25', description: 'breakfast', category_id: '', wallet_id: 4,
+  }, {
+    categories: [{ id: 12, name: 'Transport', kind: 'expense' }],
+  }).draft).toMatchObject({ type: 'expense', amount: '2.25', description: 'breakfast', category_id: 12, wallet_id: 4 })
 })
