@@ -24,6 +24,18 @@ INCOME_CATEGORIES = [
 ]
 
 
+def demo_seed_enabled() -> bool:
+    """Keep sample records opt-in for deployments while preserving local demos."""
+    configured = os.getenv("BUDGETLY_SEED_DEMO")
+    if configured is not None:
+        return configured.strip().lower() in {"1", "true", "yes", "on"}
+    environment = os.getenv("BUDGETLY_ENV", os.getenv("ENVIRONMENT", "")).strip().lower()
+    if environment in {"production", "prod"}:
+        return False
+    vercel = os.getenv("VERCEL", "").strip().lower() in {"1", "true", "yes", "on"}
+    return not vercel
+
+
 def hash_password(password: str) -> str:
     salt = secrets.token_bytes(16)
     digest = hashlib.scrypt(password.encode(), salt=salt, n=2**14, r=8, p=1, dklen=32)
@@ -86,6 +98,8 @@ def seed_database(db: Session, include_demo: bool = True, commit: bool = True):
         Wallet(user_id=admin.id, name="Main Wallet", type="cash", initial_balance=320.0, icon="wallet", color="#0a4173"),
         Wallet(user_id=admin.id, name="Bank Account", type="bank", initial_balance=1850.0, icon="landmark", color="#2f6690"),
         Wallet(user_id=admin.id, name="Travel Card", type="card", initial_balance=210.0, icon="credit-card", color="#517fa4"),
+    ] if include_demo else [
+        Wallet(user_id=admin.id, name="Main Wallet", type="cash", initial_balance=0, icon="wallet", color="#0a4173"),
     ]
     db.add_all(wallets)
     categories = db.query(Category).filter(Category.user_id == admin.id).all()

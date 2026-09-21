@@ -10,7 +10,12 @@ const fresh=()=>({name:'',type:'cash',initial_balance:0,icon:'wallet',color:'#0a
 export default function Wallets(){
   const {settings,refreshKey,refresh,notify,confirm}=useApp(); const [rows,setRows]=useState([]); const [open,setOpen]=useState(false); const [editing,setEditing]=useState(null); const [form,setForm]=useState(fresh()); const [error,setError]=useState('')
   const [saving,setSaving]=useState(false)
-  useEffect(()=>{api('/api/wallets').then(setRows)},[refreshKey]); const fmt=v=>money(v,settings.currency,settings.compact_numbers); const total=rows.filter(w=>!w.archived).reduce((a,w)=>a+w.balance,0)
+  useEffect(()=>{
+    const controller = new window.AbortController()
+    setError('')
+    api('/api/wallets', {signal: controller.signal}).then(value => { if (!controller.signal.aborted) setRows(value) }).catch(err => { if (!controller.signal.aborted) setError(err.message) })
+    return () => controller.abort()
+  },[refreshKey]); const fmt=v=>money(v,settings.currency,settings.compact_numbers); const total=rows.filter(w=>!w.archived).reduce((a,w)=>a+w.balance,0)
   const show=(w=null)=>{setEditing(w);setForm(w?{...w}:fresh());setOpen(true);setError('')}
   const submit=async e=>{e.preventDefault();if(saving)return;setSaving(true);try{await api(editing?`/api/wallets/${editing.id}`:'/api/wallets',{method:editing?'PUT':'POST',...jsonBody({...form,initial_balance:Number(form.initial_balance)})});setOpen(false);refresh();notify(editing?'Wallet updated':'Wallet added')}catch(err){setError(err.message)}finally{setSaving(false)}}
   const remove=async w=>{
@@ -26,6 +31,7 @@ export default function Wallets(){
     }
   }
   return <div className="stack gap-22">
+    {error && <div className="form-error" role="alert">{error}<button className="button ghost small" onClick={()=>refresh()}>Retry</button></div>}
     <section className="wallet-hero glass"><div><p className="eyebrow">Available money</p><h1>{fmt(total)}</h1><p className="muted">Across {rows.filter(w=>!w.archived).length} active wallets</p></div><span className="wallet-orbit"><Landmark/></span></section>
     <div className="section-row"><div><p className="eyebrow">Accounts & cash</p><h3>Your wallets</h3></div><button className="button primary" onClick={()=>show()}><Plus/>Add wallet</button></div>
     <section className="wallet-grid">{rows.length?rows.map(w=><article className={`wallet-card glass ${w.archived?'archived':''}`} key={w.id} onDoubleClick={()=>show(w)}><div className="wallet-shine"/><div className="card-top"><span className="round-icon" style={{color:w.color}}><DynamicIcon name={w.icon} size={21}/></span><span className="wallet-type">{w.type}{w.is_shared?' · Shared':''}</span></div><div><p className="muted">{w.archived?'Archived':'Available balance'}</p><h2>{fmt(w.balance)}</h2><strong>{w.name}</strong></div><div className="wallet-actions"><button onClick={()=>show(w)}>Edit</button><button className="danger" onClick={()=>remove(w)}><Trash2 size={15}/>Delete</button></div></article>):<div className="panel glass full-span"><EmptyState/></div>}</section>

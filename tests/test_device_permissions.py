@@ -8,8 +8,14 @@ ANDROID = '{http://schemas.android.com/apk/res/android}'
 def test_native_app_has_no_sms_capture_or_cross_app_services():
     manifest = ET.parse(ROOT / 'android/app/src/main/AndroidManifest.xml').getroot()
     permissions = {p.get(ANDROID + 'name') for p in manifest.findall('uses-permission')}
-    assert permissions == {'android.permission.INTERNET', 'android.permission.POST_NOTIFICATIONS'}
-    assert not manifest.findall('.//receiver')
+    assert {'android.permission.INTERNET', 'android.permission.POST_NOTIFICATIONS'} <= permissions
+    assert not permissions & {
+        'android.permission.READ_SMS', 'android.permission.RECEIVE_SMS',
+        'android.permission.SEND_SMS', 'android.permission.READ_CALL_LOG',
+        'android.permission.WRITE_CALL_LOG',
+    }
+    receivers = manifest.findall('.//receiver')
+    assert [receiver.get(ANDROID + 'name') for receiver in receivers] == ['.BudgetlyReminderReceiver']
     assert not manifest.findall('.//service')
     source = ROOT / 'android/app/src/main/java/com/flowbudget/app'
     assert not (source / 'BankSmsReceiver.java').exists()

@@ -250,7 +250,8 @@ def delete_note(note_id: int, user=Depends(current_user), db: Session = Depends(
 @router.get("/api/notes/{note_id}/history")
 def note_history(note_id: int, user=Depends(current_user), db: Session = Depends(get_db)):
     note_access(db, user, note_id, owner=True)
-    return [{"id": r.id, "title": r.title, "content": r.content, "version": r.version, "created_at": r.created_at.isoformat() + "Z"} for r in db.query(NoteRevision).filter_by(note_id=note_id).order_by(NoteRevision.id.desc()).all()]
+    rows = db.query(NoteRevision).filter_by(note_id=note_id).order_by(NoteRevision.id.desc()).limit(200).all()
+    return [{"id": r.id, "title": r.title, "content": r.content, "version": r.version, "created_at": r.created_at.isoformat() + "Z"} for r in rows]
 
 
 @router.post("/api/notes/{note_id}/shares", status_code=201)

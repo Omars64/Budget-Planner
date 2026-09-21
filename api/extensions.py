@@ -314,7 +314,8 @@ def wallet_activity(wallet_id:int,user=Depends(current_user),db=Depends(get_db))
     wallet,_,_=share_for_wallet(db,user,wallet_id)
     from .reliability_models import Activity
     rows=db.query(Activity).filter_by(user_id=wallet.user_id,resource=f'wallet:{wallet_id}').order_by(Activity.id.desc()).limit(100).all()
-    return [{'id':r.id,'action':r.action,'actor':db.get(User,r.actor_id).username if db.get(User,r.actor_id) else 'Former user','created_at':r.created_at.isoformat()+'Z'} for r in rows]
+    actors = {actor.id: actor for actor in db.query(User).filter(User.id.in_({r.actor_id for r in rows})).all()} if rows else {}
+    return [{'id':r.id,'action':r.action,'actor':actors.get(r.actor_id).username if actors.get(r.actor_id) else 'Former user','created_at':r.created_at.isoformat()+'Z'} for r in rows]
 
 
 @router.get("/api/shared/transactions")

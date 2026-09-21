@@ -9,9 +9,10 @@ from sqlalchemy.pool import StaticPool
 
 from api.app import app
 from api.database import Base, get_db
-from api.index import current_user, wallet_balance, ensure_note_columns
+from api.index import current_user, wallet_balance, ensure_indexes, ensure_note_columns
 from api.ledger_accounting import migrate_opening_balances
 from api.models import Budget, Category, Transaction, User, Wallet, WalletShare
+from api.seed import demo_seed_enabled, seed_database
 
 
 def test_existing_schema_upgrade_is_repeatable():
@@ -22,8 +23,78 @@ def test_existing_schema_upgrade_is_repeatable():
         connection.execute(text('ALTER TABLE transactions DROP COLUMN recorded_by_id'))
         ensure_note_columns(connection)
         ensure_note_columns(connection)
+        ensure_indexes(connection)
+        ensure_indexes(connection)
         assert {'is_opening_balance', 'recorded_by_id'} <= {c['name'] for c in inspect(connection).get_columns('transactions')}
     engine.dispose()
+
+
+def test_demo_data_is_disabled_by_default_on_vercel(monkeypatch):
+    monkeypatch.delenv('BUDGETLY_SEED_DEMO', raising=False)
+    monkeypatch.setenv('VERCEL', '1')
+    assert demo_seed_enabled() is False
+    monkeypatch.setenv('BUDGETLY_SEED_DEMO', 'true')
+    assert demo_seed_enabled() is True
+
+
+def test_non_demo_seed_starts_empty_and_preserves_existing_workspace(workspace, monkeypatch):
+    _, db, _, owner, _ = workspace
+    monkeypatch.setenv('ADMIN_INITIAL_EMAIL', owner.email)
+    seed_database(db, include_demo=False)
+    created = db.query(Wallet).filter_by(user_id=owner.id).one()
+    assert created.initial_balance == 0
+    assert db.query(Transaction).count() == 0
+    created.name = 'My existing wallet'
+    created.initial_balance = 25
+    db.commit()
+    seed_database(db, include_demo=False)
+    assert db.query(Wallet).filter_by(user_id=owner.id).one().initial_balance == 25
+    assert created.name == 'My existing wallet'
+
+
+def test_analytics_and_calendar_exclude_owned_shared_records(workspace):
+    client, db, _, owner, member = workspace
+    personal = wallet(client, 'Personal')
+    shared = wallet(client, 'Shared')
+    share(db, shared['id'], owner, member)
+    now = datetime.now().replace(hour=10, minute=0, second=0, microsecond=0)
+    client.post('/api/transactions', json=tx(personal['id'], amount=4, date=now.isoformat()))
+    shared_row = client.post('/api/shared/transactions', json=tx(shared['id'], amount=7, date=now.isoformat()))
+    assert shared_row.status_code == 201, shared_row.text
+
+    analytics = client.get('/api/analytics?months=1').json()
+    assert sum(row['expense'] for row in analytics['trend']) == 4
+    assert sum(row['value'] for row in analytics['categories']) == 4
+    calendar = client.get(f"/api/calendar?year={now.year}&month={now.month}").json()
+    assert calendar[now.date().isoformat()]['expense'] == 4
+
+
+def test_reports_do_not_treat_opening_debt_as_new_spending(workspace):
+    client, db, _, _, _ = workspace
+    wallet(client, 'Overdraft', -50)
+    now = datetime.now().replace(hour=10, minute=0, second=0, microsecond=0)
+    db.query(Transaction).update({'date': now}); db.commit()
+    report = client.get('/api/analytics?months=1').json()
+    assert report['trend'][0]['expense'] == 0
+    assert report['categories'] == []
+    day = client.get(f'/api/calendar?year={now.year}&month={now.month}').json()[now.date().isoformat()]
+    assert day['expense'] == 0 and day['count'] == 1
+    assert client.get('/api/calendar?year=0&month=1').status_code == 422
+
+
+def test_invalid_or_oversized_backup_preserves_existing_records(workspace, monkeypatch):
+    from api import account_security, index
+    client, db, _, _, _ = workspace
+    wallet(client, 'Keep me', 12)
+    monkeypatch.setattr(account_security, 'confirmed', lambda *args: None)
+    for payload in [[], {'version': 1, 'wallets': 'invalid'}, {'version': 1, 'notes': [None]}]:
+        assert client.post('/api/backup/restore', json=payload).status_code == 400
+    assert client.post('/api/backup/restore', content='{bad json').status_code == 400
+    monkeypatch.setattr(index, 'MAX_BACKUP_BYTES', 100)
+    assert client.post('/api/backup/restore', content=' ' * 101).status_code == 413
+    assert client.post('/api/backup/restore', content=iter([b' ' * 60, b' ' * 60])).status_code == 413
+    assert db.query(Wallet).one().name == 'Keep me'
+    assert db.query(Transaction).one().amount == Decimal('12')
 
 
 @pytest.fixture

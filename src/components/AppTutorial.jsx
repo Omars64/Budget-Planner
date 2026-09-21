@@ -8,7 +8,12 @@ import { useScrollLock } from '../lib/scrollLock'
 import Modal from './Modal'
 
 function targetFor(step) {
-  if (step.section) return [...document.querySelectorAll('.page-wrap .settings-section summary')].find(el => el.textContent.trim() === step.section)
+  if (step.section) {
+    const exact = [...document.querySelectorAll('.page-wrap .settings-section summary[data-tour-section]')].find(el => el.dataset.tourSection === step.section)
+    if (exact) return exact
+    const normalize = value => String(value || '').trim().replace(/\s+/g, ' ').toLowerCase()
+    return [...document.querySelectorAll('.page-wrap .settings-section summary')].find(el => normalize(el.textContent) === normalize(step.section))
+  }
   return [...document.querySelectorAll(step.selector)].find(el => el.getClientRects().length && window.getComputedStyle(el).visibility !== 'hidden')
 }
 
@@ -23,7 +28,7 @@ function waitForTarget(step, signal) {
       if (signal.aborted) return finish(false)
       const page = document.querySelector('.page-wrap')
       if (page?.dataset.tourPage === step.route && targetFor(step)) return finish(true)
-      if (window.performance.now() > deadline) return finish(true)
+      if (window.performance.now() > deadline) return finish(false)
       frame = window.requestAnimationFrame(tick)
     }
     signal.addEventListener('abort', abort, { once: true })
@@ -106,6 +111,10 @@ export default function AppTutorial({ request }) {
           instance.drive(index)
           window.clearTimeout(refreshTimer)
           refreshTimer = window.setTimeout(() => instance.refresh(), 350)
+        } else if (!aborter.signal.aborted) {
+          notify(`Skipped unavailable tutorial step: ${steps[index].title}`, 'error')
+          moving = false
+          return move(index + 1)
         }
         moving = false
       }
@@ -114,7 +123,7 @@ export default function AppTutorial({ request }) {
         allowScroll: true, disableActiveInteraction: true, overlayClickBehavior: () => {},
         showProgress: true, progressText: '{{current}} of {{total}}', popoverClass: 'budgetly-tour',
         nextBtnText: 'Next', prevBtnText: 'Back', doneBtnText: 'Finish',
-        steps: steps.map(step => ({ element: () => targetFor(step) || document.querySelector('.topbar'), onHighlighted: element => {
+        steps: steps.map(step => ({ element: () => targetFor(step), onHighlighted: element => {
           const details = step.section && element?.parentElement
           if (details instanceof window.HTMLDetailsElement && !details.open) details.open = true
         }, popover: { title: step.title, description: step.description } })),

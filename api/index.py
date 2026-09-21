@@ -28,7 +28,7 @@ from .schemas import (
     BudgetIn, CategoryIn, ContributionIn, DebtIn, GoalIn, LoginPayload, PinPayload,
     SettingsPayload, TransactionIn, UserCreate, UserUpdate, WalletIn,
 )
-from .seed import EXPENSE_CATEGORIES, INCOME_CATEGORIES, ensure_default_categories, seed_database
+from .seed import EXPENSE_CATEGORIES, INCOME_CATEGORIES, demo_seed_enabled, ensure_default_categories, seed_database
 from .models import RecoveryPoint, NoteRevision, utc_now
 from .data_safety import save_recovery, clear_budget, clear_notes
 from .idempotency import reserve, create_once
@@ -42,6 +42,21 @@ from .ledger_accounting import personal_wallet_ids, personal_records, opening_am
 APP_SECRET = os.getenv("APP_SECRET", "flowbudget-dev-secret-change-me")
 serializer = URLSafeTimedSerializer(APP_SECRET, salt="flowbudget-lock")
 auth_serializer = URLSafeTimedSerializer(APP_SECRET, salt="flowbudget-auth")
+
+
+def env_int(name, default, minimum, maximum):
+    try:
+        return min(max(int(os.getenv(name, default)), minimum), maximum)
+    except (TypeError, ValueError):
+        return default
+
+
+MAX_BACKUP_BYTES = env_int("BUDGETLY_MAX_BACKUP_BYTES", 25_000_000, 1_000_000, 100_000_000)
+BACKUP_COLLECTION_LIMITS = {
+    "wallets": 200, "categories": 500, "transactions": 20_000,
+    "budgets": 2_000, "goals": 2_000, "debts": 2_000,
+    "wallet_shares": 2_000, "note_folders": 500, "notes": 2_000,
+}
 
 
 def ensure_note_columns(connection):
@@ -72,6 +87,20 @@ def ensure_note_columns(connection):
                 connection.execute(text(f'ALTER TABLE {table} ADD COLUMN {name} {definition}'))
 
 
+def ensure_indexes(connection):
+    """Add the read-path indexes that matter once a workspace grows."""
+    statements = (
+        "CREATE INDEX IF NOT EXISTS ix_transactions_user_date ON transactions (user_id, date)",
+        "CREATE INDEX IF NOT EXISTS ix_transactions_wallet_date ON transactions (wallet_id, date)",
+        "CREATE INDEX IF NOT EXISTS ix_transactions_category_user ON transactions (category_id, user_id)",
+        "CREATE INDEX IF NOT EXISTS ix_wallet_shares_owner_wallet ON wallet_shares (owner_id, wallet_id)",
+        "CREATE INDEX IF NOT EXISTS ix_notes_user_updated ON notes (user_id, updated_at)",
+        "CREATE INDEX IF NOT EXISTS ix_note_revisions_note_created ON note_revisions (note_id, created_at)",
+    )
+    for statement in statements:
+        connection.execute(text(statement))
+
+
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     from .passkeys import migrate_passkeys
@@ -87,8 +116,9 @@ async def lifespan(application: FastAPI):
                 connection.execute(text("SELECT pg_advisory_xact_lock(61420731)"))
             Base.metadata.create_all(bind=connection)
             ensure_note_columns(connection)
+            ensure_indexes(connection)
             with Session(bind=connection) as db:
-                seed_database(db, commit=False)
+                seed_database(db, include_demo=demo_seed_enabled(), commit=False)
                 migrate_opening_balances(db)
                 migrate_passkeys(db)
                 db.commit()
@@ -98,7 +128,7 @@ async def lifespan(application: FastAPI):
     yield
 
 
-app = FastAPI(title="Budgetly API", version="3.8.6", lifespan=lifespan)
+app = FastAPI(title="Budgetly API", version="3.8.7", lifespan=lifespan)
 
 
 @app.middleware("http")
@@ -981,32 +1011,39 @@ def dashboard(month: Optional[str] = None, user: User = Depends(current_user), d
 @app.get("/api/analytics")
 def analytics(months: int = Query(6, ge=1, le=24), user: User = Depends(current_user), db: Session = Depends(get_db)):
     materialize_recurring_for_user(db, user.id)
-    now = datetime.now()
+    now = ledger_now()
+    personal = personal_records(db, user.id)
     rows = []
     for offset in range(months - 1, -1, -1):
         y = now.year; m = now.month - offset
         while m <= 0: m += 12; y -= 1
         start = datetime(y, m, 1); end = datetime(y + (m == 12), 1 if m == 12 else m + 1, 1)
-        txs = db.query(Transaction).filter(Transaction.user_id == user.id, Transaction.date >= start, Transaction.date < end).all()
-        rows.append({"month": start.strftime("%b"), "income": round(sum(float(t.amount) for t in txs if t.type == "income"), 3), "expense": round(sum(float(t.amount) for t in txs if t.type == "expense"), 3)})
+        txs = personal.filter(Transaction.date >= start, Transaction.date < end).all()
+        rows.append({"month": start.strftime("%b"), "income": round(sum(float(t.amount) for t in txs if t.type == "income"), 3), "expense": round(sum(float(t.amount) for t in txs if t.type == "expense" and not t.is_opening_balance), 3)})
     category_rows = db.query(Category).filter(Category.user_id == user.id, Category.kind == "expense").all()
+    category_totals = dict(personal.with_entities(Transaction.category_id, func.sum(Transaction.amount)).filter(
+        Transaction.type == "expense", Transaction.is_opening_balance.is_(False)
+    ).group_by(Transaction.category_id).all())
     categories = []
     for c in category_rows:
-        total = db.query(func.coalesce(func.sum(Transaction.amount), 0)).filter(Transaction.user_id == user.id, Transaction.type == "expense", Transaction.category_id == c.id).scalar() or 0
+        total = category_totals.get(c.id, 0) or 0
         if total: categories.append({"name": c.name, "value": round(float(total), 3), "color": c.color})
+    if category_totals.get(None):
+        categories.append({"name": "Uncategorized", "value": round(float(category_totals[None]), 3), "color": "#94a3b8"})
     return {"trend": rows, "categories": sorted(categories, key=lambda x: x["value"], reverse=True)}
 
 
 @app.get("/api/calendar")
-def calendar(year: int, month: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def calendar(year: int = Query(..., ge=1, le=9998), month: int = Query(..., ge=1, le=12), user: User = Depends(current_user), db: Session = Depends(get_db)):
     materialize_recurring_for_user(db, user.id)
     if not 1 <= month <= 12: raise HTTPException(400, "Invalid month")
     start = datetime(year, month, 1); end = datetime(year + (month == 12), 1 if month == 12 else month + 1, 1)
-    txs = db.query(Transaction).filter(Transaction.user_id == user.id, Transaction.date >= start, Transaction.date < end).all()
+    txs = personal_records(db, user.id).filter(Transaction.date >= start, Transaction.date < end).all()
     by_day = {}
     for t in txs:
         key = t.date.date().isoformat(); by_day.setdefault(key, {"income": 0, "expense": 0, "count": 0})
-        if t.type in ("income", "expense"): by_day[key][t.type] += float(t.amount)
+        if t.type == "income" or (t.type == "expense" and not t.is_opening_balance):
+            by_day[key][t.type] += float(t.amount)
         by_day[key]["count"] += 1
     return {k: {**v, "income": round(v["income"], 3), "expense": round(v["expense"], 3)} for k, v in by_day.items()}
 
@@ -1037,8 +1074,31 @@ def export_backup(user: User = Depends(current_user), db: Session = Depends(get_
 async def restore_backup(request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
     from .account_security import confirmed
     confirmed(request, db, user)
-    data = await request.json()
+    content_length = request.headers.get("content-length")
+    if content_length and content_length.isdigit() and int(content_length) > MAX_BACKUP_BYTES:
+        raise HTTPException(413, "This backup is too large to restore")
+    raw = bytearray()
+    async for chunk in request.stream():
+        if len(raw) + len(chunk) > MAX_BACKUP_BYTES:
+            raise HTTPException(413, "This backup is too large to restore")
+        raw.extend(chunk)
+    try:
+        data = json.loads(raw)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Backup must be valid JSON")
+    if not isinstance(data, dict):
+        raise HTTPException(400, "Backup must be a JSON object")
     if data.get("version") != 1: raise HTTPException(400, "Unsupported backup version")
+    for collection, limit in BACKUP_COLLECTION_LIMITS.items():
+        value = data.get(collection, [])
+        if not isinstance(value, list) or len(value) > limit:
+            raise HTTPException(400, f"Backup contains too many or invalid {collection.replace('_', ' ')}")
+    for note in data.get("notes", []):
+        if not isinstance(note, dict):
+            raise HTTPException(400, "Backup contains an invalid note")
+        attachment = note.get("attachment_data")
+        if attachment is not None and (not isinstance(attachment, str) or len(attachment) > 6_000_000):
+            raise HTTPException(400, "Backup contains an attachment that is too large")
     # Reject foreign IDs before replacing any account data.
     try:
         wallet_ids = {w["id"] for w in data.get("wallets", [])}

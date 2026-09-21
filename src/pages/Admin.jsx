@@ -28,8 +28,8 @@ export default function Admin() {
   const [categoryBusy, setCategoryBusy] = useState(false)
   const [categoryError, setCategoryError] = useState('')
 
-  const load = () => api('/api/admin/users').then(setRows)
-  useEffect(() => { load() }, [])
+  const load = (signal) => api('/api/admin/users', {signal}).then(value => { if (!signal?.aborted) { setRows(value); setError('') } })
+  useEffect(() => { const controller = new window.AbortController(); load(controller.signal).catch(err => { if (!controller.signal.aborted) setError(err.message) }); return () => controller.abort() }, [])
   const visible = useMemo(() => rows.filter(row => `${row.username} ${row.email} ${row.role}`.toLowerCase().includes(search.toLowerCase())), [rows, search])
 
   const show = row => {
@@ -81,6 +81,7 @@ export default function Admin() {
   }
 
   return <div className="settings-grid admin-settings">
+    {error && !open && <div className="form-error" role="alert">{error}<button className="button ghost small" onClick={()=>load().catch(err=>setError(err.message))}>Retry</button></div>}
     <SettingsSection title="Service health"><OperationsPanel/></SettingsSection>
     <SettingsSection title="Ask Budgetly"><AssistantSettings/></SettingsSection>
     <SettingsSection title="User management">
