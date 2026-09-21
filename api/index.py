@@ -98,7 +98,7 @@ async def lifespan(application: FastAPI):
     yield
 
 
-app = FastAPI(title="Budgetly API", version="3.8.5", lifespan=lifespan)
+app = FastAPI(title="Budgetly API", version="3.8.6", lifespan=lifespan)
 
 
 @app.middleware("http")
