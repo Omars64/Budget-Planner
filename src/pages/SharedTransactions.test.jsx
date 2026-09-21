@@ -5,9 +5,10 @@ import SharedTransactions from './SharedTransactions'
 import { api } from '../lib/api'
 
 const wallet = {wallet_id:11,name:'Household',balance:50,can_add:true,can_edit:true,owner_name:'Owner',owner_email:'owner@example.test',shares:[]}
+const ledger = vi.hoisted(() => ({rows:[]}))
 vi.mock('../App', () => ({useApp:() => ({settings:{currency:'KWD'},refreshKey:0,refresh:vi.fn(),notify:vi.fn(),confirm:vi.fn()})}))
 vi.mock('../lib/api', () => ({api:vi.fn(),jsonBody:data=>({body:JSON.stringify(data)}),money:n=>'KWD '+Number(n||0).toFixed(3),readCached:()=>null}))
-vi.mock('../lib/useLedger', () => ({default:()=>({rows:[],loading:false,hasMore:false,page:1})}))
+vi.mock('../lib/useLedger', () => ({default:()=>({rows:ledger.rows,loading:false,hasMore:false,page:1})}))
 beforeAll(() => {
   window.HTMLDialogElement.prototype.showModal = function () { this.open = true }
   window.HTMLDialogElement.prototype.close = function () { this.open = false }
@@ -15,7 +16,25 @@ beforeAll(() => {
 afterEach(cleanup)
 beforeEach(() => {
   vi.clearAllMocks()
+  ledger.rows = []
   api.mockImplementation(path=>Promise.resolve(path==='/api/shared/wallets'?[wallet]:[]))
+})
+
+it('moves an existing shared record to another editable wallet and preserves its revision', async () => {
+  const record = {id:71,wallet_id:11,type:'expense',amount:2.25,description:'Breakfast',date:'2026-09-21T08:00:00+03:00',category_id:9,category_name:'Food',wallet_name:'Household',shared_wallet_names:['Household'],can_edit:true,revision:'revision-71',owner_email:wallet.owner_email}
+  ledger.rows = [record]
+  const other = {...wallet,wallet_id:12,name:'Travel',owner_email:'other@example.test'}
+  api.mockImplementation(path=>Promise.resolve(path==='/api/shared/wallets'?[wallet,other]:[]))
+  render(<MemoryRouter><SharedTransactions/></MemoryRouter>)
+  await screen.findByText('Travel')
+  fireEvent.click(screen.getByRole('button',{name:'View Breakfast'}))
+  fireEvent.click(screen.getByRole('button',{name:'Edit',exact:true}))
+  fireEvent.change(screen.getByLabelText('Shared wallet',{exact:true}),{target:{value:'12'}})
+  expect(screen.getByLabelText('Description')).toHaveValue('Breakfast')
+  fireEvent.click(screen.getByRole('button',{name:'Save',exact:true}))
+  await waitFor(()=>expect(api).toHaveBeenCalledWith('/api/shared/transactions/71',expect.objectContaining({method:'PUT'})))
+  const call=api.mock.calls.find(([path])=>path==='/api/shared/transactions/71')
+  expect(JSON.parse(call[1].body)).toMatchObject({wallet_id:12,revision:'revision-71',amount:2.25,category_id:null,description:'Breakfast'})
 })
 it('uses the same picker in a shared transaction and saves the selected time once', async () => {
   render(<MemoryRouter><SharedTransactions/></MemoryRouter>)

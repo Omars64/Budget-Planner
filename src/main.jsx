@@ -17,6 +17,7 @@ import './ask-ai.css'
 import './date-time-picker.css'
 import 'driver.js/dist/driver.css'
 import './interaction.css'
+import './ledger-clarity.css'
 
 applyAppearance(readDeviceAppearance())
 

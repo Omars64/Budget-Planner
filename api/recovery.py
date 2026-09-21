@@ -93,6 +93,9 @@ def restore(item_id:int,user=Depends(current_user),db=Depends(get_db)):
     if item.kind=='category':
         for model,key in [(Transaction,'transaction_ids'),(Budget,'budget_ids')]:
             db.query(model).filter(model.user_id==user.id,model.id.in_(data.get(key,[])),model.category_id.is_(None)).update({'category_id':row.id},synchronize_session=False)
+    if item.kind == 'wallet':
+        from .ledger_accounting import migrate_opening_balances
+        migrate_opening_balances(db, user.id)
     audit(db,user.id,user.id,'Restored from Trash',f'{item.kind}:{row.id}'); db.commit()
     return {'ok':True,'id':row.id}
 

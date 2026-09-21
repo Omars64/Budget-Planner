@@ -48,6 +48,8 @@ class Transaction(Base):
     recurring_until = Column(Date, nullable=True)
     recurring_parent_id = Column(Integer, ForeignKey("transactions.id"), nullable=True, index=True)
     created_at = Column(DateTime, default=datetime.now)
+    is_opening_balance = Column(Boolean, nullable=False, default=False, server_default='false')
+    recorded_by_id = Column(Integer, nullable=True)
 
     wallet = relationship("Wallet", foreign_keys=[wallet_id])
     transfer_wallet = relationship("Wallet", foreign_keys=[transfer_wallet_id])

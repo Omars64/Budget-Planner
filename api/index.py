@@ -37,6 +37,7 @@ from .models import BankMessage, MessageKey
 from .reliability_models import AccountSession
 from .timekeeping import ledger_iso, now as ledger_now, today as ledger_today
 from .ledger_filters import ledger_options, filter_ledger
+from .ledger_accounting import personal_wallet_ids, personal_records, opening_amount, set_opening_balance, migrate_opening_balances, require_regular_transaction
 
 APP_SECRET = os.getenv("APP_SECRET", "flowbudget-dev-secret-change-me")
 serializer = URLSafeTimedSerializer(APP_SECRET, salt="flowbudget-lock")
@@ -46,6 +47,10 @@ auth_serializer = URLSafeTimedSerializer(APP_SECRET, salt="flowbudget-auth")
 def ensure_note_columns(connection):
     """Add note workspace columns to databases created before the Notes upgrade."""
     tables = {
+        "transactions": {
+            "is_opening_balance": "BOOLEAN NOT NULL DEFAULT FALSE",
+            "recorded_by_id": "INTEGER",
+        },
         "note_folders": {
             "color": "VARCHAR(20) NOT NULL DEFAULT '#0a4173'",
         },
@@ -84,6 +89,7 @@ async def lifespan(application: FastAPI):
             ensure_note_columns(connection)
             with Session(bind=connection) as db:
                 seed_database(db, commit=False)
+                migrate_opening_balances(db)
                 migrate_passkeys(db)
                 db.commit()
         application.state.storage_ready = True
@@ -92,7 +98,7 @@ async def lifespan(application: FastAPI):
     yield
 
 
-app = FastAPI(title="Budgetly API", version="3.8.1", lifespan=lifespan)
+app = FastAPI(title="Budgetly API", version="3.8.5", lifespan=lifespan)
 
 
 @app.middleware("http")
@@ -343,6 +349,7 @@ def tx_payload(tx: Transaction):
         "transfer_wallet_name": tx.transfer_wallet.name if tx.transfer_wallet else None,
         "category_name": tx.category.name if tx.category else None,
         "category_color": tx.category.color if tx.category else None,
+        "is_opening_balance": tx.is_opening_balance,
     }
 
 
@@ -379,13 +386,18 @@ def budget_period_start(db: Session, budget: Budget, today: date) -> date:
     return max(period_start, budget.start_date)
 
 
-def budget_spent(db: Session, budget: Budget) -> float:
-    start = budget_period_start(db, budget, ledger_today())
+def budget_spent(db: Session, budget: Budget, as_of=None, personal_only=False) -> float:
+    as_of = as_of or ledger_today()
+    start = budget_period_start(db, budget, as_of)
     q = db.query(func.coalesce(func.sum(Transaction.amount), 0)).filter(
         Transaction.user_id == budget.user_id,
         Transaction.type == "expense",
+        Transaction.is_opening_balance.is_(False),
         Transaction.date >= datetime.combine(start, datetime.min.time()),
     )
+    if personal_only:
+        q = q.filter(Transaction.wallet_id.in_(personal_wallet_ids(db, budget.user_id)))
+        q = q.filter(Transaction.date < datetime.combine(as_of + timedelta(days=1), datetime.min.time()))
     if budget.category_id:
         q = q.filter(Transaction.category_id == budget.category_id)
     return round(float(q.scalar() or 0), 3)
@@ -658,19 +670,29 @@ def update_settings(payload: SettingsPayload, user: User = Depends(current_user)
 def wallets(user: User = Depends(current_user), db: Session = Depends(get_db)):
     materialize_recurring_for_user(db, user.id)
     rows = db.query(Wallet).filter(Wallet.user_id == user.id).order_by(Wallet.archived, Wallet.created_at).all()
-    return [{"id": w.id, "name": w.name, "type": w.type, "initial_balance": float(w.initial_balance), "icon": w.icon, "color": w.color, "archived": w.archived, "balance": wallet_balance(db, w)} for w in rows]
+    shared = {r[0] for r in db.query(WalletShare.wallet_id).filter_by(owner_id=user.id).all()}
+    return [{"id": w.id, "name": w.name, "type": w.type, "initial_balance": float(opening_amount(db, w)), "icon": w.icon, "color": w.color, "archived": w.archived, "balance": wallet_balance(db, w), "is_shared": w.id in shared} for w in rows]
 
 
 @app.post("/api/wallets", status_code=201)
 def create_wallet(payload: WalletIn, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    return create_once(db, user, request, 'wallet', payload, Wallet)
+    receipt, previous = reserve(db, user.id, 'wallet', request.headers.get('Idempotency-Key'), payload)
+    if previous is not None: return previous
+    row = Wallet(user_id=user.id, **{**payload.model_dump(), 'initial_balance': 0, 'created_at': ledger_now()})
+    db.add(row); db.flush()
+    set_opening_balance(db, row, payload.initial_balance, user.id)
+    result = {**json.loads(payload.model_dump_json()), 'initial_balance': float(payload.initial_balance), 'id': row.id, 'balance': wallet_balance(db, row)}
+    if receipt: receipt.response = json.dumps(result)
+    db.commit()
+    return result
 
 
 @app.put("/api/wallets/{item_id}")
 def update_wallet(item_id: int, payload: WalletIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    row = db.query(Wallet).filter(Wallet.id == item_id, Wallet.user_id == user.id).first()
+    row = db.query(Wallet).filter(Wallet.id == item_id, Wallet.user_id == user.id).with_for_update().first()
     if not row: raise HTTPException(404, "Wallet not found")
-    for k, v in payload.model_dump().items(): setattr(row, k, v)
+    for k, v in payload.model_dump(exclude={'initial_balance'}).items(): setattr(row, k, v)
+    set_opening_balance(db, row, payload.initial_balance, user.id)
     db.commit(); db.refresh(row)
     return {**payload.model_dump(), "id": row.id, "balance": wallet_balance(db, row)}
 
@@ -728,11 +750,11 @@ def transactions(
     search: str = "", tx_type: str = "all", wallet_id: Optional[int] = None,
     category_id: Optional[int] = None, date_from: Optional[datetime] = None,
     date_to: Optional[datetime] = None, limit: int = Query(200, ge=1, le=1000),
-    options: tuple = Depends(ledger_options),
+    options: tuple = Depends(ledger_options), scope: str = Query('all', pattern='^(all|personal)$'),
     user: User = Depends(current_user), db: Session = Depends(get_db),
 ):
     materialize_recurring_for_user(db, user.id)
-    q = db.query(Transaction).filter(Transaction.user_id == user.id)
+    q = personal_records(db, user.id) if scope == 'personal' else db.query(Transaction).filter(Transaction.user_id == user.id)
     if search: q = q.filter(or_(Transaction.description.ilike(f"%{search}%"), Transaction.notes.ilike(f"%{search}%")))
     if tx_type != "all": q = q.filter(Transaction.type == tx_type)
     if wallet_id: q = q.filter(or_(Transaction.wallet_id == wallet_id, Transaction.transfer_wallet_id == wallet_id))
@@ -765,7 +787,7 @@ def create_transaction(payload: TransactionIn, request: Request, user: User = De
     receipt, previous = reserve(db, user.id, 'transaction', request.headers.get('Idempotency-Key'), payload)
     if previous is not None: return previous
     validate_transaction_references(db, user.id, payload)
-    row = Transaction(user_id=user.id, **payload.model_dump()); db.add(row); db.flush(); db.refresh(row)
+    row = Transaction(user_id=user.id, recorded_by_id=user.id, **payload.model_dump()); db.add(row); db.flush(); db.refresh(row)
     result = tx_payload(row)
     if receipt: receipt.response = json.dumps(result)
     db.commit()
@@ -777,6 +799,7 @@ def update_transaction(item_id: int, payload: TransactionIn, request: Request, u
     row = db.query(Transaction).filter(Transaction.id == item_id, Transaction.user_id == user.id).with_for_update().first()
     if not row: raise HTTPException(404, "Transaction not found")
     check_revision(request, row)
+    require_regular_transaction(row)
     from .account_security import audit
     audit(db, user.id, user.id, 'Edited transaction', f'transaction:{row.id}')
     validate_transaction_references(db, user.id, payload)
@@ -788,6 +811,7 @@ def update_transaction(item_id: int, payload: TransactionIn, request: Request, u
 def delete_transaction(item_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
     row = db.query(Transaction).filter(Transaction.id == item_id, Transaction.user_id == user.id).first()
     if not row: raise HTTPException(404, "Transaction not found")
+    require_regular_transaction(row)
     save_recovery(db, user, user, f"Deleted transaction: {row.description}")
     from .recovery import trash
     trash(db, row, user, 'transaction')
@@ -918,30 +942,37 @@ def dashboard(month: Optional[str] = None, user: User = Depends(current_user), d
         raise HTTPException(400, "month must be YYYY-MM")
     start = datetime(current.year, current.month, 1)
     next_month = datetime(current.year + (current.month == 12), 1 if current.month == 12 else current.month + 1, 1)
-    month_txs = db.query(Transaction).filter(Transaction.user_id == user.id, Transaction.date >= start, Transaction.date < next_month).all()
+    personal = personal_records(db, user.id)
+    month_txs = personal.filter(Transaction.date >= start, Transaction.date < next_month).all()
     income = sum(float(t.amount) for t in month_txs if t.type == "income")
-    expense = sum(float(t.amount) for t in month_txs if t.type == "expense")
-    wallets_rows = db.query(Wallet).filter(Wallet.user_id == user.id, Wallet.archived == False).all()  # noqa: E712
+    opening = sum(float(t.amount) for t in month_txs if t.type == 'income' and t.is_opening_balance)
+    opening_debt = sum(float(t.amount) for t in month_txs if t.type == 'expense' and t.is_opening_balance)
+    expense = sum(float(t.amount) for t in month_txs if t.type == "expense" and not t.is_opening_balance)
+    wallets_rows = db.query(Wallet).filter(Wallet.id.in_(personal_wallet_ids(db, user.id)), Wallet.archived.is_(False)).all()
     total_balance = sum(wallet_balance(db, w) for w in wallets_rows)
     category_map = {}
     for t in month_txs:
-        if t.type == "expense":
+        if t.type == "expense" and not t.is_opening_balance:
             name = t.category.name if t.category else "Uncategorized"
             color = t.category.color if t.category else "#94a3b8"
             category_map.setdefault(name, {"name": name, "value": 0.0, "color": color})["value"] += float(t.amount)
     days = []
     days_in_month = month_calendar.monthrange(current.year, current.month)[1]
-    visible_days = datetime.now().day if current.year == datetime.now().year and current.month == datetime.now().month else days_in_month
+    today = ledger_today()
+    visible_days = today.day if current.year == today.year and current.month == today.month else days_in_month
     for day in range(1, visible_days + 1):
         day_rows = [t for t in month_txs if t.date.day == day]
-        days.append({"day": str(day), "income": round(sum(float(t.amount) for t in day_rows if t.type == "income"), 3), "expense": round(sum(float(t.amount) for t in day_rows if t.type == "expense"), 3)})
-    recent = db.query(Transaction).filter(Transaction.user_id == user.id).order_by(Transaction.date.desc()).limit(6).all()
+        days.append({"day": str(day), "income": round(sum(float(t.amount) for t in day_rows if t.type == "income"), 3), "expense": round(sum(float(t.amount) for t in day_rows if t.type == "expense" and not t.is_opening_balance), 3)})
+    recent = personal.filter(Transaction.date >= start, Transaction.date < next_month).order_by(Transaction.date.desc(), Transaction.id.desc()).limit(5).all()
     bdata = []
-    for b in db.query(Budget).filter(Budget.user_id == user.id).all():
-        spent = budget_spent(db, b)
-        bdata.append({"id": b.id, "name": b.name, "spent": spent, "limit_amount": float(b.limit_amount), "progress": round(spent / float(b.limit_amount) * 100, 1)})
+    as_of = today if (current.year, current.month) == (today.year, today.month) else (next_month - timedelta(days=1)).date()
+    for b in db.query(Budget).filter(Budget.user_id == user.id, Budget.start_date <= as_of).all():
+        spent = budget_spent(db, b, as_of=as_of, personal_only=True)
+        bdata.append({"id": b.id, "name": b.name, "period": b.period, "spent": spent, "limit_amount": float(b.limit_amount), "progress": round(spent / float(b.limit_amount) * 100, 1)})
     return {
-        "month": current.strftime("%Y-%m"), "total_balance": round(total_balance, 3), "income": round(income, 3), "expense": round(expense, 3), "net": round(income - expense, 3),
+        "month": current.strftime("%Y-%m"), "total_balance": round(total_balance, 3), "income": round(income, 3), "expense": round(expense, 3), "net": round(income - expense - opening_debt, 3),
+        "opening_funds": round(opening, 3), "opening_debt": round(opening_debt, 3), "earned_income": round(income - opening, 3),
+        "wallets": [{"id": w.id, "name": w.name, "balance": wallet_balance(db, w)} for w in wallets_rows],
         "cashflow": days, "category_spending": sorted(category_map.values(), key=lambda x: x["value"], reverse=True),
         "recent_transactions": [tx_payload(t) for t in recent], "budgets": bdata,
     }
@@ -1054,6 +1085,7 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
         if t.get("category_id"):
             t["category_id"] = category_map.get(t["category_id"], t["category_id"])
         t["recurring_parent_id"] = None
+        t['recorded_by_id'] = None
         row = Transaction(user_id=user.id, **t)
         db.add(row); db.flush()
         if old_id is not None:
@@ -1088,6 +1120,8 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
                        checklist=note.get("checklist", "[]") if isinstance(note.get("checklist", "[]"), str) else json.dumps(note.get("checklist", [])),
                        attachment_name=note.get("attachment_name"), attachment_type=note.get("attachment_type"), attachment_data=note.get("attachment_data")))
     if pin_hash: db.add(AppSetting(user_id=user.id, key="pin_hash", value=pin_hash))
+    db.flush()
+    migrate_opening_balances(db, user.id)
     db.commit()
     return {"ok": True}
 

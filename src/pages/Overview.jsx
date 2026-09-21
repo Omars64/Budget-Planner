@@ -1,89 +1,69 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { ArrowDownLeft, ArrowUpRight, Landmark, Sparkles, WalletCards } from 'lucide-react'
-import { format } from 'date-fns'
-import { dateInput, displayDate } from '../lib/time'
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { ArrowRight, Plus, Wallet } from 'lucide-react'
+import { dateInput } from '../lib/time'
 import { api, money } from '../lib/api'
 import { useApp } from '../App'
-import MetricCard from '../components/MetricCard'
 import ProgressBar from '../components/ProgressBar'
 import EmptyState from '../components/EmptyState'
+import LedgerRow, { TransactionDetails } from '../components/LedgerRow'
+import TransactionModal from '../components/TransactionModal'
 
 export default function Overview() {
-  const { settings, refreshKey } = useApp()
+  const { settings, refreshKey, refresh, notify } = useApp()
   const [data, setData] = useState(null)
-  const [month, setMonth] = useState(dateInput().slice(0,7))
+  const [month, setMonth] = useState(dateInput().slice(0, 7))
   const [error, setError] = useState('')
-  useEffect(() => { api(`/api/dashboard?month=${month}`).then(setData).catch(e => setError(e.message)) }, [month, refreshKey])
-  const fmt = v => money(v, settings.currency, settings.compact_numbers)
-  const categoryMax = useMemo(() => Math.max(...(data?.category_spending || []).map(x => x.value), 1), [data])
+  const [selected, setSelected] = useState(null)
+  const [adding, setAdding] = useState(false)
+  useEffect(() => {
+    const controller = new window.AbortController()
+    setError('')
+    api(`/api/dashboard?month=${month}`, { signal: controller.signal })
+      .then(value => { if (!controller.signal.aborted) setData(value) })
+      .catch(e => { if (!controller.signal.aborted) setError(e.message) })
+    return () => controller.abort()
+  }, [month, refreshKey])
+  const fmt = value => money(value, settings.currency, settings.compact_numbers)
+  const filteredLink = { aiFilters: { month } }
+  if (!data && !error) return <div className="skeleton-page"><div/><div/><div/></div>
 
-  if (error) return <div className="error-panel glass">{error}</div>
-  if (!data) return <div className="skeleton-page"><div/><div/><div/></div>
-
-  return <div className="stack gap-22">
-    <section className="hero-strip glass">
-      <div>
-        <p className="eyebrow"><Sparkles size={14}/> Your money, in motion</p>
-        <h1>{fmt(data.total_balance)}</h1>
-        <p className="muted">Total available across active wallets</p>
-      </div>
-      <label className="month-picker"><span>Viewing month</span><input type="month" value={month} onChange={e => setMonth(e.target.value)} /></label>
+  return <div className="overview-page">
+    <section className="overview-balance">
+      <div><p className="muted">Personal balance now</p><h1>{data ? fmt(data.total_balance) : '-'}</h1><p className="muted">Across {data?.wallets?.length || 0} active personal wallets</p></div>
+      <div className="overview-controls"><label className="field"><span>Viewing month</span><input type="month" min="1000-01" max="9999-12" value={month} onChange={e => e.target.value && setMonth(e.target.value)}/></label><button className="button primary" onClick={() => setAdding(true)}><Plus size={18}/>Add transaction</button></div>
     </section>
-
-    <section className="metric-grid">
-      <MetricCard label="Total balance" value={fmt(data.total_balance)} sub="Across your wallets" icon={WalletCards} delay={.02}/>
-      <MetricCard label="Income" value={fmt(data.income)} sub="This selected month" icon={ArrowDownLeft} tone="positive" delay={.06}/>
-      <MetricCard label="Expenses" value={fmt(data.expense)} sub="This selected month" icon={ArrowUpRight} tone="negative" delay={.1}/>
-      <MetricCard label="Net movement" value={fmt(data.net)} sub={data.net >= 0 ? 'You kept more than you spent' : 'Spending is ahead of income'} icon={Landmark} tone={data.net >= 0 ? 'positive' : 'negative'} delay={.14}/>
-    </section>
-
-    <section className="dashboard-grid">
-      <div className="panel glass span-2">
-        <div className="panel-head"><div><p className="eyebrow">Cash flow</p><h3>Month rhythm</h3></div><span className="legend"><i className="income-dot"/>Income <i className="expense-dot"/>Expenses</span></div>
-        <div className="chart-wrap">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data.cashflow} margin={{ top: 12, right: 8, left: -20, bottom: 0 }}>
-              <defs><linearGradient id="incomeFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#0a4173" stopOpacity=".26"/><stop offset="1" stopColor="#0a4173" stopOpacity="0"/></linearGradient><linearGradient id="expenseFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#d55f5f" stopOpacity=".2"/><stop offset="1" stopColor="#d55f5f" stopOpacity="0"/></linearGradient></defs>
-              <CartesianGrid strokeDasharray="3 6" vertical={false} stroke="rgba(10,65,115,.10)" />
-              <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fontSize: 11}} />
-              <YAxis axisLine={false} tickLine={false} tick={{fontSize: 11}} />
-              <Tooltip contentStyle={{borderRadius: 14, border: '1px solid rgba(10,65,115,.14)', background: 'rgba(255,255,255,.92)'}} formatter={v => fmt(v)} />
-              <Area type="monotone" dataKey="income" stroke="#0a4173" strokeWidth={2.4} fill="url(#incomeFill)" />
-              <Area type="monotone" dataKey="expense" stroke="#d55f5f" strokeWidth={2.1} fill="url(#expenseFill)" />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
+    {error && <div className="form-error" role="alert">{error}</div>}
+    {data && <div aria-busy={data.month !== month} className={data.month !== month ? 'overview-loading' : ''}>
+      <section className="overview-metrics" aria-label="Selected month summary">
+        <div><span>Income &amp; starting funds</span><strong className="tx-amount income">{fmt(data.income)}</strong><small>{data.opening_funds ? `Includes ${fmt(data.opening_funds)} opening balance` : 'Income recorded this month'}</small></div>
+        <div><span>Spent this month</span><strong className="tx-amount expense">{fmt(data.expense)}</strong><small>Personal expenses only</small></div>
+        <div><span>{data.net >= 0 ? 'Net inflow' : 'Net outflow'}</span><strong>{fmt(Math.abs(data.net))}</strong><small>{data.opening_debt ? `Includes ${fmt(data.opening_debt)} starting debt` : 'Income & starting funds less expenses'}</small></div>
+      </section>
+      <section className="overview-wallets" aria-label="Personal wallets">
+        {data.wallets?.map(w => <Link key={w.id} to="/transactions" state={{ aiFilters: { wallet: String(w.id), month } }}><span><Wallet size={16}/>{w.name}</span><strong>{fmt(w.balance)}</strong></Link>)}
+        {!data.wallets?.length && <Link to="/wallets">Add a personal wallet <ArrowRight size={16}/></Link>}
+      </section>
+      <div className="overview-columns">
+        <section className="overview-section">
+          <div className="panel-head"><h3>Budget progress</h3><Link to="/budgets" className="overview-link">View all <ArrowRight size={15}/></Link></div>
+          {data.budgets.length ? <div className="overview-budgets">{[...data.budgets].sort((a, b) => b.progress - a.progress).slice(0, 3).map(b => <div key={b.id}>
+            <div className="overview-pair"><strong>{b.name}</strong><span>{Math.round(b.progress)}% used</span></div>
+            <ProgressBar value={b.progress} warning={b.progress >= 90}/>
+            <div className="overview-pair muted"><span>{fmt(b.spent)} of {fmt(b.limit_amount)} ({b.period})</span><strong className={b.spent > b.limit_amount ? 'tx-amount expense' : ''}>{fmt(Math.abs(b.limit_amount - b.spent))} {b.spent > b.limit_amount ? 'over' : 'left'}</strong></div>
+          </div>)}</div> : <EmptyState title="No budgets for this period" text="Set a personal spending limit to track your progress."/>}
+        </section>
+        <section className="overview-section">
+          <div className="panel-head"><h3>Where your money went</h3><Link to="/transactions" state={filteredLink} className="overview-link">View all <ArrowRight size={15}/></Link></div>
+          {data.category_spending.length ? <div className="overview-categories">{data.category_spending.slice(0, 3).map(c => <div key={c.name}><div className="overview-pair"><span>{c.name}</span><strong>{fmt(c.value)}</strong></div><div className="mini-track"><i style={{ width: `${Math.min(100, c.value / (data.expense || 1) * 100)}%`, background: c.color }}/></div><small>{Math.round(c.value / (data.expense || 1) * 100)}% of spending</small></div>)}</div> : <EmptyState title="No spending this month" text="Your personal expenses will appear here."/>}
+        </section>
       </div>
-
-      <div className="panel glass">
-        <div className="panel-head"><div><p className="eyebrow">Spending</p><h3>Top categories</h3></div></div>
-        <div className="category-bars">
-          {data.category_spending.length ? data.category_spending.slice(0,5).map(c => <div className="category-bar" key={c.name}>
-            <div><span>{c.name}</span><strong>{fmt(c.value)}</strong></div>
-            <div className="mini-track"><i style={{width: `${c.value/categoryMax*100}%`, background: c.color}} /></div>
-          </div>) : <EmptyState title="No spending yet" text="Expenses in this month will show up here."/>}
-        </div>
-      </div>
-    </section>
-
-    <section className="dashboard-grid">
-      <div className="panel glass span-2">
-        <div className="panel-head"><div><p className="eyebrow">Latest activity</p><h3>Recent transactions</h3></div></div>
-        <div className="transaction-list compact">
-          {data.recent_transactions.length ? data.recent_transactions.map(tx => <div className="transaction-row" key={tx.id}>
-            <span className={`tx-symbol ${tx.type}`}>{tx.type === 'income' ? <ArrowDownLeft size={18}/> : <ArrowUpRight size={18}/>}</span>
-            <div className="tx-main"><strong>{tx.description}</strong><small>{tx.category_name || (tx.type === 'transfer' ? `${tx.wallet_name} → ${tx.transfer_wallet_name}` : 'Uncategorized')} · {format(displayDate(tx.date), 'dd MMM, HH:mm')}</small></div>
-            <strong className={`tx-amount ${tx.type}`}>{tx.type === 'income' ? '+' : tx.type === 'expense' ? '−' : ''}{fmt(tx.amount)}</strong>
-          </div>) : <EmptyState/>}
-        </div>
-      </div>
-      <div className="panel glass">
-        <div className="panel-head"><div><p className="eyebrow">Limits</p><h3>Budget pulse</h3></div></div>
-        <div className="stack gap-16">
-          {data.budgets.length ? data.budgets.slice(0,4).map(b => <div key={b.id} className="budget-mini"><div><span>{b.name}</span><strong>{Math.round(b.progress)}%</strong></div><ProgressBar value={b.progress} warning={b.progress >= 90}/><small>{fmt(b.spent)} of {fmt(b.limit_amount)}</small></div>) : <EmptyState title="No budgets" text="Create a spending limit to see its pulse."/>}
-        </div>
-      </div>
-    </section>
+      <section className="overview-section overview-recent">
+        <div className="panel-head"><h3>Recent activity</h3><Link to="/transactions" state={filteredLink} className="overview-link">View all transactions <ArrowRight size={15}/></Link></div>
+        {data.recent_transactions.length ? data.recent_transactions.map(tx => <LedgerRow key={tx.id} tx={tx} fmt={fmt} showDate onOpen={() => setSelected(tx)}/>) : <EmptyState title="No transactions this month" text="Add a transaction to start recording your activity."/>}
+      </section>
+    </div>}
+    <TransactionDetails tx={selected} fmt={fmt} onClose={() => setSelected(null)}/>
+    <TransactionModal open={adding} onClose={() => setAdding(false)} onSaved={() => { setAdding(false); refresh(); notify('Transaction added') }}/>
   </div>
 }

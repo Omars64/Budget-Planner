@@ -1,0 +1,54 @@
+.budgetly-v2 .overview-page { background:var(--surface,#fff); }
+.budgetly-v2 .overview-balance { display:flex; justify-content:space-between; gap:24px; flex-wrap:wrap; padding:24px; border-bottom:1px solid var(--line); }
+.budgetly-v2 .overview-balance h1 { margin:8px 0; font-size:32px; overflow-wrap:anywhere; color:var(--accent-text,var(--accent)); }
+.budgetly-v2 .overview-balance p { font-size:13px; margin:0; }
+.budgetly-v2 .overview-controls { display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap; }
+.budgetly-v2 .overview-controls input { width:180px; }
+.budgetly-v2 .overview-metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); border-bottom:1px solid var(--line); }
+.budgetly-v2 .overview-metrics>div { padding:22px 24px; display:flex; flex-direction:column; gap:8px; min-width:0; }
+.budgetly-v2 .overview-metrics span { font-size:13px; color:var(--muted); }
+.budgetly-v2 .overview-metrics strong { font-size:23px; white-space:normal; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
+.budgetly-v2 .overview-metrics small { font-size:12px; color:var(--muted); line-height:1.5; }
+.budgetly-v2 .overview-wallets { display:flex; gap:24px; flex-wrap:wrap; padding:16px 24px; border-bottom:1px solid var(--line); }
+.budgetly-v2 .overview-wallets a { display:grid; gap:6px; color:var(--text); font-size:13px; overflow-wrap:anywhere; min-width:0; }
+.budgetly-v2 .overview-wallets span { display:flex; gap:6px; align-items:center; color:var(--muted); }
+.budgetly-v2 .overview-columns { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
+.budgetly-v2 .overview-section { padding:24px; border-bottom:1px solid var(--line); min-width:0; }
+.budgetly-v2 .overview-section h3 { margin:0; font-size:18px; }
+.budgetly-v2 .overview-section .panel-head { align-items:center; flex-wrap:wrap; }
+.budgetly-v2 .overview-link { display:inline-flex; align-items:center; gap:6px; min-height:40px; color:var(--accent-text,var(--accent)); font-size:13px; }
+.budgetly-v2 .overview-budgets,.budgetly-v2 .overview-categories { display:grid; gap:24px; }
+.budgetly-v2 .overview-pair { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; font-size:13px; line-height:1.6; }
+.budgetly-v2 .overview-pair>* { min-width:0; overflow-wrap:anywhere; }
+.budgetly-v2 .overview-budgets .progress { margin:10px 0; }
+.budgetly-v2 .overview-categories small { display:block; color:var(--muted); margin-top:6px; font-size:12px; }
+.budgetly-v2 .overview-recent .ledger-entry { padding-left:0; padding-right:0; }
+.budgetly-v2 .overview-loading { opacity:.55; pointer-events:none; }
+.budgetly-v2 .ledger-entry { grid-template-columns:42px minmax(0,1fr) minmax(120px,25%); }
+.budgetly-v2 .ledger-entry .tx-side { max-width:none; min-width:0; align-self:start; gap:2px; }
+.budgetly-v2 .ledger-entry .tx-category,.budgetly-v2 .ledger-entry .tx-contributor { font-size:12px; color:var(--muted); line-height:1.5; overflow-wrap:anywhere; }
+.budgetly-v2 .ledger-entry .tx-main { gap:3px; }
+.budgetly-v2 .ledger-entry .wallet-label { font-size:12px; }
+.budgetly-v2 .ledger-entry .tx-kind { font-weight:600; }
+.budgetly-v2 .detail-kind { margin:0; text-transform:capitalize; color:var(--muted); }
+.budgetly-v2 .ledger-quick-types { display:flex; flex-wrap:wrap; gap:4px; padding-top:8px; }
+.budgetly-v2 .ledger-quick-types button { min-height:40px; padding:8px 12px; color:var(--muted); border:0; border-bottom:2px solid transparent; background:transparent; font-size:13px; }
+.budgetly-v2 .ledger-quick-types button[aria-pressed=true] { color:var(--accent-text,var(--accent)); border-bottom-color:var(--accent-text,var(--accent)); font-weight:700; }
+.budgetly-v2 .ledger-date-title { font-size:13px; }
+.budgetly-v2 .shared-owner { display:block; font-size:12px; color:var(--muted); margin-top:6px; }
+@media(max-width:820px) {
+  .budgetly-v2 .overview-balance,.budgetly-v2 .overview-section { padding:20px 16px; }
+  .budgetly-v2 .overview-columns { grid-template-columns:1fr; }
+  .budgetly-v2 .overview-metrics>div { padding:18px 12px; }
+  .budgetly-v2 .overview-metrics strong { font-size:18px; }
+  .budgetly-v2 .overview-wallets { padding:16px; }
+  .budgetly-v2 .overview-controls { width:100%; justify-content:space-between; }
+}
+@media(max-width:420px) {
+  .budgetly-v2 .overview-metrics { grid-template-columns:1fr 1fr; }
+  .budgetly-v2 .overview-metrics>div:last-child { grid-column:1/-1; padding-top:0; }
+  .budgetly-v2 .ledger-entry { grid-template-columns:32px minmax(0,1fr) minmax(110px,35%); padding:14px 12px; gap:8px; }
+  .budgetly-v2 .ledger-entry .tx-symbol { width:32px; height:34px; }
+  .budgetly-v2 .ledger-entry .tx-main strong { font-size:14px; }
+  .budgetly-v2 .ledger-entry .tx-side small { font-size:11px; }
+}

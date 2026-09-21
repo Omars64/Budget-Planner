@@ -75,7 +75,7 @@ export default function AppShell({ children }) {
         <div className="button-row top-actions">{location.pathname === '/' && <button className="button ghost tutorial-button" data-tour="tutorial" title="Tutorial" aria-label="Tutorial" onClick={() => { setMenu(false); setTutorialRequest(value => value + 1) }}><Compass size={18}/><span>Tutorial</span></button>}<button className="button ghost signout-button" title="Sign out" aria-label="Sign out" onClick={lock}><LogOut size={17}/><span>Sign out</span></button>{isLedger && !nativeAndroid && <button data-tour="add-transaction" className="button primary add-button" onClick={addTransaction}><Plus size={18}/><span>Add transaction</span></button>}</div>
       </header>
       <motion.div className="page-wrap" data-tour-page={location.pathname} key={location.pathname} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .28 }}>{children}</motion.div>
-      <footer className="app-footer">Budgetly v3.8.1 | Powered by Omar Solanki</footer>
+      <footer className="app-footer">Budgetly v3.8.5 | Powered by Omar Solanki</footer>
     </main>
     {isLedger && nativeAndroid && <button data-tour="add-transaction" className="transaction-fab" aria-label="Add transaction" title="Add transaction" onClick={addTransaction}><Plus size={28}/></button>}
 

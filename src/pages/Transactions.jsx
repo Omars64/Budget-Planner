@@ -11,27 +11,28 @@ import StatementImport from '../components/StatementImport'
 import LedgerFilters, { defaultLedgerFilters } from '../components/LedgerFilters'
 import LedgerPagination from '../components/LedgerPagination'
 import useLedger from '../lib/useLedger'
-import LedgerRow, { TransactionDetails } from '../components/LedgerRow'
+import LedgerRow, { LedgerDateHeader, TransactionDetails } from '../components/LedgerRow'
 
 export default function Transactions() {
   const location = useLocation()
   const { user, settings, refreshKey, refresh, notify ,confirm} = useApp()
   const [filters, setFilters] = useState(() => ({ ...defaultLedgerFilters, ...location.state?.aiFilters }))
-  const ledger = useLedger('/api/transactions', filters, refreshKey)
+  const ledger = useLedger('/api/transactions', { ...filters, scope: 'personal' }, refreshKey)
   const { rows, loading } = ledger
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState(null)
   const [selected, setSelected] = useState(null)
   const [wallets, setWallets] = useState([])
+  const [categories, setCategories] = useState([])
 
-  useEffect(() => { api('/api/wallets').then(setWallets).catch(() => setWallets([])) }, [refreshKey])
+  useEffect(() => { api('/api/wallets').then(rows => setWallets(rows.filter(w => !w.is_shared))).catch(() => setWallets([])); api('/api/categories').then(setCategories).catch(() => setCategories([])) }, [refreshKey])
 
   const fmt = v => money(v, settings.currency, settings.compact_numbers)
   const grouped = useMemo(() => rows.reduce((acc, tx) => { const key = format(displayDate(tx.date), 'yyyy-MM-dd'); (acc[key] ||= []).push(tx); return acc }, {}), [rows])
   const remove = async tx => { if (!await confirm(`Delete “${tx.description}”?`)) return; try { await api(`/api/transactions/${tx.id}`, {method:'DELETE'}); setSelected(null); refresh(); notify('Transaction deleted') } catch (err) { notify(err.message, 'error') } }
 
   return <div className="ledger-page stack">
-    <LedgerFilters value={filters} onChange={setFilters} wallets={wallets}><StatementImport wallets={wallets} compact/></LedgerFilters>
+    <LedgerFilters value={filters} onChange={setFilters} wallets={wallets} categories={categories}><StatementImport wallets={wallets} compact/></LedgerFilters>
     {ledger.error && <div className="form-error" role="alert">{ledger.error}<button className="button ghost small" onClick={ledger.retry}>Retry</button></div>}
 
 
@@ -43,7 +44,7 @@ export default function Transactions() {
       <div className="ledger-count">{rows.length}{ledger.hasMore ? '+' : ''} transaction{rows.length === 1 ? '' : 's'}</div>
       {loading && !rows.length ? <div className="list-skeleton"><i/><i/><i/><i/></div> : !rows.length ? <EmptyState title="No matching transactions" text="Try a different filter or add a new movement."/> : <div className="date-groups">
         {Object.entries(grouped).map(([day, txs]) => <div className="date-group" key={day}>
-          <div className="date-label"><strong>{format(new Date(day+'T12:00:00'), 'EEEE')}</strong><span>{format(new Date(day+'T12:00:00'), 'dd MMM yyyy')}</span></div>
+          <LedgerDateHeader day={day}/>
           {txs.map(tx => <LedgerRow key={tx.id} tx={tx} fmt={fmt} onOpen={() => setSelected(tx)}/> )}
         </div>)}
       </div>}

@@ -12,7 +12,7 @@ class ORMModel(BaseModel):
 class WalletIn(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     type: str = "cash"
-    initial_balance: Decimal = Decimal("0")
+    initial_balance: Decimal = Field(default=Decimal('0'), max_digits=16, decimal_places=3)
     icon: str = "wallet"
     color: str = "#0a4173"
     archived: bool = False

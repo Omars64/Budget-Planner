@@ -32,7 +32,8 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
     const controller = new window.AbortController()
     Promise.all([api('/api/wallets', {signal: controller.signal}), api('/api/categories', {signal: controller.signal})]).then(([w,c]) => {
       if (controller.signal.aborted) return
-      setWallets(w.filter(x => !x.archived || x.id === editing?.wallet_id)); setCategories(c)
+      w = w.filter(x => !x.is_shared || x.id === editing?.wallet_id || x.id === editing?.transfer_wallet_id)
+      setWallets(w.filter(x => !x.archived || x.id === editing?.wallet_id || x.id === editing?.transfer_wallet_id)); setCategories(c)
       const base = editing ? {
         ...editing,
         date: dateInput(editing.date),

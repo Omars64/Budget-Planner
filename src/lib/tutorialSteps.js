@@ -1,6 +1,6 @@
 export function tutorialSteps(isAdmin) {
   const steps = [
-    { route: '/', selector: '.hero-strip', title: 'Your overview', description: 'See your available money across wallets. Change the month to review income, expenses and budget progress for that period.' },
+    { route: '/', selector: '.overview-balance, .hero-strip', title: 'Your overview', description: 'See your available money in personal wallets. Shared balances stay in Shared Transactions. Change the month to review income, expenses and budget progress for that period.' },
     { route: '/wallets', selector: '.section-row .button.primary', title: 'Start with a wallet', description: 'Use Add wallet for cash, a bank account or a card. Enter its starting balance once. Transactions then update that balance. Each wallet also has Edit and Delete actions.' },
     { route: '/transactions', selector: '[data-tour="add-transaction"]', title: 'Record a transaction', description: 'This opens a new transaction. Choose Expense, Income or Transfer, enter the amount and description, then pick the wallet and category. The round + in Android does the same job.' },
     { route: '/transactions', selector: '.ledger-filter-bar', title: 'Find the right records', description: 'Use the filter icon to choose wallets, month, type, search text and sort order, then Apply filters. The month arrows move between months. Remove a filter to show more records.' },
