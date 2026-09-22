@@ -11,13 +11,16 @@ import StatementImport from '../components/StatementImport'
 import LedgerFilters, { defaultLedgerFilters } from '../components/LedgerFilters'
 import LedgerPagination from '../components/LedgerPagination'
 import useLedger from '../lib/useLedger'
+import { useViewState } from '../lib/viewState'
+import AnimatedMoney from '../components/AnimatedMoney'
 import LedgerRow, { LedgerDateHeader, TransactionDetails } from '../components/LedgerRow'
 
 export default function Transactions() {
   const location = useLocation()
   const { user, settings, refreshKey, refresh, notify ,confirm} = useApp()
-  const [filters, setFilters] = useState(() => ({ ...defaultLedgerFilters, ...location.state?.aiFilters }))
-  const ledger = useLedger('/api/transactions', { ...filters, scope: 'personal' }, refreshKey)
+  const [filters, setFilters] = useViewState(`personal:${user?.id}:filters`, defaultLedgerFilters, location.state?.aiFilters ? {...defaultLedgerFilters,...location.state.aiFilters} : undefined)
+  useEffect(() => { if (location.state?.aiFilters) setFilters({...defaultLedgerFilters,...location.state.aiFilters}) }, [location.key])
+  const ledger = useLedger('/api/transactions', { ...filters, scope: 'personal' }, refreshKey, false, `personal:${user?.id}`)
   const { rows, loading } = ledger
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState(null)
@@ -37,7 +40,7 @@ export default function Transactions() {
 
 
     <section className="transaction-wallets" aria-label="Current wallet balances">
-      {wallets.filter(wallet => filters.wallet ? String(wallet.id) === filters.wallet : !wallet.archived).map(wallet => <div className="transaction-wallet-balance glass" key={wallet.id}><span><Wallet size={15}/>{wallet.name}</span><strong>{fmt(wallet.balance)}</strong></div>)}
+      {wallets.filter(wallet => filters.wallet ? String(wallet.id) === filters.wallet : !wallet.archived).map(wallet => <div className="transaction-wallet-balance glass" key={wallet.id}><span><Wallet size={15}/>{wallet.name}</span><strong><AnimatedMoney value={wallet.balance} currency={settings.currency} compact={settings.compact_numbers}/></strong></div>)}
     </section>
 
     <section className="ledger-list">

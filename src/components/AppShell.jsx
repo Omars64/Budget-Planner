@@ -1,7 +1,7 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { BarChart3, CalendarDays, Gauge, LayoutDashboard, LogOut, Menu, Mountain, PanelLeftOpen, Plus, ReceiptText, Settings, Share2, ShieldCheck, Target, WalletCards, X } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useApp } from '../App'
 import TransactionModal from './TransactionModal'
 import BrandLogo from './BrandLogo'
@@ -9,6 +9,8 @@ import { Capacitor } from '@capacitor/core'
 import { CircleHelp, MessageSquare, NotebookPen } from 'lucide-react'
 import { Compass } from 'lucide-react'
 import AppTutorial from './AppTutorial'
+import ScrollMemory from './ScrollMemory'
+import Milestone from './Milestone'
 import { useContainedScroll, useScrollLock } from '../lib/scrollLock'
 
 const nav = [
@@ -32,6 +34,15 @@ export default function AppShell({ children }) {
   const [txModal, setTxModal] = useState(false)
   const [tutorialRequest, setTutorialRequest] = useState(0)
   const sidebar = useRef(null)
+  useEffect(() => {
+    if (!menu) return
+    const back = event => {
+      if (document.querySelector('[aria-modal="true"], dialog[open]')) return
+      event.preventDefault(); setMenu(false)
+    }
+    window.addEventListener('budgetly:back', back)
+    return () => window.removeEventListener('budgetly:back', back)
+  }, [menu])
   useScrollLock(menu)
   useContainedScroll(sidebar)
   const { user, settings, appearance, refresh, notify, lock } = useApp()
@@ -45,6 +56,7 @@ export default function AppShell({ children }) {
     : setTxModal(true)
 
   return <div className={`app-shell budgetly-v2 ${nativeAndroid ? 'native-android' : 'browser-app'} ${isLedger ? 'has-ledger' : ''} ${location.pathname === '/ask-ai' ? 'has-ai' : ''}`}>
+    <ScrollMemory userId={user?.id}/>
     <aside ref={sidebar} className={`sidebar glass ${menu ? 'open' : ''}`}>
       <div className="sidebar-head">
         <div className="brand">
@@ -74,8 +86,8 @@ export default function AppShell({ children }) {
         </div>
         <div className="button-row top-actions">{location.pathname === '/' && <button className="button ghost tutorial-button" data-tour="tutorial" title="Tutorial" aria-label="Tutorial" onClick={() => { setMenu(false); setTutorialRequest(value => value + 1) }}><Compass size={18}/><span>Tutorial</span></button>}<button className="button ghost signout-button" title="Sign out" aria-label="Sign out" onClick={lock}><LogOut size={17}/><span>Sign out</span></button>{isLedger && !nativeAndroid && <button data-tour="add-transaction" className="button primary add-button" onClick={addTransaction}><Plus size={18}/><span>Add transaction</span></button>}</div>
       </header>
-      <motion.div className="page-wrap" data-tour-page={location.pathname} key={location.pathname} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .28 }}>{children}</motion.div>
-      <footer className="app-footer">Budgetly v3.8.7 | Powered by Omar Solanki</footer>
+      <motion.div className="page-wrap" data-tour-page={location.pathname} key={location.pathname} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: .16 }}>{children}</motion.div>
+      <footer className="app-footer">Budgetly v4.1.0 | Powered by Omar Solanki</footer>
     </main>
     {isLedger && nativeAndroid && <button data-tour="add-transaction" className="transaction-fab" aria-label="Add transaction" title="Add transaction" onClick={addTransaction}><Plus size={28}/></button>}
 
@@ -86,5 +98,6 @@ export default function AppShell({ children }) {
 
     <TransactionModal open={txModal} onClose={() => setTxModal(false)} onSaved={() => { setTxModal(false); refresh(); notify('Transaction saved') }} />
     <AppTutorial request={tutorialRequest}/>
+    <Milestone/>
   </div>
 }

@@ -22,6 +22,12 @@ export function useConfirmation() {
     if (message && !dialog.current.open) dialog.current.showModal()
   }, [message])
   useEffect(() => () => resolve.current?.(false), [])
+  useEffect(() => {
+    if (!message) return
+    const back = event => { event.preventDefault(); settle(false) }
+    window.addEventListener('budgetly:back', back)
+    return () => window.removeEventListener('budgetly:back', back)
+  }, [message, settle])
 
   const confirmation = <dialog ref={dialog} className="confirmation-dialog" aria-labelledby="confirmation-title" aria-describedby="confirmation-message" onCancel={event => { event.preventDefault(); settle(false) }}>
     <AlertTriangle size={24} className="confirmation-icon" aria-hidden="true" />

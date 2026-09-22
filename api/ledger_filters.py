@@ -11,12 +11,15 @@ def ledger_options(
     month: Optional[str] = Query(None, pattern=r"^[1-9][0-9]{3}-(0[1-9]|1[0-2])$"),
     sort: Literal['newest', 'oldest'] = 'newest',
     offset: int = Query(0, ge=0),
+    exclude_opening: bool = False,
 ):
-    return month, sort, offset
+    return month, sort, offset, exclude_opening
 
 
 def filter_ledger(query, options):
-    month, sort, offset = options
+    month, sort, offset, exclude_opening = options
+    if exclude_opening:
+        query = query.filter(Transaction.is_opening_balance.is_(False))
     if month:
         year, number = map(int, month.split('-'))
         start = datetime(year, number, 1)

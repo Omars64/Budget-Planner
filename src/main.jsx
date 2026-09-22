@@ -1,7 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { HashRouter } from 'react-router-dom'
-import { MotionConfig } from 'framer-motion'
+import MotionPreferences from './components/MotionPreferences'
 import { applyAppearance, readDeviceAppearance } from './lib/appearance'
 import App from './App'
 import './styles.css'
@@ -18,13 +18,14 @@ import './date-time-picker.css'
 import 'driver.js/dist/driver.css'
 import './interaction.css'
 import './ledger-clarity.css'
+import './comfort.css'
 
 applyAppearance(readDeviceAppearance())
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <MotionConfig reducedMotion="user"><HashRouter>
+    <MotionPreferences><HashRouter>
       <App />
-    </HashRouter></MotionConfig>
+    </HashRouter></MotionPreferences>
   </React.StrictMode>,
 )

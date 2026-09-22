@@ -4,6 +4,7 @@ import { dateInput, displayDate } from '../lib/time'
 import Modal from './Modal'
 import { Sparkles } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { useSavedTransaction } from '../lib/savedFeedback'
 
 export function LedgerDateHeader({ day }) {
   const today = dateInput().slice(0, 10)
@@ -14,11 +15,12 @@ export function LedgerDateHeader({ day }) {
 }
 
 export default function LedgerRow({ tx, fmt, shared = false, showDate = false, onOpen }) {
+  const saved = useSavedTransaction()
   const name = (tx.category_name || '').toLowerCase()
   const Icon = tx.type === 'income' ? ArrowDownLeft : tx.type === 'transfer' ? ArrowRightLeft : name.includes('food') ? Utensils : name.includes('shop') ? ShoppingBasket : name.includes('transport') ? Bus : ArrowUpRight
   const title = tx.description?.trim() || tx.category_name || 'Unnamed transaction'
   const walletLabel = tx.type === 'transfer' ? `${tx.wallet_name || 'Wallet'} → ${tx.transfer_wallet_name || 'Wallet'}` : tx.wallet_name || tx.shared_wallet_names?.join(' / ')
-  return <button className="ledger-entry" onClick={onOpen} aria-label={`View ${title}`}>
+  return <button className={`ledger-entry${saved === tx.id ? ' just-saved' : ''}`} onClick={onOpen} aria-label={`View ${title}`}>
     <span className={`tx-symbol ${tx.type} ${Icon === Utensils ? 'food' : Icon === ShoppingBasket ? 'shopping' : ''}`}><Icon size={20}/></span>
     <span className="tx-main"><strong>{title}</strong><span className="tx-category">{tx.is_opening_balance ? (tx.type === 'income' ? 'Starting funds' : 'Starting debt') : tx.category_name || (tx.type === 'transfer' ? 'Wallet transfer' : 'Uncategorized')}</span><span className="wallet-label"><Wallet size={14} aria-hidden="true"/>{walletLabel}{tx.recurring_frequency && tx.recurring_frequency !== 'none' && <Repeat2 size={13} aria-label="Recurring transaction"/>}</span>{shared && <span className="tx-contributor">{tx.recorded_by_name ? `Added by ${tx.recorded_by_name}` : `Wallet owner: ${tx.owner_name || tx.owner_email || 'Unknown'}`}</span>}</span>
     <span className="tx-side"><strong className={`tx-amount ${tx.type}`}>{tx.type === 'income' ? '+\u00a0' : tx.type === 'expense' ? '-\u00a0' : ''}{fmt(tx.amount)}</strong><small className="tx-kind">{tx.type === 'income' ? 'Income' : tx.type === 'transfer' ? 'Transfer' : 'Expense'}</small><small>{format(displayDate(tx.date), showDate ? 'dd MMM, HH:mm' : 'HH:mm')}</small></span>

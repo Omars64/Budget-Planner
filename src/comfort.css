@@ -1,0 +1,81 @@
+/* Dialogs live outside animated pages so fixed positioning stays viewport-relative. */
+.modal-layer .modal-backdrop { overflow:hidden; overscroll-behavior:none; top:var(--dialog-top,0px); bottom:auto; height:var(--dialog-height,100dvh); }
+.modal-layer .modal { min-width:0; max-width:100%; max-height:calc(var(--dialog-height,100dvh) - 32px); overflow-x:hidden; overscroll-behavior:contain; touch-action:pan-y; }
+.modal-layer .modal-body, .transaction-form, .transaction-form > * { min-width:0; max-width:100%; }
+.modal-layer .modal-head { gap:12px; user-select:none; }
+.modal-layer .modal-head > div { min-width:0; overflow-wrap:anywhere; }
+.modal-layer .modal-head .icon-button { flex-shrink:0; }
+.transaction-form .amount-input input { width:100%; min-width:0; }
+.transaction-form .segment-control button { min-width:0; padding-inline:8px; }
+.transaction-form .modal-actions { position:sticky; bottom:0; background:var(--surface); padding-block:12px; z-index:2; }
+dialog.confirmation-dialog { background:var(--surface); color:var(--text); border-color:var(--line); }
+dialog.confirmation-dialog :is(h3,p) { color:inherit; }
+.budgetly-v2 .sidebar-head,.budgetly-v2 .sidebar-signout,.budgetly-v2 .sidebar-foot { flex-shrink:0; }
+.budgetly-v2 .sidebar-foot { padding:12px 8px; gap:12px; }
+.budgetly-v2 .sidebar-avatar,.budgetly-v2 .sidebar-foot .default-avatar { width:36px; height:36px; flex-shrink:0; }
+.budgetly-v2 .nav-item { transition:background-color .16s,color .16s; }
+.budgetly-v2 .nav-item:hover { transform:none; }
+.budgetly-v2 .nav-item.active::before { content:''; position:absolute; left:0; top:25%; bottom:25%; width:3px; background:currentColor; border-radius:2px; }
+.overview-balance h1 { font-size:30px; overflow-wrap:anywhere; }
+.overview-metrics a { display:grid; gap:8px; min-width:0; color:inherit; }
+.budgetly-v2 .overview-metrics > a { padding:20px 24px; align-content:start; }
+.overview-metrics a strong { font-size:22px; overflow-wrap:anywhere; }
+.overview-shared { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:20px; border-block:1px solid var(--line); }
+.overview-shared > div { display:grid; gap:6px; min-width:0; }
+.overview-shared strong { font-size:22px; overflow-wrap:anywhere; }
+.overview-shared a,.record-link { color:var(--accent-text); }
+.overview-page .empty-state { padding:12px 0; text-align:left; }
+.overview-page .empty-state > span { display:none; }
+.overview-page .empty-state h4 { font-size:14px; }
+.overview-page .empty-state p { font-size:12px; }
+.record-link { display:block; min-width:0; }
+.record-link:hover,.overview-metrics a:hover { text-decoration:underline; text-underline-offset:4px; }
+.record-total { border:0; padding:0; background:transparent; color:inherit; text-align:left; cursor:pointer; }
+.record-total:hover { text-decoration:underline; text-underline-offset:4px; }
+.chart-records { display:flex; flex-wrap:wrap; gap:12px; margin-top:16px; }
+.chart-records a { color:var(--accent-text); }
+.legend-list > a { display:flex; align-items:center; gap:8px; font-size:13px; padding-block:6px; }
+.legend-list > a strong { margin-left:auto; }
+.calendar-indicators { display:none; }
+.milestone { display:flex; align-items:center; gap:12px; padding:16px; border:1px solid var(--line); border-radius:8px; background:var(--surface-soft); }
+.milestone > div { flex:1; }
+.milestone-toast { position:fixed; z-index:110; left:50%; bottom:100px; transform:translateX(-50%); width:min(420px,calc(100% - 32px)); box-shadow:0 8px 28px #0002; }
+.milestone strong,.milestone small { display:block; }
+.milestone > svg { color:var(--positive); animation:milestone-pop .4s ease-out; }
+@keyframes milestone-pop { from { transform:scale(.7); opacity:0; } to { transform:scale(1); opacity:1; } }
+.ledger-entry.just-saved { box-shadow:inset 3px 0 var(--positive); background:var(--accent-soft); animation:saved-row .4s ease-out; }
+@keyframes saved-row { from { opacity:.6; } to { opacity:1; } }
+.budgetly-v2 :is(.ledger-entry,.wallet-card,.goal-card,.debt-card,.budget-card,.metric-card,.panel,.message-row),.nav-item.active svg { animation:none; }
+.progress > *, .mini-track > * { transition:width .3s ease-out; animation:none; }
+.settings-section[open] > :not(summary) { animation:budgetly-fade .18s ease-out; }
+@media(max-width:820px) {
+  .budgetly-v2 .sidebar { z-index:80; bottom:0; top:0; height:100dvh; padding-bottom:max(16px,env(safe-area-inset-bottom)); overflow:hidden; }
+  .budgetly-v2 .sidebar-scrim { z-index:75; }
+  .budgetly-v2 .nav-list { flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; }
+  .budgetly-v2 .sidebar-foot { margin-top:0; }
+  .modal-layer .modal-backdrop { display:flex; justify-content:center; align-items:flex-end; padding:12px 0 0; }
+  .modal-layer .modal { width:100%; max-height:calc(var(--dialog-height,100dvh) - 12px); border-radius:16px 16px 0 0; padding-bottom:env(safe-area-inset-bottom); margin:0; }
+  .modal-layer .modal-body { padding-inline:16px; }
+  .modal-layer .field input,.modal-layer .field select,.modal-layer .field textarea { font-size:16px; }
+  .modal-layer .segment-control { width:100%; }
+  .modal-layer .segment-control button { font-size:13px; gap:4px; }
+  .modal-layer .segment-control svg { width:16px; flex-shrink:0; }
+  .calendar-day .day-money { display:none; }
+  .calendar-indicators { display:flex; gap:4px; justify-content:center; }
+  .calendar-indicators i { width:5px; height:5px; border-radius:50%; background:var(--muted); }
+  .calendar-indicators .income { background:var(--positive); }
+  .calendar-indicators .expense { background:var(--negative); }
+  .calendar-day { min-width:0; min-height:64px; }
+  .calendar-weekdays span { font-size:12px; }
+  .day-tx { min-width:0; flex-wrap:wrap; gap:8px; }
+  .day-tx strong { overflow-wrap:anywhere; }
+  .overview-shared { padding:16px; }
+  .budgetly-v2 .overview-metrics > a { padding:16px 12px; }
+}
+@media(max-width:420px) {
+  .budgetly-v2 .overview-metrics > a:last-child { grid-column:1/-1; display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--line); }
+}
+:root[data-motion=reduced] *, :root[data-motion=off] * { animation:none!important; scroll-behavior:auto!important; }
+:root[data-motion=reduced] * { transition-duration:.01s!important; }
+:root[data-motion=off] * { transition:none!important; }
+:root[data-motion=reduced] :is(button,a), :root[data-motion=off] :is(button,a) { scale:1!important; }

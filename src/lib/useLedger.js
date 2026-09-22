@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, readCached } from './api'
+import { readView, writeView } from './viewState'
 
 const PAGE_SIZE = 100
 
@@ -9,14 +10,18 @@ export function ledgerQuery(filters, offset = 0) {
   if (filters.month) query.set('month', filters.month)
   if (filters.category) query.set('category_id', filters.category)
   if (filters.scope) query.set('scope', filters.scope)
+  if (filters.exclude_opening) query.set('exclude_opening', 'true')
+  if (filters.date_from) query.set('date_from', filters.date_from)
+  if (filters.date_to) query.set('date_to', filters.date_to)
   return query.toString()
 }
 
-export default function useLedger(endpoint, filters, refreshKey, poll = false) {
+export default function useLedger(endpoint, filters, refreshKey, poll = false, viewKey) {
   const filterKey = ledgerQuery(filters)
-  const [pagination, setPagination] = useState({ key: filterKey, offset: 0 })
+  const [pagination, setPagination] = useState(() => viewKey ? readView(`${viewKey}:page`, {key:filterKey,offset:0}) : {key:filterKey,offset:0})
   if (pagination.key !== filterKey) setPagination({ key: filterKey, offset: 0 })
   const offset = pagination.key === filterKey ? pagination.offset : 0
+  useEffect(() => { if (viewKey) writeView(`${viewKey}:page`, {key:filterKey,offset}) }, [viewKey, filterKey, offset])
   const path = `${endpoint}?${ledgerQuery(filters, offset)}`
   const [result, setResult] = useState(() => ({ path, rows: readCached(path), error: '' }))
   const [retry, setRetry] = useState(0)

@@ -16,8 +16,29 @@ beforeAll(() => {
 afterEach(cleanup)
 beforeEach(() => {
   vi.clearAllMocks()
+  sessionStorage.clear()
   ledger.rows = []
   api.mockImplementation(path=>Promise.resolve(path==='/api/shared/wallets'?[wallet]:[]))
+})
+
+it('recovers a shared draft after closing and navigating away, then clears it only after a successful save', async () => {
+  let view = render(<MemoryRouter><SharedTransactions/></MemoryRouter>)
+  await screen.findByText('Household')
+  fireEvent(window,new window.Event('budgetly:add-shared-transaction'))
+  fireEvent.change(screen.getByLabelText('Amount'),{target:{value:'4.5'}})
+  fireEvent.change(screen.getByLabelText('Description'),{target:{value:'Draft purchase'}})
+  fireEvent.click(screen.getByRole('button',{name:'Cancel',exact:true}))
+  view.unmount()
+  view = render(<MemoryRouter><SharedTransactions/></MemoryRouter>)
+  await screen.findByText('Household')
+  fireEvent(window,new window.Event('budgetly:add-shared-transaction'))
+  expect(screen.getByLabelText('Amount')).toHaveValue(4.5)
+  expect(screen.getByLabelText('Description')).toHaveValue('Draft purchase')
+  expect(screen.getByText('After: KWD 45.500')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button',{name:'Save',exact:true}))
+  await waitFor(()=>expect(screen.queryByRole('button',{name:'Save',exact:true})).not.toBeInTheDocument())
+  expect(sessionStorage.getItem('flowbudget_shared_tx_draft_undefined')).toBeNull()
+  view.unmount()
 })
 
 it('moves an existing shared record to another editable wallet and preserves its revision', async () => {

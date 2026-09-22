@@ -6,6 +6,7 @@ import { api, jsonBody } from '../lib/api'
 import { tutorialSteps } from '../lib/tutorialSteps'
 import { useScrollLock } from '../lib/scrollLock'
 import Modal from './Modal'
+import { effectiveMotion } from '../lib/comfort'
 
 function targetFor(step) {
   if (step.section) {
@@ -43,6 +44,7 @@ export default function AppTutorial({ request }) {
   const [running, setRunning] = useState(false)
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState('')
+  const [mode, setMode] = useState('quick')
   const tour = useRef(null)
   const opened = useRef(false)
   const busy = useRef(false)
@@ -79,7 +81,10 @@ export default function AppTutorial({ request }) {
 
   useEffect(() => {
     mounted.current = true
+    const back = event => { if (tour.current) { event.preventDefault(); tour.current.destroy() } }
+    window.addEventListener('budgetly:back', back)
     return () => {
+      window.removeEventListener('budgetly:back', back)
       mounted.current = false
       controller.current?.abort()
       tour.current?.destroy()
@@ -97,7 +102,7 @@ export default function AppTutorial({ request }) {
     try {
       const { driver } = await import('driver.js')
       if (aborter.signal.aborted) return
-      const steps = tutorialSteps(user.role === 'admin')
+      const steps = tutorialSteps(user.role === 'admin', mode)
       let outcome = 'skipped'
       let moving = false
       let refreshTimer
@@ -119,7 +124,7 @@ export default function AppTutorial({ request }) {
         moving = false
       }
       const instance = driver({
-        animate: !window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+        animate: effectiveMotion() === 'full',
         allowScroll: true, disableActiveInteraction: true, overlayClickBehavior: () => {},
         showProgress: true, progressText: '{{current}} of {{total}}', popoverClass: 'budgetly-tour',
         nextBtnText: 'Next', prevBtnText: 'Back', doneBtnText: 'Finish',
@@ -158,7 +163,8 @@ export default function AppTutorial({ request }) {
   return <Modal open={welcome} onClose={skip} title="Welcome to Budgetly">
     <div className="tutorial-welcome stack gap-16">
       <Compass size={40} aria-hidden="true"/>
-      <p>Take a guided tour of your wallets, transactions and the tools that help you plan. Go at your own pace, or skip and return from Overview anytime.</p>
+      <p>Start with a wallet, a transaction and your balance. You can return to the full walkthrough anytime.</p>
+      <div className="segment-control" role="group" aria-label="Tutorial length"><button type="button" aria-pressed={mode === 'quick'} className={mode === 'quick' ? 'active' : ''} onClick={() => setMode('quick')}>Quick start</button><button type="button" aria-pressed={mode === 'full'} className={mode === 'full' ? 'active' : ''} onClick={() => setMode('full')}>Full walkthrough</button></div>
       {error && <p className="form-error" role="alert">{error}</p>}
       <div className="modal-actions"><button className="button ghost" disabled={starting} onClick={skip}>Skip for now</button><button className="button primary" disabled={starting} onClick={start}>{starting ? 'Opening...' : 'Start tutorial'}</button></div>
     </div>

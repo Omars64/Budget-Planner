@@ -8,6 +8,8 @@ import DateTimeField from './DateTimeField'
 import { api, jsonBody, money } from '../lib/api'
 import VoiceInputButton from './VoiceInputButton'
 import { applyVoiceTransaction } from '../lib/voiceInput'
+import BalancePreview from './BalancePreview'
+import { transactionSaved } from '../lib/savedFeedback'
 
 const blank = () => ({ type: 'expense', amount: '', description: '', notes: '', date: dateInput(), wallet_id: '', transfer_wallet_id: '', category_id: '', recurring_frequency: 'none', recurring_until: '' })
 
@@ -74,9 +76,10 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
       category_id: form.type === 'transfer' || !form.category_id ? null : Number(form.category_id),
       date: saveDate(form.date), recurring_until: form.recurring_frequency === 'none' ? null : form.recurring_until,
     }
-      await api(editing ? `/api/transactions/${editing.id}` : '/api/transactions', { method: editing ? 'PUT' : 'POST', ...jsonBody(payload) })
-      sessionStorage.removeItem(draftKey)
-      onSaved?.()
+      const saved = await api(editing ? `/api/transactions/${editing.id}` : '/api/transactions', { method: editing ? 'PUT' : 'POST', ...jsonBody(payload) })
+      if (!editing) { try { sessionStorage.removeItem(draftKey) } catch { /* Saving must not depend on device storage. */ } }
+      transactionSaved(saved)
+      onSaved?.(saved)
     } catch (err) { setError(err.message) }
     finally { submitting.current = false; setBusy(false) }
   }
@@ -99,7 +102,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
         <label className="field"><span>{form.type === 'transfer' ? 'From wallet' : 'Wallet'}</span><select required value={form.wallet_id} onChange={e => set('wallet_id',e.target.value)}>{wallets.map(w => <option key={w.id} value={w.id}>{w.name} · {money(w.balance,settings.currency)}</option>)}</select></label>
         {form.type === 'transfer' ? <label className="field"><span>To wallet</span><select required value={form.transfer_wallet_id} onChange={e => set('transfer_wallet_id',e.target.value)}><option value="">Select destination</option>{wallets.filter(w => String(w.id) !== String(form.wallet_id)).map(w => <option key={w.id} value={w.id}>{w.name} · {money(w.balance,settings.currency)}</option>)}</select></label> : <label className="field"><span>Category</span><select value={form.category_id} onChange={e => set('category_id',e.target.value)}><option value="">Uncategorized</option>{visibleCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
       </div>
-      <div className="balance-preview"><span>Current: {money(wallets.find(w=>String(w.id)===String(form.wallet_id))?.balance,settings.currency)}</span>{!editing&&<strong>After: {money(Number(wallets.find(w=>String(w.id)===String(form.wallet_id))?.balance||0)+(form.type==='income'?1:-1)*Number(form.amount||0),settings.currency)}</strong>}</div>
+      <BalancePreview wallet={wallets.find(w=>String(w.id)===String(form.wallet_id))} draft={form} editing={editing} currency={settings.currency}/>
       <details className="form-options" open={advanced} onToggle={e => setAdvanced(e.currentTarget.open)}><summary>More options</summary><div className="stack gap-16">
         <label className="field"><span><Repeat2 size={15}/> Repeat</span><select value={form.recurring_frequency} onChange={e => set('recurring_frequency',e.target.value)}><option value="none">Does not repeat</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select></label>
         {form.recurring_frequency !== 'none' && <label className="field"><span>Repeat until</span><input required min={form.date.slice(0,10)} type="date" value={form.recurring_until} onChange={e => set('recurring_until',e.target.value)} /></label>}

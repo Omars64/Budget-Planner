@@ -193,6 +193,7 @@ def test_overview_excludes_owned_shared_and_incoming_shared_records(workspace):
     assert overview['income'] == 100 and overview['opening_funds'] == 100
     assert overview['earned_income'] == 0 and overview['expense'] == 10
     assert overview['total_balance'] == 140
+    assert overview['shared'] == {'balance': 450, 'wallet_count': 1}
     assert [w['name'] for w in overview['wallets']] == ['Private']
     assert overview['budgets'][0]['spent'] == 10
     assert sum(c['value'] for c in overview['category_spending']) == 10
@@ -201,7 +202,29 @@ def test_overview_excludes_owned_shared_and_incoming_shared_records(workspace):
     assert next(w for w in client.get('/api/wallets').json() if w['id'] == shared['id'])['is_shared']
     actor['user'] = member
     assert client.get('/api/dashboard?month=2026-09').json()['total_balance'] == 0
+    assert client.get('/api/dashboard?month=2026-09').json()['shared'] == {'balance': 450, 'wallet_count': 1}
     assert client.get('/api/shared/transactions').json()
+
+
+def test_drilldowns_match_displayed_spending_and_shared_access(workspace):
+    client, db, actor, owner, member = workspace
+    private = wallet(client, 'Private', -50)
+    shared = wallet(client, 'Shared', 100)
+    share(db, shared['id'], owner, member)
+    for row in db.query(Transaction).all(): row.date = datetime(2026, 9, 1)
+    category = Category(user_id=owner.id, name='Food', kind='expense')
+    db.add(category); db.commit()
+    client.post('/api/transactions', json=tx(private['id'], amount=4))
+    client.post('/api/transactions', json=tx(private['id'], amount=6, category_id=category.id))
+    report = client.get('/api/dashboard?month=2026-09').json()
+    for item in report['category_spending']:
+        records = client.get('/api/transactions',params={'scope':'personal','month':'2026-09','tx_type':'expense','category_id':item['id'],'exclude_opening':True}).json()
+        assert sum(row['amount'] for row in records) == item['value']
+        assert all(not row['is_opening_balance'] for row in records)
+    actor['user'] = member
+    assert client.get('/api/dashboard').json()['shared']['balance'] == 100
+    db.query(WalletShare).delete(); db.commit()
+    assert client.get('/api/dashboard').json()['shared'] == {'balance':0,'wallet_count':0}
 
 
 def test_shared_wallet_correction_updates_both_balances_and_attribution(workspace):

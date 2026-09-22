@@ -8,6 +8,20 @@ vi.mock('./api', () => ({ api: vi.fn(), readCached: () => undefined }))
 beforeEach(() => vi.clearAllMocks())
 afterEach(cleanup)
 
+test('restores the page for the same account and filter after navigating away', async () => {
+  sessionStorage.clear()
+  api.mockResolvedValue(Array.from({length:101},(_,id)=>({id})))
+  const first = renderHook(()=>useLedger('/api/transactions',defaultLedgerFilters,0,false,'personal:41'))
+  await waitFor(()=>expect(first.result.current.hasMore).toBe(true))
+  act(()=>first.result.current.next())
+  await waitFor(()=>expect(first.result.current.page).toBe(2))
+  first.unmount()
+  const restored = renderHook(()=>useLedger('/api/transactions',defaultLedgerFilters,0,false,'personal:41'))
+  expect(restored.result.current.page).toBe(2)
+  const other = renderHook(()=>useLedger('/api/transactions',defaultLedgerFilters,0,false,'personal:42'))
+  expect(other.result.current.page).toBe(1)
+})
+
 test('paginates and resets to the first page when a wallet or month changes', async () => {
   api.mockResolvedValue(Array.from({length: 101}, (_, id) => ({ id })))
   const { result, rerender } = renderHook(({ filters }) => useLedger('/api/transactions', filters, 0), {initialProps: {filters: defaultLedgerFilters}})

@@ -1,6 +1,6 @@
-export function tutorialSteps(isAdmin) {
+export function tutorialSteps(isAdmin, mode = 'full') {
   const steps = [
-    { route: '/', selector: '.overview-balance, .hero-strip', title: 'Your overview', description: 'See your available money in personal wallets. Shared balances stay in Shared Transactions. Change the month to review income, expenses and budget progress for that period.' },
+    { route: '/', selector: '.overview-balance, .hero-strip', title: 'Your overview', description: 'See your personal balance, money in and spending. Shared balances appear separately. Choose a month or select a total to review its records.' },
     { route: '/wallets', selector: '.section-row .button.primary', title: 'Start with a wallet', description: 'Use Add wallet for cash, a bank account or a card. Enter its starting balance once. Transactions then update that balance. Each wallet also has Edit and Delete actions.' },
     { route: '/transactions', selector: '[data-tour="add-transaction"]', title: 'Record a transaction', description: 'This opens a new transaction. Choose Expense, Income or Transfer, enter the amount and description, then pick the wallet and category. The round + in Android does the same job.' },
     { route: '/transactions', selector: '.ledger-filter-bar', title: 'Find the right records', description: 'Use the filter icon to choose wallets, month, type, search text and sort order, then Apply filters. The month arrows move between months. Remove a filter to show more records.' },
@@ -27,5 +27,6 @@ export function tutorialSteps(isAdmin) {
     { route: '/admin', section: 'User management', title: 'Manage user access', description: 'Review accounts, disable compromised access, reset passwords carefully and keep administrator access limited to trusted operators.' },
   )
   steps.push({ route: '/', selector: '[data-tour="tutorial"]', title: 'You are ready', description: 'Start with a wallet and your first transaction. This Tutorial button is always available on Overview whenever you want another walkthrough.' })
+  if (mode === 'quick') return [steps[1], steps[2], steps[0], steps.at(-1)]
   return steps
 }

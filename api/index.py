@@ -128,7 +128,7 @@ async def lifespan(application: FastAPI):
     yield
 
 
-app = FastAPI(title="Budgetly API", version="3.8.7", lifespan=lifespan)
+app = FastAPI(title="Budgetly API", version="4.1.0", lifespan=lifespan)
 
 
 @app.middleware("http")
@@ -788,7 +788,7 @@ def transactions(
     if search: q = q.filter(or_(Transaction.description.ilike(f"%{search}%"), Transaction.notes.ilike(f"%{search}%")))
     if tx_type != "all": q = q.filter(Transaction.type == tx_type)
     if wallet_id: q = q.filter(or_(Transaction.wallet_id == wallet_id, Transaction.transfer_wallet_id == wallet_id))
-    if category_id: q = q.filter(Transaction.category_id == category_id)
+    if category_id is not None: q = q.filter(Transaction.category_id.is_(None) if category_id == 0 else Transaction.category_id == category_id)
     if date_from: q = q.filter(Transaction.date >= date_from)
     if date_to: q = q.filter(Transaction.date <= date_to)
     return [tx_payload(t) for t in filter_ledger(q, options).limit(limit).all()]
@@ -855,7 +855,7 @@ def budgets(user: User = Depends(current_user), db: Session = Depends(get_db)):
     result = []
     for b in db.query(Budget).filter(Budget.user_id == user.id).order_by(Budget.created_at).all():
         spent = budget_spent(db, b); remaining = max(0.0, float(b.limit_amount) - spent)
-        result.append({"id": b.id, "name": b.name, "category_id": b.category_id, "category_name": b.category.name if b.category else None, "limit_amount": float(b.limit_amount), "period": b.period, "start_date": b.start_date.isoformat(), "notify_threshold": b.notify_threshold, "spent": spent, "remaining": round(remaining, 3), "progress": round(min(spent / float(b.limit_amount) * 100, 999), 1)})
+        result.append({"id": b.id, "name": b.name, "category_id": b.category_id, "category_name": b.category.name if b.category else None, "limit_amount": float(b.limit_amount), "period": b.period, "start_date": b.start_date.isoformat(), "notify_threshold": b.notify_threshold, "spent": spent, "remaining": round(remaining, 3), "progress": round(min(spent / float(b.limit_amount) * 100, 999), 1), "records_from": budget_period_start(db, b, ledger_today()).isoformat() + 'T00:00:00'})
     return result
 
 
@@ -980,12 +980,18 @@ def dashboard(month: Optional[str] = None, user: User = Depends(current_user), d
     expense = sum(float(t.amount) for t in month_txs if t.type == "expense" and not t.is_opening_balance)
     wallets_rows = db.query(Wallet).filter(Wallet.id.in_(personal_wallet_ids(db, user.id)), Wallet.archived.is_(False)).all()
     total_balance = sum(wallet_balance(db, w) for w in wallets_rows)
+    from .extensions import shared_wallet_ids
+    shared_ids = shared_wallet_ids(db, user)
+    shared_rows = db.query(Wallet).filter(Wallet.id.in_(shared_ids), Wallet.archived.is_(False)).all() if shared_ids else []
+    for owner_id in {w.user_id for w in shared_rows} - {user.id}:
+        materialize_recurring_for_user(db, owner_id)
+    shared_balance = round(sum(wallet_balance(db, w) for w in shared_rows), 3)
     category_map = {}
     for t in month_txs:
         if t.type == "expense" and not t.is_opening_balance:
             name = t.category.name if t.category else "Uncategorized"
             color = t.category.color if t.category else "#94a3b8"
-            category_map.setdefault(name, {"name": name, "value": 0.0, "color": color})["value"] += float(t.amount)
+            category_map.setdefault(t.category_id, {"id": t.category_id or 0, "name": name, "value": 0.0, "color": color})["value"] += float(t.amount)
     days = []
     days_in_month = month_calendar.monthrange(current.year, current.month)[1]
     today = ledger_today()
@@ -998,11 +1004,12 @@ def dashboard(month: Optional[str] = None, user: User = Depends(current_user), d
     as_of = today if (current.year, current.month) == (today.year, today.month) else (next_month - timedelta(days=1)).date()
     for b in db.query(Budget).filter(Budget.user_id == user.id, Budget.start_date <= as_of).all():
         spent = budget_spent(db, b, as_of=as_of, personal_only=True)
-        bdata.append({"id": b.id, "name": b.name, "period": b.period, "spent": spent, "limit_amount": float(b.limit_amount), "progress": round(spent / float(b.limit_amount) * 100, 1)})
+        bdata.append({"id": b.id, "name": b.name, "period": b.period, "spent": spent, "limit_amount": float(b.limit_amount), "progress": round(spent / float(b.limit_amount) * 100, 1), "category_id": b.category_id, "records_from": budget_period_start(db, b, as_of).isoformat() + 'T00:00:00', "records_to": as_of.isoformat() + 'T23:59:59.999999'})
     return {
         "month": current.strftime("%Y-%m"), "total_balance": round(total_balance, 3), "income": round(income, 3), "expense": round(expense, 3), "net": round(income - expense - opening_debt, 3),
         "opening_funds": round(opening, 3), "opening_debt": round(opening_debt, 3), "earned_income": round(income - opening, 3),
         "wallets": [{"id": w.id, "name": w.name, "balance": wallet_balance(db, w)} for w in wallets_rows],
+        "shared": {"balance": shared_balance, "wallet_count": len(shared_rows)},
         "cashflow": days, "category_spending": sorted(category_map.values(), key=lambda x: x["value"], reverse=True),
         "recent_transactions": [tx_payload(t) for t in recent], "budgets": bdata,
     }
@@ -1019,7 +1026,7 @@ def analytics(months: int = Query(6, ge=1, le=24), user: User = Depends(current_
         while m <= 0: m += 12; y -= 1
         start = datetime(y, m, 1); end = datetime(y + (m == 12), 1 if m == 12 else m + 1, 1)
         txs = personal.filter(Transaction.date >= start, Transaction.date < end).all()
-        rows.append({"month": start.strftime("%b"), "income": round(sum(float(t.amount) for t in txs if t.type == "income"), 3), "expense": round(sum(float(t.amount) for t in txs if t.type == "expense" and not t.is_opening_balance), 3)})
+        rows.append({"month": start.strftime("%b"), "month_key": start.strftime("%Y-%m"), "income": round(sum(float(t.amount) for t in txs if t.type == "income"), 3), "expense": round(sum(float(t.amount) for t in txs if t.type == "expense" and not t.is_opening_balance), 3)})
     category_rows = db.query(Category).filter(Category.user_id == user.id, Category.kind == "expense").all()
     category_totals = dict(personal.with_entities(Transaction.category_id, func.sum(Transaction.amount)).filter(
         Transaction.type == "expense", Transaction.is_opening_balance.is_(False)
@@ -1027,9 +1034,9 @@ def analytics(months: int = Query(6, ge=1, le=24), user: User = Depends(current_
     categories = []
     for c in category_rows:
         total = category_totals.get(c.id, 0) or 0
-        if total: categories.append({"name": c.name, "value": round(float(total), 3), "color": c.color})
+        if total: categories.append({"id": c.id, "name": c.name, "value": round(float(total), 3), "color": c.color})
     if category_totals.get(None):
-        categories.append({"name": "Uncategorized", "value": round(float(category_totals[None]), 3), "color": "#94a3b8"})
+        categories.append({"id": 0, "name": "Uncategorized", "value": round(float(category_totals[None]), 3), "color": "#94a3b8"})
     return {"trend": rows, "categories": sorted(categories, key=lambda x: x["value"], reverse=True)}
 
 

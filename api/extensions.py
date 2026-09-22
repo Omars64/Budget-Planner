@@ -329,7 +329,7 @@ def shared_transactions(search: str = "", tx_type: str = "all", wallet_id: Optio
     for owner_id in {w.user_id for w in db.query(Wallet).filter(Wallet.id.in_(ids)).all()}: materialize_recurring_for_user(db, owner_id)
     q = db.query(Transaction).options(joinedload(Transaction.wallet), joinedload(Transaction.transfer_wallet), joinedload(Transaction.category)).filter(or_(Transaction.wallet_id.in_(ids), Transaction.transfer_wallet_id.in_(ids)))
     if search: q = q.filter(or_(Transaction.description.ilike(f"%{search}%"), Transaction.notes.ilike(f"%{search}%")))
-    if category_id: q = q.filter(Transaction.category_id == category_id)
+    if category_id is not None: q = q.filter(Transaction.category_id.is_(None) if category_id == 0 else Transaction.category_id == category_id)
     if tx_type != "all":
         if tx_type not in {"income", "expense", "transfer"}: raise HTTPException(422, "Invalid transaction type")
         q = q.filter(Transaction.type == tx_type)

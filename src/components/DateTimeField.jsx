@@ -10,7 +10,9 @@ function PickerDialog({ title, onClose, children }) {
     const node = ref.current
     const previous = document.activeElement
     node.showModal()
-    return () => { node.close(); if (previous?.isConnected) previous.focus() }
+    const back = event => { if (!event.defaultPrevented && node.open) { event.preventDefault(); node.dispatchEvent(new window.Event('cancel', {cancelable:true})) } }
+    window.addEventListener('budgetly:back', back)
+    return () => { window.removeEventListener('budgetly:back', back); node.close(); if (previous?.isConnected) previous.focus() }
   }, [])
   return createPortal(<dialog ref={ref} className="transaction-picker" aria-label={title}
     onCancel={e => { e.preventDefault(); onClose() }}

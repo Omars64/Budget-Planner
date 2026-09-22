@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { celebrateMilestone } from '../components/Milestone'
 import { CalendarClock, Coins, HandCoins, Pencil, Plus, Target, Trash2 } from 'lucide-react'
 import { api, jsonBody, money } from '../lib/api'
 import { useApp } from '../App'
@@ -7,10 +8,24 @@ import ProgressBar from '../components/ProgressBar'
 import EmptyState from '../components/EmptyState'
 import { displayDate } from '../lib/time'
 export default function GoalsDebts(){
+ const {user} = useApp()
+ const recording = useRef(false)
  const {settings,refreshKey,refresh,notify,confirm}=useApp(); const [goals,setGoals]=useState([]); const [debts,setDebts]=useState([]); const [mode,setMode]=useState(null); const [action,setAction]=useState(null); const [form,setForm]=useState({}); const [amount,setAmount]=useState(''); const [error,setError]=useState(''); const load=(signal)=>Promise.all([api('/api/goals',{signal}),api('/api/debts',{signal})]).then(([g,d])=>{if(!signal?.aborted){setGoals(g);setDebts(d)}}); useEffect(()=>{const controller=new window.AbortController();setError('');load(controller.signal).catch(err=>{if(!controller.signal.aborted)setError(err.message)});return()=>controller.abort()},[refreshKey]); const fmt=v=>money(v,settings.currency,settings.compact_numbers)
  const openGoal=g=>{setForm(g?{...g,target_amount:g.target_amount,current_amount:g.current_amount,deadline:g.deadline||''}:{name:'',target_amount:'',current_amount:0,deadline:'',icon:'target',color:'#0a4173'});setAction(null);setMode('goal')}; const openDebt=d=>{setForm(d?{...d,principal:d.principal,remaining:d.remaining,due_date:d.due_date||''}:{name:'',kind:'owed',principal:'',remaining:'',interest_rate:0,due_date:'',minimum_payment:0,notes:''});setAction(null);setMode('debt')}
  const submit=async e=>{e.preventDefault();try{const goal=mode==='goal';const payload=goal?{...form,target_amount:Number(form.target_amount),current_amount:Number(form.current_amount||0),deadline:form.deadline||null}:{...form,principal:Number(form.principal),remaining:Number(form.remaining === '' || form.remaining == null ? form.principal : form.remaining),interest_rate:Number(form.interest_rate||0),minimum_payment:Number(form.minimum_payment||0),due_date:form.due_date||null};await api(mode==='goal'&&form.id?`/api/goals/${form.id}`:mode==='debt'&&form.id?`/api/debts/${form.id}`:goal?'/api/goals':'/api/debts',{method:form.id?'PUT':'POST',...jsonBody(payload)});setMode(null);refresh();notify(form.id?(goal?'Goal updated':'Debt updated'):(goal?'Goal created':'Debt added'))}catch(err){notify(err.message,'error')}}
- const contribute=async()=>{if(!amount)return;try{await api(action.type==='goal'?`/api/goals/${action.id}/contribute`:`/api/debts/${action.id}/pay`,{method:'POST',...jsonBody({amount:Number(amount)})});setAction(null);setAmount('');refresh();notify(action.type==='goal'?'Goal contribution recorded':'Debt payment recorded')}catch(err){notify(err.message,'error')}}
+ const contribute=async()=>{
+   if (!(Number(amount)>0) || recording.current) return
+   recording.current = true
+   try {
+     const isGoal = action.type === 'goal'
+     const previous = (isGoal ? goals : debts).find(item => item.id === action.id)
+     const result = await api(isGoal ? `/api/goals/${action.id}/contribute` : `/api/debts/${action.id}/pay`,{method:'POST',...jsonBody({amount:Number(amount)})})
+     const completed = previous && (isGoal ? previous.current_amount < previous.target_amount && result.current_amount >= previous.target_amount : previous.remaining > 0 && result.remaining === 0)
+     if (completed) celebrateMilestone(`${user?.id}:${action.type}:${action.id}`,isGoal ? 'Goal reached' : 'Debt cleared',action.name)
+     setAction(null);setAmount('');refresh();notify(isGoal?'Goal contribution recorded':'Debt payment recorded')
+   } catch(err) { notify(err.message,'error') }
+   finally { recording.current = false }
+ }
  const remove=async(type,id)=>{if(!await confirm(`Delete this ${type}?`))return;try{await api(`/api/${type==='goal'?'goals':'debts'}/${id}`,{method:'DELETE'});refresh();notify(`${type==='goal'?'Goal':'Debt'} deleted`)}catch(err){notify(err.message,'error')}}
  const cardActions=(type,item)=><div className="button-row"><button className="row-icon" onClick={()=>type==='goal'?openGoal(item):openDebt(item)} aria-label={`Edit ${item.name}`}><Pencil size={16}/></button><button className="row-icon danger" onClick={()=>remove(type,item.id)} aria-label={`Delete ${item.name}`}><Trash2/></button></div>
  return <div className="stack gap-22">{error&&<div className="form-error" role="alert">{error}<button className="button ghost small" onClick={()=>refresh()}>Retry</button></div>}<section className="section-intro glass"><div><p className="eyebrow">Forward motion</p><h2>Save toward good things. Finish what you owe.</h2><p className="muted">Goals and debts live side by side so progress stays visible.</p></div><div className="button-row"><button className="button ghost" onClick={()=>openDebt()}><HandCoins/>Add debt</button><button className="button primary" onClick={()=>openGoal()}><Plus/>New goal</button></div></section>

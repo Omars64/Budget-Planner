@@ -91,6 +91,7 @@ test('new accounts can skip; completed accounts can replay the tutorial', async 
 test('tour starts, finishes without financial writes, and can start again', async () => {
   vi.spyOn(window.HTMLElement.prototype, 'getClientRects').mockReturnValue([{ width: 100, height: 100 }])
   const view = render(<MemoryRouter><div className="page-wrap" data-tour-page="/"><section className="hero-strip">Overview</section></div><AppTutorial request={0}/></MemoryRouter>)
+  fireEvent.click(await screen.findByRole('button', { name: 'Full walkthrough' }))
   fireEvent.click(await screen.findByRole('button', { name: 'Start tutorial' }))
   await waitFor(() => expect(state.driver?.drive).toHaveBeenCalledWith(0))
   act(() => state.config.onDoneClick())
@@ -109,4 +110,21 @@ test('saved completion does not auto-open and admin steps are role-specific', as
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   expect(tutorialSteps(false).some(step => step.route === '/admin')).toBe(false)
   expect(tutorialSteps(true).some(step => step.route === '/admin')).toBe(true)
+})
+
+test('quick start covers wallet, transaction and balance without the full settings tour', () => {
+  const quick = tutorialSteps(true, 'quick')
+  expect(quick).toHaveLength(4)
+  expect(quick.map(step=>step.route)).toEqual(['/wallets','/transactions','/','/'])
+})
+
+test('dialogs are portalled outside an animated page and Android Back closes only the top dialog', () => {
+  const parent = vi.fn(), child = vi.fn()
+  const {container} = render(<div className="page-wrap" style={{transform:'translateX(50px)'}}><Modal open title="Outer" onClose={parent}/><Modal open title="Inner" onClose={child}/></div>)
+  expect(container.querySelector('[role="dialog"]')).toBeNull()
+  const event = new window.Event('budgetly:back',{cancelable:true})
+  window.dispatchEvent(event)
+  expect(event.defaultPrevented).toBe(true)
+  expect(child).toHaveBeenCalledOnce()
+  expect(parent).not.toHaveBeenCalled()
 })

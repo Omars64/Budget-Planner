@@ -13,6 +13,7 @@ import { biometricSupported, disableBiometric, setupBiometric, cancelBiometric, 
 import DeviceSignInPreference from '../components/DeviceSignInPreference'
 import PasswordInput from '../components/PasswordInput'
 import AccentPicker from '../components/AccentPicker'
+import ComfortSettings from '../components/ComfortSettings'
 
 const imageData = async (file, maxBytes, label) => {
   if (!file) throw new Error(`Choose a ${label.toLowerCase()} first`)
@@ -76,7 +77,7 @@ export default function Settings(){
   return <div className="settings-grid">
     <AccountSecurity/>
     <TrashPanel/>
-    <SettingsSection title="Personal preferences" className=""><form onSubmit={save} className="stack gap-16">
+    <SettingsSection title="Personal preferences" className=""><ComfortSettings/><form onSubmit={save} className="stack gap-16">
       <label className="field"><span>Appearance</span><select aria-label="Appearance" value={form.theme || 'light'} onChange={e => setForm({...form, theme:e.target.value})}><option value="light">Light</option><option value="dark">Dark</option><option value="system">Match device</option></select></label>
       <label className="field"><span>Font</span><select aria-label="Font" value={form.font_family || 'system'} onChange={e => setForm({...form, font_family:e.target.value})}><option value="system">System</option><option value="arial">Arial</option><option value="georgia">Georgia</option><option value="verdana">Verdana</option></select></label>
       <label className="field"><span>Text colour</span><select aria-label="Text colour" value={form.text_color || 'ink'} onChange={e => setForm({...form, text_color:e.target.value})}><option value="ink">Ink</option><option value="charcoal">Charcoal</option><option value="forest">Forest</option></select></label>

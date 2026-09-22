@@ -5,6 +5,11 @@ export default function ResizablePanels() {
     const selector = '.page-wrap .panel, .page-wrap .wallet-card, .page-wrap .metric-card, .page-wrap .goal-card, .page-wrap .debt-card, .page-wrap .budget-card'
     const handles = new Map()
     const attach = () => {
+      if (window.matchMedia('(max-width: 820px), (pointer: coarse)').matches) {
+        handles.forEach((handle,panel) => { handle.remove(); panel.classList.remove('resizable-panel'); ['width','height','grid-column','justify-self'].forEach(key => panel.style.removeProperty(key)) })
+        handles.clear()
+        return
+      }
       for (const [panel, handle] of handles) if (!panel.isConnected) { handle.remove(); handles.delete(panel) }
       document.querySelectorAll(selector).forEach(panel => {
         if (handles.has(panel)) return
@@ -46,7 +51,8 @@ export default function ResizablePanels() {
     attach()
     const observer = new MutationObserver(attach)
     observer.observe(document.body, { childList:true, subtree:true })
-    return () => { observer.disconnect(); handles.forEach((handle,panel) => { handle.remove(); panel.classList.remove('resizable-panel') }) }
+    window.addEventListener('resize', attach)
+    return () => { observer.disconnect(); window.removeEventListener('resize', attach); handles.forEach((handle,panel) => { handle.remove(); panel.classList.remove('resizable-panel') }) }
   }, [])
   return null
 }
