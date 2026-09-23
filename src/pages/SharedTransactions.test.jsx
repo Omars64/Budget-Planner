@@ -17,6 +17,7 @@ afterEach(cleanup)
 beforeEach(() => {
   vi.clearAllMocks()
   sessionStorage.clear()
+  localStorage.clear()
   ledger.rows = []
   api.mockImplementation(path=>Promise.resolve(path==='/api/shared/wallets'?[wallet]:[]))
 })

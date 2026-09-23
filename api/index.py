@@ -37,6 +37,7 @@ from .models import BankMessage, MessageKey
 from .reliability_models import AccountSession
 from .timekeeping import ledger_iso, now as ledger_now, today as ledger_today
 from .ledger_filters import ledger_options, filter_ledger
+from ._version import VERSION
 from .ledger_accounting import personal_wallet_ids, personal_records, opening_amount, set_opening_balance, migrate_opening_balances, require_regular_transaction
 
 APP_SECRET = os.getenv("APP_SECRET", "flowbudget-dev-secret-change-me")
@@ -128,7 +129,7 @@ async def lifespan(application: FastAPI):
     yield
 
 
-app = FastAPI(title="Budgetly API", version="4.1.0", lifespan=lifespan)
+app = FastAPI(title="Budgetly API", version=VERSION, lifespan=lifespan)
 
 
 @app.middleware("http")
@@ -838,15 +839,17 @@ def update_transaction(item_id: int, payload: TransactionIn, request: Request, u
 
 
 @app.delete("/api/transactions/{item_id}", status_code=204)
-def delete_transaction(item_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def delete_transaction(item_id: int, undo: bool = False, user: User = Depends(current_user), db: Session = Depends(get_db)):
     row = db.query(Transaction).filter(Transaction.id == item_id, Transaction.user_id == user.id).first()
     if not row: raise HTTPException(404, "Transaction not found")
     require_regular_transaction(row)
     save_recovery(db, user, user, f"Deleted transaction: {row.description}")
     from .recovery import trash
-    trash(db, row, user, 'transaction')
+    deleted = trash(db, row, user, 'transaction')
     db.query(Transaction).filter(Transaction.user_id == user.id, Transaction.recurring_parent_id == item_id).delete()
     db.delete(row); db.commit()
+    if undo:
+        return JSONResponse({'trash_id': deleted.id})
 
 
 @app.get("/api/budgets")

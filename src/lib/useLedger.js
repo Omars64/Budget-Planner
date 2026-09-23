@@ -36,9 +36,9 @@ export default function useLedger(endpoint, filters, refreshKey, poll = false, v
       setBusy(true)
       try {
         const rows = await api(path, { signal: controller.signal })
-        if (!controller.signal.aborted) setResult({ path, rows, error: '' })
+        if (!controller.signal.aborted) setResult({ path, rows, error: '', updatedAt: Date.now() })
       } catch (error) {
-        if (!controller.signal.aborted) setResult(previous => ({ path, rows: previous.path === path && ![401, 403].includes(error.status) ? previous.rows : undefined, error: error.message }))
+        if (!controller.signal.aborted) setResult(previous => ({ path, rows: previous.path === path && ![401, 403].includes(error.status) ? previous.rows : undefined, updatedAt: previous.path === path ? previous.updatedAt : undefined, error: error.message }))
       } finally {
         pending = false
         if (!controller.signal.aborted) setBusy(false)
@@ -47,12 +47,14 @@ export default function useLedger(endpoint, filters, refreshKey, poll = false, v
     const timer = setTimeout(sync, 180)
     const interval = poll ? setInterval(sync, 5000) : null
     window.addEventListener('focus', sync)
+    window.addEventListener('online', sync)
     document.addEventListener('visibilitychange', sync)
     return () => {
       controller.abort()
       clearTimeout(timer)
       if (interval) clearInterval(interval)
       window.removeEventListener('focus', sync)
+      window.removeEventListener('online', sync)
       document.removeEventListener('visibilitychange', sync)
     }
   }, [path, refreshKey, retry, poll])
@@ -63,6 +65,7 @@ export default function useLedger(endpoint, filters, refreshKey, poll = false, v
     loading: !current.rows && !current.error,
     busy: busy || result.path !== path,
     error: current.error,
+    updatedAt: current.updatedAt,
     hasMore: (current.rows?.length || 0) > PAGE_SIZE,
     page: offset / PAGE_SIZE + 1,
     previous: () => setPagination({ key: filterKey, offset: Math.max(0, offset - PAGE_SIZE) }),

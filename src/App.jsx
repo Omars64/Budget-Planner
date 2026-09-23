@@ -165,12 +165,12 @@ export default function App() {
   const [refreshKey, setRefreshKey] = useState(0)
   const [toast, setToast] = useState(null)
 
-  const notify = useCallback((message, type = 'success') => {
-    setToast({ id: Date.now(), message, type })
+  const notify = useCallback((message, type = 'success', action = null) => {
+    setToast({ id: Date.now(), message, type, action })
   }, [])
   useEffect(() => {
     if (!toast) return undefined
-    const timer = window.setTimeout(() => setToast(null), 5000)
+    const timer = window.setTimeout(() => setToast(null), toast.action ? 15000 : 5000)
     return () => window.clearTimeout(timer)
   }, [toast])
   const refresh = useCallback(() => setRefreshKey(v => v + 1), [])
@@ -266,6 +266,6 @@ export default function App() {
       </Suspense>
     </AppShell>
     {confirmation}
-    <AnimatePresence>{toast && <motion.div role={toast.type === 'error' ? 'alert' : 'status'} className={`toast ${toast.type}`} initial={{ opacity: 0, y: -18, scale: .96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -12 }}>{toast.message}</motion.div>}</AnimatePresence>
+    <AnimatePresence>{toast && <motion.div role={toast.type === 'error' ? 'alert' : 'status'} className={`toast ${toast.type}`} initial={{ opacity: 0, y: -18, scale: .96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -12 }}>{toast.message}{toast.action && <button className="toast-action" onClick={() => {const action=toast.action;setToast(null);void action.run().catch(err=>notify(err.message,'error'))}}>{toast.action.label}</button>}</motion.div>}</AnimatePresence>
   </AppContext.Provider>
 }

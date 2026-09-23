@@ -15,6 +15,51 @@ from api.models import Budget, Category, Transaction, User, Wallet, WalletShare
 from api.seed import demo_seed_enabled, seed_database
 
 
+def test_transaction_undo_is_exact_idempotent_and_owner_scoped(workspace):
+    client, db, actor, owner, member = workspace
+    personal = wallet(client, 'Undo wallet', 10)
+    created = client.post('/api/transactions', json=tx(personal['id'], amount=2)).json()
+    deleted = client.delete(f"/api/transactions/{created['id']}?undo=true")
+    assert deleted.status_code == 200, deleted.text
+    trash_id = deleted.json()['trash_id']
+    actor['user'] = member
+    assert client.post(f'/api/trash/{trash_id}/restore').status_code == 404
+    actor['user'] = owner
+    restored = client.post(f'/api/trash/{trash_id}/restore')
+    assert restored.status_code == 200, restored.text
+    assert client.post(f'/api/trash/{trash_id}/restore').json()['already_restored']
+    assert db.query(Transaction).filter_by(wallet_id=personal['id'], is_opening_balance=False).count() == 1
+
+
+def test_shared_editor_deletion_cannot_grant_owner_trash_access(workspace):
+    client, db, actor, owner, member = workspace
+    w = wallet(client, 'Editor deletion')
+    share(db, w['id'], owner, member)
+    created = client.post('/api/shared/transactions', json=tx(w['id'])).json()
+    actor['user'] = member
+    response = client.delete(f"/api/shared/transactions/{created['id']}?undo=true")
+    assert response.status_code == 200
+    assert response.json()['trash_id'] is None
+    assert client.get('/api/trash').json() == []
+    actor['user'] = owner
+    item = client.get('/api/trash').json()[0]
+    assert client.post(f"/api/trash/{item['id']}/restore").status_code == 200
+
+
+def test_shared_undo_does_not_duplicate_existing_recurring_children(workspace):
+    client, db, actor, owner, member = workspace
+    w = wallet(client, 'Shared undo')
+    share(db, w['id'], owner, member)
+    created = client.post('/api/shared/transactions', json=tx(w['id'], amount=3)).json()
+    child = Transaction(user_id=owner.id, wallet_id=w['id'], type='expense', amount=3, description='Existing child', date=datetime(2026, 9, 22), recurring_parent_id=created['id'])
+    db.add(child); db.commit()
+    result = client.delete(f"/api/shared/transactions/{created['id']}?undo=true")
+    assert result.status_code == 200, result.text
+    restored = client.post(f"/api/trash/{result.json()['trash_id']}/restore")
+    assert restored.status_code == 200, restored.text
+    assert db.query(Transaction).filter_by(wallet_id=w['id'], is_opening_balance=False).count() == 2
+
+
 def test_existing_schema_upgrade_is_repeatable():
     engine = create_engine('sqlite://')
     Base.metadata.create_all(engine)

@@ -30,6 +30,8 @@ def trash(db, row, actor, kind):
     item = TrashItem(user_id=row.user_id, kind=kind, label=getattr(row,'name',None) or getattr(row,'description',None) or getattr(row,'title','Item'), payload=json.dumps(payload))
     db.add(item)
     audit(db,row.user_id,actor.id,'Moved to Trash',f'{kind}:{row.id}')
+    db.flush()
+    return item
 
 
 @router.get('/api/trash')

@@ -32,11 +32,16 @@ export default function Transactions() {
 
   const fmt = v => money(v, settings.currency, settings.compact_numbers)
   const grouped = useMemo(() => rows.reduce((acc, tx) => { const key = format(displayDate(tx.date), 'yyyy-MM-dd'); (acc[key] ||= []).push(tx); return acc }, {}), [rows])
-  const remove = async tx => { if (!await confirm(`Delete “${tx.description}”?`)) return; try { await api(`/api/transactions/${tx.id}`, {method:'DELETE'}); setSelected(null); refresh(); notify('Transaction deleted') } catch (err) { notify(err.message, 'error') } }
+  const remove = async tx => { if (!await confirm(`Delete “${tx.description}”?`)) return; try {
+    const result = await api(`/api/transactions/${tx.id}?undo=true`, {method:'DELETE'})
+    setSelected(null); refresh()
+    notify('Transaction moved to Trash', 'success', result?.trash_id ? {label:'Undo',run:async()=>{await api(`/api/trash/${result.trash_id}/restore`,{method:'POST'});refresh();notify('Transaction restored')}} : null)
+  } catch (err) { notify(err.message, 'error') } }
 
   return <div className="ledger-page stack">
     <LedgerFilters value={filters} onChange={setFilters} wallets={wallets} categories={categories}><StatementImport wallets={wallets} compact/></LedgerFilters>
     {ledger.error && <div className="form-error" role="alert">{ledger.error}<button className="button ghost small" onClick={ledger.retry}>Retry</button></div>}
+    {ledger.error && ledger.updatedAt && <small className="muted">Showing records last updated at {new Date(ledger.updatedAt).toLocaleTimeString()}.</small>}
 
 
     <section className="transaction-wallets" aria-label="Current wallet balances">

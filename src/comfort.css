@@ -79,3 +79,22 @@ dialog.confirmation-dialog :is(h3,p) { color:inherit; }
 :root[data-motion=reduced] * { transition-duration:.01s!important; }
 :root[data-motion=off] * { transition:none!important; }
 :root[data-motion=reduced] :is(button,a), :root[data-motion=off] :is(button,a) { scale:1!important; }
+.field-error { color:var(--negative); font-size:13px; overflow-wrap:anywhere; }
+.searchable-field { min-width:0; }
+.searchable-field > label { font-size:14px; font-weight:600; color:var(--muted); }
+.searchable-field select { width:100%; min-width:0; max-width:100%; }
+.transaction-templates { margin-block:0; }
+.transaction-templates > div { padding-top:12px; }
+.connection-status { padding:10px 16px; background:var(--surface); color:var(--text); border-bottom:1px solid var(--line); overflow-wrap:anywhere; }
+.shared-management { padding-block:16px; border-bottom:1px solid var(--line); }
+.shared-management .security-item span { overflow-wrap:anywhere; min-width:0; }
+.toast-action { color:inherit; border:1px solid currentColor; border-radius:6px; padding:6px 12px; margin-inline-start:12px; background:transparent; font:inherit; cursor:pointer; }
+.transaction-form [aria-invalid=true] { border-color:var(--negative); }
+.transaction-fields { border:0; padding:0; margin:0; min-inline-size:0; width:100%; }
+@media(max-width:420px) {
+  .budgetly-v2 .overview-metrics > a:last-child { flex-wrap:wrap; gap:8px; }
+  .budgetly-v2 .overview-metrics > a:last-child small { flex-basis:100%; }
+  .modal-layer .modal-head h3 { overflow-wrap:anywhere; }
+  .modal-layer .modal-actions { flex-wrap:wrap; }
+  .modal-layer .modal-actions > button { min-width:0; }
+}

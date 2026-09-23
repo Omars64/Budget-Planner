@@ -40,6 +40,9 @@ export const auth = {
     sessionStorage.removeItem(tokenKey)
     localStorage.removeItem(tokenKey)
     Object.keys(sessionStorage).filter(key => key.startsWith('flowbudget_note_draft_')).forEach(key => sessionStorage.removeItem(key))
+    for (const storage of [sessionStorage, localStorage]) {
+      Object.keys(storage).filter(key => /^flowbudget_(shared_)?tx_draft_/.test(key)).forEach(key => storage.removeItem(key))
+    }
   },
 }
 

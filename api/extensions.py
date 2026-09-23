@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi.responses import JSONResponse
 from .idempotency import reserve
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from pydantic import BaseModel, Field, model_validator
@@ -375,13 +376,18 @@ def update_shared_transaction(transaction_id: int, payload: SharedTransactionIn,
 
 
 @router.delete("/api/shared/transactions/{transaction_id}", status_code=204)
-def delete_shared_transaction(transaction_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def delete_shared_transaction(transaction_id: int, undo: bool = False, user: User = Depends(current_user), db: Session = Depends(get_db)):
     row = db.get(Transaction, transaction_id)
     if not row: raise HTTPException(404, "Transaction not found")
     if not can_edit_wallet(db, user, row.wallet_id) or (row.type == "transfer" and not can_edit_wallet(db, user, row.transfer_wallet_id)): raise HTTPException(403, "You do not have edit access to this transaction")
     require_regular_transaction(row)
     save_recovery(db, db.get(User, row.user_id), user, f"Deleted shared transaction: {row.description}")
     from .recovery import trash
-    trash(db, row, user, 'transaction')
+    deleted = trash(db, row, user, 'transaction')
+    # Shared recurrence children stay recorded; do not duplicate them on restore.
+    deleted.payload = json.dumps({'item': json.loads(deleted.payload)['item']})
     db.query(Transaction).filter(Transaction.recurring_parent_id == row.id).update({Transaction.recurring_parent_id: None}, synchronize_session=False)
-    db.delete(row); db.commit(); return Response(status_code=status.HTTP_204_NO_CONTENT)
+    db.delete(row); db.commit()
+    if undo:
+        return JSONResponse({'trash_id': deleted.id if deleted.user_id == user.id else None})
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

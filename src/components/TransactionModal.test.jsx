@@ -11,7 +11,7 @@ beforeAll(() => {
   window.HTMLDialogElement.prototype.close = function () { this.open = false }
 })
 beforeEach(() => {
-  sessionStorage.clear(); vi.clearAllMocks()
+  sessionStorage.clear(); localStorage.clear(); vi.clearAllMocks()
   sessionStorage.setItem('flowbudget_tx_draft_9', JSON.stringify({ type:'expense', amount:'', description:'', notes:'', date:'2026-09-12T12:00', wallet_id:1, transfer_wallet_id:'', category_id:'', recurring_frequency:'none', recurring_until:'' }))
   api.mockImplementation(path => Promise.resolve(path==='/api/wallets' ? [{id:1,name:'Main Wallet',balance:50}] : path==='/api/categories' ? [{id:2,name:'Food',kind:'expense'}] : {}))
 })
@@ -19,10 +19,9 @@ async function mount() {
   render(<TransactionModal open onClose={vi.fn()} onSaved={vi.fn()}/> )
   await waitFor(() => expect(screen.getByRole('button',{name:'Add transaction'})).toBeEnabled())
 }
-it('removes template controls and explains invalid amounts', async () => {
+it('keeps templates collapsed and explains invalid amounts', async () => {
   await mount()
-  expect(screen.queryByText('Saved template')).not.toBeInTheDocument()
-  expect(screen.queryByText('Save template')).not.toBeInTheDocument()
+  expect(screen.getByText('Templates').closest('details')).not.toHaveAttribute('open')
   expect(screen.getByLabelText('Description').closest('details')).toBeNull()
   expect(api).not.toHaveBeenCalledWith('/api/transaction-templates')
   fireEvent.click(screen.getByRole('button',{name:'Add transaction'}))
