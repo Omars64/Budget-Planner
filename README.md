@@ -228,7 +228,13 @@ Before a real deployment:
 5. Build with `npm run build`.
 6. Verify `/api/health` after deployment.
 
-**Do not rely on SQLite for persistent data on a serverless deployment.** Local SQLite is excellent for development, but a hosted serverless filesystem is not the correct persistence layer for personal financial records. The API returns HTTP 503 when storage initialization fails. It also rejects SQLite on Vercel unless `ALLOW_EPHEMERAL_SQLITE=true` is explicitly set for a temporary preview; use managed Postgres in production.
+**Do not rely on SQLite for persistent data on a serverless deployment.** Local SQLite is excellent for development, but a hosted serverless filesystem is not the correct persistence layer for personal financial records. The API returns HTTP 503 when storage initialization fails and rejects SQLite on Vercel. Use managed PostgreSQL in production.
+
+Alembic migrations run under the database startup lock. Existing installations are checked and stamped at the baseline without replacing account records. Review each new revision and rehearse it on a restored test database before deploying. Use `python -m alembic current` to inspect the current revision locally.
+
+Settings > Backup & restore keeps the original JSON workspace backup and restore. It also offers a date-filtered wallet statement for any accessible personal or shared wallet, including view-only shared access. CSV and XLSX use one record per row with money in, money out, and running balance; PDF and Word present the same columns for reading. Statements cannot be used as JSON restores. Android exports open the native share sheet.
+
+See [disaster recovery](docs/DISASTER_RECOVERY.md) for encrypted off-site backup setup and monthly restore verification, and the [operations runbook](docs/OPERATIONS_RUNBOOK.md) for health checks and incident steps.
 
 For an authorized live collaboration smoke test, set `FLOWBUDGET_ADMIN_PASSWORD` in the current PowerShell 7 session and run `./scripts/verify-production.ps1`. The test creates two temporary accounts, verifies sharing and persistence beyond two minutes, and deletes its test accounts and data afterward. It does not test email delivery.
 
@@ -248,7 +254,7 @@ Transfers are stored as one transaction with a source and destination wallet. Wa
 
 ## Security scope
 
-FlowBudget now uses account login with `admin` and `user` roles. Budget records are scoped to the signed-in user, while admins can manage accounts from the Admin page. For public production use, add rate limiting, email verification/password reset flows and migration tooling before inviting untrusted users.
+FlowBudget uses account login with `admin` and `user` roles. Budget records are scoped to the signed-in user, while admins can manage accounts from the Admin page. The API includes rate limits, email verification/password reset, activity history, and migration tooling. Before inviting real users, configure and test independent backups, monitor production logs, and verify a restore into a separate database.
 
 ## Design notes
 

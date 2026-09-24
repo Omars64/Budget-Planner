@@ -15,7 +15,7 @@ DATABASE_URL_KEYS = (
 )
 DATABASE_URL = next((os.environ[key].strip() for key in DATABASE_URL_KEYS if os.getenv(key, "").strip()), f"sqlite:///{DEFAULT_DB}")
 IS_SQLITE = DATABASE_URL.startswith("sqlite")
-IS_EPHEMERAL_VERCEL_SQLITE = bool(os.getenv("VERCEL")) and IS_SQLITE and os.getenv("ALLOW_EPHEMERAL_SQLITE", "").lower() not in {"1", "true", "yes"}
+IS_EPHEMERAL_VERCEL_SQLITE = bool(os.getenv("VERCEL")) and IS_SQLITE
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = "postgresql+psycopg://" + DATABASE_URL[len("postgres://"):]
 elif DATABASE_URL.startswith("postgresql://"):

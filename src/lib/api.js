@@ -121,3 +121,17 @@ export const money = (value, currency = 'KWD', compact = false) => {
 }
 
 export const jsonBody = value => ({ body: JSON.stringify(value) })
+
+export async function apiFile(path) {
+  const headers = new Headers()
+  if (auth.token) headers.set('Authorization', `Bearer ${auth.token}`)
+  let response
+  try { response = await fetch(`${apiBase}${path}`, { headers }) }
+  catch { throw new Error('Could not reach Budgetly. Check your connection and try again.') }
+  if (!response.ok) {
+    let detail
+    try { detail = (await response.json()).detail } catch { /* Use the status below. */ }
+    throw new Error(typeof detail === 'string' ? detail : `Download failed (${response.status})`)
+  }
+  return response.blob()
+}

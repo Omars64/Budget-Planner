@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 from .database import Base
 
@@ -34,6 +34,11 @@ class Category(Base):
 
 class Transaction(Base):
     __tablename__ = "transactions"
+    __table_args__ = (
+        CheckConstraint("amount > 0", name="ck_transactions_positive_amount"),
+        CheckConstraint("type IN ('income', 'expense', 'transfer')", name="ck_transactions_type"),
+        CheckConstraint("(type = 'transfer' AND transfer_wallet_id IS NOT NULL AND transfer_wallet_id <> wallet_id) OR (type <> 'transfer' AND transfer_wallet_id IS NULL)", name="ck_transactions_transfer_wallet"),
+    )
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     type = Column(String(20), nullable=False)  # income | expense | transfer
@@ -132,7 +137,8 @@ class PendingSignup(Base):
 
 class WalletShare(Base):
     __tablename__ = "wallet_shares"
-    __table_args__ = (UniqueConstraint("wallet_id", "invitee_email", name="uq_wallet_share_email"),)
+    __table_args__ = (UniqueConstraint("wallet_id", "invitee_email", name="uq_wallet_share_email"),
+                      CheckConstraint("permission IN ('view', 'add', 'edit')", name="ck_wallet_shares_permission"))
     id = Column(Integer, primary_key=True)
     wallet_id = Column(Integer, ForeignKey("wallets.id", ondelete="CASCADE"), nullable=False, index=True)
     owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)

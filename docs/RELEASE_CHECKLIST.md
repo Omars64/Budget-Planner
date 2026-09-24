@@ -8,8 +8,9 @@ Keep the existing design. Overview must never offer Add transaction.
 2. Run `npm run version:sync`. Commit package.json, package-lock.json and api/_version.py. Android and the browser read package.json directly.
 3. Run `npm run release:check` (version consistency, lint, frontend tests, production build).
 4. Run `python -m pytest tests` against an isolated test database, never production.
-5. Run `npm run android:sync`, then build the APK with `npm run android:apk -- -Release`.
-6. Stop local Vite preview processes before `npm ci` on Windows; loaded native modules cannot be replaced.
+5. Review Alembic revisions and rehearse them on a restored test database. Confirm a recent external backup and a successful monthly restore test.
+6. Run `npm run android:sync`, then build the APK with `npm run android:apk -- -Release`.
+7. Stop local Vite preview processes before `npm ci` on Windows; loaded native modules cannot be replaced.
 
 ## Browser and physical Android acceptance
 
@@ -24,5 +25,6 @@ Keep the existing design. Overview must never offer Add transaction.
 - Verify shared viewer/add/editor/owner permissions and revoked-access refresh.
 - Goals and debts explicitly track progress only, without silently moving wallet funds.
 - Verify tutorial skip/replay, notification permission, scheduled delivery with app closed, profile visibility and footer clearance.
+- Export owner and shared-viewer wallet statements for a selected date range in CSV, XLSX, PDF, and Word. Check opening/running balances and Android sharing. Confirm JSON restore remains separate.
 
 Do not claim physical-device notification delivery, signed-release success, or deployment unless those checks actually ran. Retain the prior APK/deployment for rollback; do not roll back a database blindly.

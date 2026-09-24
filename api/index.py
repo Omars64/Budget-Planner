@@ -115,8 +115,8 @@ async def lifespan(application: FastAPI):
             # Serialize schema/bootstrap work across simultaneous serverless starts.
             if connection.dialect.name == "postgresql":
                 connection.execute(text("SELECT pg_advisory_xact_lock(61420731)"))
-            Base.metadata.create_all(bind=connection)
-            ensure_note_columns(connection)
+            from .schema_migrations import apply_migrations
+            apply_migrations(connection, ensure_note_columns)
             ensure_indexes(connection)
             with Session(bind=connection) as db:
                 seed_database(db, include_demo=demo_seed_enabled(), commit=False)
@@ -465,8 +465,8 @@ def health(db: Session = Depends(get_db)):
 @app.post("/api/auth/login")
 def login(payload: LoginPayload, request: Request, db: Session = Depends(get_db)):
     from .account_security import limit, audit
-    limit(db, 'login:'+normalize_email(payload.email), 15)
-    limit(db, 'login-ip:'+(request.client.host if request.client else 'unknown'), 100)
+    limit(db, 'login:'+normalize_email(payload.email), 10, 900)
+    limit(db, 'login-ip:'+(request.client.host if request.client else 'unknown'), 50, 900)
     user = db.query(User).filter(User.email == normalize_email(payload.email)).first()
     if not user or not user.active or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")
@@ -714,6 +714,8 @@ def create_wallet(payload: WalletIn, request: Request, user: User = Depends(curr
     set_opening_balance(db, row, payload.initial_balance, user.id)
     result = {**json.loads(payload.model_dump_json()), 'initial_balance': float(payload.initial_balance), 'id': row.id, 'balance': wallet_balance(db, row)}
     if receipt: receipt.response = json.dumps(result)
+    from .account_security import audit
+    audit(db, user.id, user.id, 'Created wallet', f'wallet:{row.id}')
     db.commit()
     return result
 
@@ -724,6 +726,8 @@ def update_wallet(item_id: int, payload: WalletIn, user: User = Depends(current_
     if not row: raise HTTPException(404, "Wallet not found")
     for k, v in payload.model_dump(exclude={'initial_balance'}).items(): setattr(row, k, v)
     set_opening_balance(db, row, payload.initial_balance, user.id)
+    from .account_security import audit
+    audit(db, user.id, user.id, 'Edited wallet', f'wallet:{row.id}')
     db.commit(); db.refresh(row)
     return {**payload.model_dump(), "id": row.id, "balance": wallet_balance(db, row)}
 
@@ -821,6 +825,8 @@ def create_transaction(payload: TransactionIn, request: Request, user: User = De
     row = Transaction(user_id=user.id, recorded_by_id=user.id, **payload.model_dump()); db.add(row); db.flush(); db.refresh(row)
     result = tx_payload(row)
     if receipt: receipt.response = json.dumps(result)
+    from .account_security import audit
+    audit(db, user.id, user.id, 'Added transaction', f'transaction:{row.id}')
     db.commit()
     return result
 
@@ -1082,8 +1088,9 @@ def export_backup(user: User = Depends(current_user), db: Session = Depends(get_
 
 @app.post("/api/backup/restore")
 async def restore_backup(request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    from .account_security import confirmed
+    from .account_security import audit, confirmed, limit
     confirmed(request, db, user)
+    limit(db, f'backup-restore:{user.id}', 10, 3600)
     content_length = request.headers.get("content-length")
     if content_length and content_length.isdigit() and int(content_length) > MAX_BACKUP_BYTES:
         raise HTTPException(413, "This backup is too large to restore")
@@ -1123,6 +1130,7 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
     except (KeyError, TypeError, ValueError):
         raise HTTPException(400, "Backup contains invalid references")
     save_recovery(db, user, user, "Before backup restore")
+    audit(db, user.id, user.id, 'Restored JSON backup', 'workspace')
     # Preserve PIN while replacing budget data.
     pin_hash = setting(db, user.id, "pin_hash")
     clear_budget(db, user.id)

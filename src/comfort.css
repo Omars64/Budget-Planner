@@ -80,6 +80,8 @@ dialog.confirmation-dialog :is(h3,p) { color:inherit; }
 :root[data-motion=off] * { transition:none!important; }
 :root[data-motion=reduced] :is(button,a), :root[data-motion=off] :is(button,a) { scale:1!important; }
 .field-error { color:var(--negative); font-size:13px; overflow-wrap:anywhere; }
+.statement-export { margin-top:20px; padding-top:20px; border-top:1px solid var(--border, #d4dce3); }
+.statement-export h4 { margin:0; font-size:1rem; }
 .searchable-field { min-width:0; }
 .searchable-field > label { font-size:14px; font-weight:600; color:var(--muted); }
 .searchable-field select { width:100%; min-width:0; max-width:100%; }
