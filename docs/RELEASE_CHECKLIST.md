@@ -4,13 +4,26 @@ Keep the existing design. Overview must never offer Add transaction.
 
 ## Automated checks
 
-1. Set `version` and the increasing `androidVersionCode` in package.json only.
+1. Choose the semantic version from all changes since the previous release: fixes only increase Patch; backward-compatible features increase Minor and reset Patch; breaking changes increase Major and reset Minor/Patch. Apply the highest applicable change as part of release work, without waiting for a separate version request. Set `version` and a higher `androidVersionCode` in package.json only; Android's code increases independently of the semantic version.
 2. Run `npm run version:sync`. Commit package.json, package-lock.json and api/_version.py. Android and the browser read package.json directly.
 3. Run `npm run release:check` (version consistency, lint, frontend tests, production build).
 4. Run `python -m pytest tests` against an isolated test database, never production.
 5. Review Alembic revisions and rehearse them on a restored test database. Confirm a recent external backup and a successful monthly restore test.
 6. Run `npm run android:sync`, then build the APK with `npm run android:apk -- -Release`.
 7. Stop local Vite preview processes before `npm ci` on Windows; loaded native modules cannot be replaced.
+
+## Windows dependency installation
+
+Stop the Vite development or preview server in this checkout before reinstalling dependencies. If Node cannot verify the registry certificate on this machine, use the Windows trusted certificate store for the current PowerShell session:
+
+```powershell
+$env:NODE_USE_SYSTEM_CA = '1'
+npm ci --offline=false
+```
+
+Keep TLS certificate verification enabled. Restart the development server only after installation finishes.
+
+The `xcode` dependency has a scoped `uuid` override to 11.1.1 for GHSA-w5hq-g745-h8pq. It retains the CommonJS `uuid.v4()` API used by Xcode tooling. Review this override when upgrading Capacitor or `xcode`, and remove it once the upstream dependency includes a patched compatible version.
 
 ## Browser and physical Android acceptance
 
