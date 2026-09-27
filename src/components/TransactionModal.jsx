@@ -28,6 +28,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
   const [loading, setLoading] = useState(false)
   const [voiceActive, setVoiceActive] = useState(false)
   const [advanced, setAdvanced] = useState(false)
+  const [schedule, setSchedule] = useState(false)
   const submitting = useRef(false)
 
   useEffect(() => {
@@ -36,6 +37,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
     setErrors({})
     setLoading(true)
     setAdvanced(Boolean(editing?.recurring_frequency && editing.recurring_frequency !== 'none'))
+    setSchedule(false)
     const controller = new window.AbortController()
     Promise.all([api('/api/wallets', {signal: controller.signal}), api('/api/categories', {signal: controller.signal})]).then(([w,c]) => {
       if (controller.signal.aborted) return
@@ -70,10 +72,16 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
     e.preventDefault()
     if (submitting.current || loading || voiceActive) return
     const invalid = transactionErrors(form)
+    if (schedule && (form.recurring_frequency !== 'none' || form.recurring_until)) {
+      setError('Scheduled entries must be one-time. Turn off Repeat first.'); setAdvanced(true); return
+    }
     setErrors(invalid)
     if (Object.keys(invalid).length) {
       if (invalid.recurring_until) setAdvanced(true)
       setError(Object.values(invalid)[0]); focusInvalid(e.currentTarget); return
+    }
+    if (schedule && new Date(saveDate(form.date)).getTime() <= Date.now()) {
+      setError('Choose a future date and time to schedule this entry.'); return
     }
     submitting.current = true; setBusy(true); setError('')
     try {
@@ -83,10 +91,10 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
       category_id: form.type === 'transfer' || !form.category_id ? null : Number(form.category_id),
       date: saveDate(form.date), recurring_until: form.recurring_frequency === 'none' ? null : form.recurring_until,
     }
-      const saved = await api(editing ? `/api/transactions/${editing.id}` : '/api/transactions', { method: editing ? 'PUT' : 'POST', ...jsonBody(payload) })
+      const saved = await api(schedule ? '/api/planned-transactions' : editing ? `/api/transactions/${editing.id}` : '/api/transactions', { method: editing ? 'PUT' : 'POST', ...jsonBody(schedule ? {transaction: payload, status: 'scheduled', reminder_enabled: true} : payload) })
       if (!editing) clearDraft(draftKey)
-      transactionSaved(saved)
-      onSaved?.(saved)
+      if (!schedule) transactionSaved(saved)
+      onSaved?.(saved, schedule)
     } catch (err) { setError(err.status === 409 ? 'This transaction changed elsewhere. Your edits are still here. Close and reopen the record to review the latest version before applying them.' : err.message) }
     finally { submitting.current = false; setBusy(false) }
   }
@@ -99,6 +107,8 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
         <button type="button" className={form.type === 'income' ? 'active' : ''} onClick={() => {set('type','income');set('category_id','')}}><ArrowDownLeft size={17}/>Income</button>
         <button type="button" className={form.type === 'transfer' ? 'active' : ''} onClick={() => set('type','transfer')}><ArrowRightLeft size={17}/>Transfer</button>
       </div>
+      {!editing && <div className="segment-control" aria-label="Recording time"><button type="button" className={!schedule ? 'active' : ''} onClick={() => setSchedule(false)}>Record now</button><button type="button" className={schedule ? 'active' : ''} onClick={() => setSchedule(true)}>Schedule</button></div>}
+      {schedule && <p className="form-note">Recorded on the next app visit after this time, or by daily maintenance. It will not affect balances before then.</p>}
 
       <VoiceInputButton disabled={busy || loading || !open} onActiveChange={setVoiceActive} onTranscript={applyVoice} onError={message => setError(message)}/>
       {!editing && <TransactionTemplates userId={user.id} scope="personal" draft={form} disabled={busy || loading} onApply={item => {
@@ -119,7 +129,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
         <SearchableSelect label={form.type === 'transfer' ? 'From wallet' : 'Wallet'} value={form.wallet_id} onChange={v => set('wallet_id',v)} disabled={busy || loading} error={errors.wallet_id} recentKey={`budgetly:recent:${user.id}:wallets`} options={wallets.map(w => ({value:w.id,label:`${w.name} · ${money(w.balance,settings.currency)}`}))}/>
         {form.type === 'transfer' ? <SearchableSelect label="To wallet" value={form.transfer_wallet_id} onChange={v => set('transfer_wallet_id',v)} disabled={busy || loading} error={errors.transfer_wallet_id} options={wallets.filter(w => String(w.id) !== String(form.wallet_id)).map(w => ({value:w.id,label:w.name}))}/> : <SearchableSelect label="Category" placeholder="Uncategorized" value={form.category_id} onChange={v => set('category_id',v)} disabled={busy || loading} recentKey={`budgetly:recent:${user.id}:categories`} options={visibleCategories.map(c => ({value:c.id,label:c.name}))}/>}
       </div>
-      <BalancePreview wallet={wallets.find(w=>String(w.id)===String(form.wallet_id))} draft={form} editing={editing} currency={settings.currency}/>
+      {!schedule && <BalancePreview wallet={wallets.find(w=>String(w.id)===String(form.wallet_id))} draft={form} editing={editing} currency={settings.currency}/>}
       <details className="form-options" open={advanced} onToggle={e => setAdvanced(e.currentTarget.open)}><summary>More options</summary><div className="stack gap-16">
         {!editing && <button className="button ghost small" type="button" disabled={busy || voiceActive} onClick={() => {clearDraft(draftKey);setForm({...blank(),wallet_id:wallets[0]?.id || ''});setErrors({});setError('')}}>Discard draft</button>}
         <label className="field"><span><Repeat2 size={15}/> Repeat</span><select value={form.recurring_frequency} onChange={e => set('recurring_frequency',e.target.value)}><option value="none">Does not repeat</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select></label>
@@ -128,7 +138,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
         <label className="field"><span>Notes (optional)</span><textarea rows="3" value={form.notes} onChange={e => set('notes', e.target.value)}/></label>
       </div></details>
       {error && <div className="form-error" role="alert">{error}</div>}
-      <div className="modal-actions"><button type="button" className="button ghost" disabled={busy} onClick={onClose}>Cancel</button><button className="button primary" disabled={busy || loading || voiceActive}>{loading ? 'Loading wallets...' : busy ? 'Saving…' : editing ? 'Save changes' : 'Add transaction'}</button></div>
+      <div className="modal-actions"><button type="button" className="button ghost" disabled={busy} onClick={onClose}>Cancel</button><button className="button primary" disabled={busy || loading || voiceActive}>{loading ? 'Loading wallets...' : busy ? 'Saving…' : editing ? 'Save changes' : schedule ? 'Schedule entry' : 'Add transaction'}</button></div>
       </fieldset>
     </form>
   </Modal>

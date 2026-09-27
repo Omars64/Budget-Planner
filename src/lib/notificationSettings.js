@@ -10,6 +10,9 @@ export const notificationSettingKeys = [
   'quiet_start',
   'quiet_end',
   'reminder_topics',
+  'upcoming_reminders_enabled',
+  'upcoming_reminder_days',
+  'upcoming_reminder_time',
 ]
 
 const allowedIntervals = [1, 2, 3, 4, 6, 8, 12, 24]
@@ -39,6 +42,9 @@ const normalize = (source = {}) => {
     quiet_start: typeof source.quiet_start === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(source.quiet_start) ? source.quiet_start : '22:00',
     quiet_end: typeof source.quiet_end === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(source.quiet_end) ? source.quiet_end : '08:00',
     reminder_topics: topics.length ? topics : ['daily'],
+    upcoming_reminders_enabled: Boolean(source.upcoming_reminders_enabled),
+    upcoming_reminder_days: [0,1,2,3,7,14].includes(Number(source.upcoming_reminder_days)) ? Number(source.upcoming_reminder_days) : 1,
+    upcoming_reminder_time: typeof source.upcoming_reminder_time === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(source.upcoming_reminder_time) ? source.upcoming_reminder_time : '09:00',
   }
 }
 

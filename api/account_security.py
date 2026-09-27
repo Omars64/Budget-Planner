@@ -93,6 +93,8 @@ def signout_all(user=Depends(current_user), db=Depends(get_db)):
 
 @router.post('/api/account/signout', status_code=204)
 def signout(request: Request, user=Depends(current_user), db=Depends(get_db)):
+    from .workspace import count_feedback_event
+    count_feedback_event(db, user.id)
     row=db.get(AccountSession,request.state.session_id)
     row.revoked=True;db.commit()
 

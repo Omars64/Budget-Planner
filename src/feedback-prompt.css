@@ -1,0 +1,1 @@
+.feedback-stars{display:flex;justify-content:center;gap:5px}.feedback-stars button{border:0;background:transparent;color:var(--accent-text,var(--accent));width:46px;height:46px;display:grid;place-items:center;border-radius:6px}.feedback-stars button:hover,.feedback-stars button:focus-visible{background:var(--surface-soft);outline:2px solid var(--accent)}

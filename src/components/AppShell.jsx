@@ -1,6 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { BarChart3, CalendarDays, Gauge, LayoutDashboard, LogOut, Menu, Mountain, PanelLeftOpen, Plus, ReceiptText, Settings, Share2, ShieldCheck, Target, WalletCards, X } from 'lucide-react'
+import { BarChart3, CalendarClock, CalendarDays, Gauge, LayoutDashboard, LogOut, Menu, Mountain, PanelLeftOpen, Plus, ReceiptText, Settings, Share2, ShieldCheck, Target, WalletCards, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useApp } from '../App'
 import TransactionModal from './TransactionModal'
@@ -19,6 +19,7 @@ const nav = [
   ['/', 'Overview', LayoutDashboard],
   ['/ask-ai', 'Ask Budgetly', CircleHelp],
   ['/transactions', 'Transactions', ReceiptText],
+  ['/upcoming', 'Upcoming', CalendarClock],
   ['/shared-transactions', 'Shared Transactions', Share2],
   ['/calendar', 'Calendar', CalendarDays],
   ['/analytics', 'Analytics', BarChart3],
@@ -99,7 +100,7 @@ export default function AppShell({ children }) {
       <button onClick={() => setMenu(true)}><Menu size={19}/><span>More</span></button>
     </nav>
 
-    <TransactionModal open={txModal} onClose={() => setTxModal(false)} onSaved={() => { setTxModal(false); refresh(); notify('Transaction saved') }} />
+    <TransactionModal open={txModal} onClose={() => setTxModal(false)} onSaved={(_, scheduled) => { setTxModal(false); refresh(); notify(scheduled ? 'Transaction scheduled' : 'Transaction saved') }} />
     <AppTutorial request={tutorialRequest}/>
     <Milestone/>
   </div>

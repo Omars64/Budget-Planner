@@ -84,7 +84,9 @@ def cron_auth(request):
 @router.get('/api/maintenance/daily')
 def maintenance(request:Request,db=Depends(get_db)):
     cron_auth(request)
-    return daily_snapshots(db)
+    from .planned import post_due
+    posted = post_due(db)
+    return {**daily_snapshots(db), 'scheduled_transactions_posted': posted}
 
 
 @router.post('/api/admin/operations/backup')

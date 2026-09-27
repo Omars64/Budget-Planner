@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from .database import Base, IS_EPHEMERAL_VERCEL_SQLITE, SessionLocal, engine, get_db
-from .models import AppSetting, Budget, Category, Debt, Goal, PendingSignup, Transaction, User, Wallet, WalletShare, Note, NoteFolder, NoteShare, Feedback
+from .models import AppSetting, Budget, Category, Debt, Goal, PendingSignup, Transaction, PlannedTransaction, User, Wallet, WalletShare, Note, NoteFolder, NoteShare, Feedback
 from .schemas import (
     BudgetIn, CategoryIn, ContributionIn, DebtIn, GoalIn, LoginPayload, PinPayload,
     SettingsPayload, TransactionIn, UserCreate, UserUpdate, WalletIn,
@@ -57,6 +57,7 @@ BACKUP_COLLECTION_LIMITS = {
     "wallets": 200, "categories": 500, "transactions": 20_000,
     "budgets": 2_000, "goals": 2_000, "debts": 2_000,
     "wallet_shares": 2_000, "note_folders": 500, "notes": 2_000,
+    "planned_transactions": 20_000,
 }
 
 
@@ -205,6 +206,8 @@ def user_payload(user: User):
 def issue_token(user: User) -> str:
     sid = secrets.token_urlsafe(32)
     with SessionLocal() as db:
+        from .workspace import count_feedback_event
+        count_feedback_event(db, user.id)
         db.add(AccountSession(id=sid, user_id=user.id, verified_at=utc_now()))
         db.commit()
     return auth_serializer.dumps({"user_id": user.id, "sid": sid, "role": user.role, "credential": hashlib.sha256(user.password_hash.encode()).hexdigest()})
@@ -475,7 +478,9 @@ def login(payload: LoginPayload, request: Request, db: Session = Depends(get_db)
 
 
 @app.get("/api/auth/me")
-def me(user: User = Depends(current_user)):
+def me(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    from .planned import post_due
+    post_due(db)
     return user_payload(user)
 
 @app.delete("/api/account", status_code=204)
@@ -486,6 +491,7 @@ def delete_account(request: Request, user: User = Depends(current_user), db: Ses
     if user.role == 'admin' and db.query(User).filter_by(role='admin', active=True).count() <= 1:
         raise HTTPException(409, 'Add another active administrator before deleting your account.')
     db.query(Transaction).filter_by(user_id=user.id).update({Transaction.recurring_parent_id: None})
+    db.query(PlannedTransaction).filter(or_(PlannedTransaction.owner_id == user.id, PlannedTransaction.created_by_id == user.id)).delete(synchronize_session=False)
     email = normalize_email(user.email)
     db.query(WalletShare).filter(or_(WalletShare.owner_id == user.id, WalletShare.member_user_id == user.id, WalletShare.invitee_email == email)).delete(synchronize_session=False)
     note_ids = db.query(Note.id).filter(Note.user_id == user.id)
@@ -737,13 +743,15 @@ def delete_wallet(item_id: int, delete_transactions: bool = False, user: User = 
     row = db.query(Wallet).filter(Wallet.id == item_id, Wallet.user_id == user.id).first()
     if not row: raise HTTPException(404, "Wallet not found")
     used = db.query(Transaction).filter(Transaction.user_id == user.id, or_(Transaction.wallet_id == item_id, Transaction.transfer_wallet_id == item_id)).first()
-    if used and not delete_transactions: raise HTTPException(409, "Confirm deletion of this wallet and its linked transactions")
+    planned = db.query(PlannedTransaction).filter(PlannedTransaction.owner_id == user.id, or_(PlannedTransaction.wallet_id == item_id, PlannedTransaction.transfer_wallet_id == item_id)).first()
+    if (used or planned) and not delete_transactions: raise HTTPException(409, "Confirm deletion of this wallet and its linked transactions or upcoming entries")
     save_recovery(db, user, user, f"Deleted wallet: {row.name}")
     from .recovery import trash
     trash(db, row, user, 'wallet')
     set_setting(db, user.id, "workspace_initialized", "true")
     linked = db.query(Transaction.id).filter(Transaction.user_id == user.id, or_(Transaction.wallet_id == item_id, Transaction.transfer_wallet_id == item_id))
     db.query(Transaction).filter(Transaction.user_id == user.id, Transaction.recurring_parent_id.in_(linked)).update({Transaction.recurring_parent_id: None}, synchronize_session=False)
+    db.query(PlannedTransaction).filter(PlannedTransaction.owner_id == user.id, or_(PlannedTransaction.wallet_id == item_id, PlannedTransaction.transfer_wallet_id == item_id)).delete(synchronize_session=False)
     db.query(Transaction).filter(Transaction.user_id == user.id, or_(Transaction.wallet_id == item_id, Transaction.transfer_wallet_id == item_id)).delete(synchronize_session=False)
     db.query(WalletShare).filter_by(wallet_id=item_id).delete()
     db.delete(row); db.commit()
@@ -776,6 +784,7 @@ def delete_category(item_id: int, user: User = Depends(current_user), db: Sessio
     from .recovery import trash
     trash(db, row, user, 'category')
     db.query(Transaction).filter_by(user_id=user.id, category_id=item_id).update({'category_id':None})
+    db.query(PlannedTransaction).filter_by(owner_id=user.id, category_id=item_id).update({'category_id': None})
     db.query(Budget).filter_by(user_id=user.id, category_id=item_id).update({'category_id':None})
     db.delete(row); db.commit()
 
@@ -852,6 +861,7 @@ def delete_transaction(item_id: int, undo: bool = False, user: User = Depends(cu
     save_recovery(db, user, user, f"Deleted transaction: {row.description}")
     from .recovery import trash
     deleted = trash(db, row, user, 'transaction')
+    db.query(PlannedTransaction).filter_by(posted_transaction_id=item_id).update({'posted_transaction_id': None})
     db.query(Transaction).filter(Transaction.user_id == user.id, Transaction.recurring_parent_id == item_id).delete()
     db.delete(row); db.commit()
     if undo:
@@ -1071,6 +1081,7 @@ def export_backup(user: User = Depends(current_user), db: Session = Depends(get_
         "wallets": [{c.name: getattr(w, c.name) for c in Wallet.__table__.columns if c.name not in {"created_at", "user_id"}} for w in db.query(Wallet).filter(Wallet.user_id == user.id).all()],
         "categories": [{c.name: getattr(x, c.name) for c in Category.__table__.columns if c.name not in {"created_at", "user_id"}} for x in db.query(Category).filter(Category.user_id == user.id).all()],
         "transactions": [{**{c.name: getattr(t, c.name) for c in Transaction.__table__.columns if c.name not in {"created_at", "user_id"}}, "date": t.date.isoformat(), "recurring_until": t.recurring_until.isoformat() if t.recurring_until else None} for t in db.query(Transaction).filter(Transaction.user_id == user.id).all()],
+        "planned_transactions": [{"id": p.id, "wallet_id": p.wallet_id, "transfer_wallet_id": p.transfer_wallet_id, "category_id": p.category_id, "type": p.type, "amount": float(p.amount), "description": p.description, "notes": p.notes, "due_at": p.due_at.isoformat(), "status": p.status, "reminder_enabled": p.reminder_enabled, "posted_transaction_id": p.posted_transaction_id} for p in db.query(PlannedTransaction).filter(PlannedTransaction.owner_id == user.id).all()],
         "budgets": [{**{c.name: getattr(b, c.name) for c in Budget.__table__.columns if c.name not in {"created_at", "user_id"}}, "start_date": b.start_date.isoformat()} for b in db.query(Budget).filter(Budget.user_id == user.id).all()],
         "goals": [{**{c.name: getattr(g, c.name) for c in Goal.__table__.columns if c.name not in {"created_at", "user_id"}}, "deadline": g.deadline.isoformat() if g.deadline else None} for g in db.query(Goal).filter(Goal.user_id == user.id).all()],
         "debts": [{**{c.name: getattr(d, c.name) for c in Debt.__table__.columns if c.name not in {"created_at", "user_id"}}, "due_date": d.due_date.isoformat() if d.due_date else None} for d in db.query(Debt).filter(Debt.user_id == user.id).all()],
@@ -1123,6 +1134,9 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
         for tx in data.get("transactions", []):
             if tx["wallet_id"] not in wallet_ids or (tx.get("transfer_wallet_id") and tx["transfer_wallet_id"] not in wallet_ids) or (tx.get("category_id") and tx["category_id"] not in category_ids):
                 raise ValueError("Invalid transaction reference")
+        for plan in data.get('planned_transactions', []):
+            if plan['wallet_id'] not in wallet_ids or (plan.get('transfer_wallet_id') and plan['transfer_wallet_id'] not in wallet_ids) or (plan.get('category_id') and plan['category_id'] not in category_ids):
+                raise ValueError('Invalid planned transaction reference')
         for budget in data.get("budgets", []):
             if budget.get("category_id") and budget["category_id"] not in category_ids: raise ValueError("Invalid category reference")
         for share in data.get("wallet_shares", []):
@@ -1168,6 +1182,16 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
         db.add(row); db.flush()
         if old_id is not None:
             tx_map[old_id] = row.id
+    for p in data.get('planned_transactions', []):
+        payload = {k: v for k, v in p.items() if k not in {'id', 'owner_id', 'created_by_id', 'error', 'created_at'}}
+        payload['wallet_id'] = wallet_map[payload['wallet_id']]
+        payload['transfer_wallet_id'] = wallet_map.get(payload.get('transfer_wallet_id'))
+        payload['category_id'] = category_map.get(payload.get('category_id'))
+        payload['posted_transaction_id'] = tx_map.get(payload.get('posted_transaction_id'))
+        payload['due_at'] = datetime.fromisoformat(payload['due_at'])
+        if payload['status'] == 'posted' and not payload['posted_transaction_id']:
+            payload['status'] = 'planned'
+        db.add(PlannedTransaction(owner_id=user.id, created_by_id=user.id, **payload))
     for b in data.get("budgets", []):
         b = {k: v for k, v in dict(b).items() if k not in {"id", "user_id"}}
         b["start_date"] = date.fromisoformat(b["start_date"])

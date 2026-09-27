@@ -61,6 +61,31 @@ class Transaction(Base):
     category = relationship("Category")
 
 
+class PlannedTransaction(Base):
+    __tablename__ = "planned_transactions"
+    __table_args__ = (
+        CheckConstraint("amount > 0", name="ck_planned_positive_amount"),
+        CheckConstraint("type IN ('income', 'expense', 'transfer')", name="ck_planned_type"),
+        CheckConstraint("status IN ('planned', 'scheduled', 'posted', 'failed')", name="ck_planned_status"),
+    )
+    id = Column(Integer, primary_key=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    created_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    wallet_id = Column(Integer, ForeignKey("wallets.id"), nullable=False, index=True)
+    transfer_wallet_id = Column(Integer, ForeignKey("wallets.id"), nullable=True)
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
+    type = Column(String(20), nullable=False)
+    amount = Column(Numeric(16, 3), nullable=False)
+    description = Column(String(160), nullable=False)
+    notes = Column(Text, nullable=False, default="")
+    due_at = Column(DateTime, nullable=False, index=True)
+    status = Column(String(20), nullable=False, default="planned", index=True)
+    reminder_enabled = Column(Boolean, nullable=False, default=True)
+    posted_transaction_id = Column(Integer, ForeignKey("transactions.id"), nullable=True, unique=True)
+    error = Column(String(240), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utc_now)
+
+
 class Budget(Base):
     __tablename__ = "budgets"
     id = Column(Integer, primary_key=True)

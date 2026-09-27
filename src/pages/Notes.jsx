@@ -48,7 +48,8 @@ export default function Notes() {
   const { user, notify, confirm } = useApp()
   const draftKey = `flowbudget_note_draft_${user.id}`
   const [restored] = useState(() => { try { const value = JSON.parse(sessionStorage.getItem(draftKey)); return value && typeof value.title === 'string' ? { ...blankNote('all'), ...value } : null } catch { return null } })
-  const [notes, setNotes] = useState([]); const [folders, setFolders] = useState([]); const [folder, setFolder] = useState('all'); const [search, setSearch] = useState(''); const [draft, setDraft] = useState(restored); const [dirty, setDirty] = useState(Boolean(restored)); const [busy, setBusy] = useState(false); const [loading, setLoading] = useState(true); const [error, setError] = useState(''); const [folderEdit, setFolderEdit] = useState(null); const [sharing, setSharing] = useState(false); const [historyOpen, setHistoryOpen] = useState(false); const [history, setHistory] = useState([]); const [invite, setInvite] = useState({ email: '', permission: 'view' }); const [toolsOpen, setToolsOpen] = useState(false); const fileRef = useRef(null)
+  const [notes, setNotes] = useState([]); const [folders, setFolders] = useState([]); const [folder, setFolder] = useState('all'); const [search, setSearch] = useState(''); const [draft, setDraft] = useState(restored); const [dirty, setDirty] = useState(Boolean(restored)); const [busy, setBusy] = useState(false); const [loading, setLoading] = useState(true); const [error, setError] = useState(''); const [folderEdit, setFolderEdit] = useState(null); const [sharing, setSharing] = useState(false); const [historyOpen, setHistoryOpen] = useState(false); const [history, setHistory] = useState([]); const [invite, setInvite] = useState({ email: '', permission: 'view' }); const [toolsOpen, setToolsOpen] = useState(false); const fileRef = useRef(null); const draftRef = useRef(draft); const busyRef = useRef(false)
+  draftRef.current = draft
 
   useEffect(() => { try { if (dirty && draft) sessionStorage.setItem(draftKey, JSON.stringify(draft)); else sessionStorage.removeItem(draftKey) } catch { /* Draft protection is best effort. */ } }, [draftKey, dirty, draft])
   const load = async () => { const [n, f] = await Promise.all([api('/api/notes'), api('/api/note-folders')]); setNotes(n); setFolders(f); setLoading(false); return n }
@@ -58,17 +59,33 @@ export default function Notes() {
     sync(); const timer = setInterval(sync, 10000); window.addEventListener('focus', sync); return () => { cancelled = true; clearInterval(timer); window.removeEventListener('focus', sync) }
   }, [dirty])
   const visible = useMemo(() => notes.filter(note => { const inFolder = folder === 'shared' ? !note.is_owner : note.is_owner && (folder === 'all' || (folder === 'pinned' ? note.pinned : String(note.folder_id) === folder)); const haystack = `${note.title} ${note.content} ${(note.checklist || []).map(item => item.text).join(' ')}`.toLowerCase(); return inFolder && haystack.includes(search.toLowerCase()) }), [notes, folder, search])
-  const leave = async () => !dirty || await confirm('Discard unsaved changes to this note?')
+  const leave = async () => !dirty || await save()
   const select = async note => { if (!await leave()) return; setError(''); setToolsOpen(false); if (!note) { setDraft(null); setDirty(false); return } try { setDraft(note.id ? await api(`/api/notes/${note.id}`) : note); setDirty(false) } catch (err) { setError(err.message) } }
   const changeFolder = async value => { if (!await leave()) return; setFolder(value); setDraft(null); setDirty(false); setError('') }
-  const change = patch => { setDraft(current => ({ ...current, ...patch })); setDirty(true) }
+  const change = patch => { setDraft(current => { const next={...current,...patch};draftRef.current=next;return next }); setDirty(true); setError('') }
   const savePayload = note => ({ title: note.title, content: note.content || '', folder_id: note.folder_id || null, pinned: Boolean(note.pinned), note_type: note.note_type || 'text', color: note.color || '#ffffff', page_style: note.page_style || 'plain', checklist: note.checklist || [], attachment_name: note.attachment_name || null, attachment_type: note.attachment_type || null, attachment_data: note.attachment_data || null, version: note.version || 1 })
   const save = async () => {
-    const firstLine = (draft?.content || draft?.checklist?.[0]?.text || '').trim().split(/\r?\n/)[0].slice(0, 160)
-    const note = { ...draft, title: draft?.title?.trim() || firstLine || 'Untitled note' }
-    setDraft(note); setBusy(true); setError('')
-    try { const result = await api(note.id ? `/api/notes/${note.id}` : '/api/notes', { method: note.id ? 'PUT' : 'POST', ...jsonBody(savePayload(note)) }); setDraft(result); setDirty(false); await load(); notify('Note saved') } catch (err) { setError(err.message) } finally { setBusy(false) }
+    if (busyRef.current) return false
+    const current = draftRef.current
+    if (!current?.can_edit) return true
+    const firstLine = (current.content || current.checklist?.[0]?.text || '').trim().split(/\r?\n/)[0].slice(0, 160)
+    const note = { ...current, title: current.title?.trim() || firstLine || 'Untitled note' }
+    busyRef.current = true; setBusy(true); setError('')
+    try {
+      const result = await api(note.id ? `/api/notes/${note.id}` : '/api/notes', { method: note.id ? 'PUT' : 'POST', ...jsonBody(savePayload(note)) })
+      const latest = draftRef.current
+      if (latest === current || JSON.stringify(latest) === JSON.stringify(current)) { draftRef.current=result; setDraft(result); setDirty(false) }
+      else { const merged={...latest,id:result.id,version:result.version,updated_at:result.updated_at};draftRef.current=merged;setDraft(merged);setDirty(true) }
+      await load()
+      return true
+    } catch (err) { setError(err.message); return false }
+    finally { busyRef.current=false;setBusy(false) }
   }
+  useEffect(() => {
+    if (!dirty || busy || error || !draft?.can_edit) return undefined
+    const timer = setTimeout(() => { void save() }, 1200)
+    return () => clearTimeout(timer)
+  }, [draft, dirty, busy, error])
   const remove = async () => { if (!await confirm('Delete this note? Everyone sharing it will lose access.')) return; setBusy(true); try { await api(`/api/notes/${draft.id}`, { method: 'DELETE' }); setDraft(null); setDirty(false); await load(); notify('Note moved to Trash') } catch (err) { setError(err.message) } finally { setBusy(false) } }
   const saveFolder = async event => { event.preventDefault(); setBusy(true); try { await api(folderEdit.id ? `/api/note-folders/${folderEdit.id}` : '/api/note-folders', { method: folderEdit.id ? 'PUT' : 'POST', ...jsonBody({ name: folderEdit.name, color: folderEdit.color }) }); setFolderEdit(null); await load() } catch (err) { notify(err.message, 'error') } finally { setBusy(false) } }
   const removeFolder = async item => { if (!await leave() || !await confirm(`Delete folder "${item.name}"? Its notes will remain in All notes.`)) return; try { await api(`/api/note-folders/${item.id}`, { method: 'DELETE' }); setFolder('all'); setDraft(null); setDirty(false); await load() } catch (err) { notify(err.message, 'error') } }

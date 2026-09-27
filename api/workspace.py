@@ -8,7 +8,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from .database import get_db
-from .index import current_user, admin_user, normalize_email, set_setting
+from .index import current_user, admin_user, normalize_email, set_setting, setting
 from .models import Note, NoteFolder, NoteShare, Feedback, User, utc_now
 from .models import RecoveryPoint, NoteRevision
 from .data_safety import save_recovery, clear_budget, clear_notes
@@ -51,6 +51,47 @@ class FeedbackIn(BaseModel):
 class FeedbackUpdate(BaseModel):
     status: Literal["new", "reviewing", "resolved"]
     reply: str = Field(default="", max_length=10000)
+
+
+class RatingIn(BaseModel):
+    stars: int = Field(ge=1, le=5)
+    comment: str = Field(default='', max_length=2000)
+
+
+def count_feedback_event(db, user_id):
+    db.query(User).filter_by(id=user_id).with_for_update().first()
+    count = int(setting(db, user_id, 'feedback_prompt_events', '0')) + 1
+    set_setting(db, user_id, 'feedback_prompt_events', str(count))
+    return count
+
+
+@router.get('/api/feedback/prompt')
+def feedback_prompt(user=Depends(current_user), db: Session = Depends(get_db)):
+    count = int(setting(db, user.id, 'feedback_prompt_events', '0'))
+    dismissed = int(setting(db, user.id, 'feedback_prompt_dismissed', '0'))
+    rated = setting(db, user.id, 'feedback_rating_received', 'false') == 'true'
+    return {'show': not rated and count - dismissed >= 3, 'show_after_next_event': not rated and count + 1 - dismissed >= 3, 'rated': rated, 'events': count}
+
+
+@router.post('/api/feedback/prompt/dismiss')
+def dismiss_feedback_prompt(next_event: bool = False, user=Depends(current_user), db: Session = Depends(get_db)):
+    count = int(setting(db, user.id, 'feedback_prompt_events', '0'))
+    set_setting(db, user.id, 'feedback_prompt_dismissed', str(count + int(next_event)))
+    db.commit()
+    return {'ok': True}
+
+
+@router.post('/api/feedback/rating', status_code=201)
+def rate_app(payload: RatingIn, user=Depends(current_user), db: Session = Depends(get_db)):
+    db.query(User).filter_by(id=user.id).with_for_update().first()
+    if setting(db, user.id, 'feedback_rating_received', 'false') == 'true':
+        raise HTTPException(409, 'Your rating was already received.')
+    row = Feedback(user_id=user.id, subject=f'App rating: {payload.stars}/5',
+                   content=payload.comment.strip() or 'No comment', category='rating')
+    db.add(row)
+    set_setting(db, user.id, 'feedback_rating_received', 'true')
+    db.commit()
+    return feedback_payload(db, row)
 
 
 class ClearWorkspaceIn(BaseModel):

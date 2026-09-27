@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session, joinedload
 from .data_safety import save_recovery
 
 from .database import get_db
-from .models import Category, PendingSignup, Transaction, User, Wallet, WalletShare
+from .models import Category, PendingSignup, Transaction, PlannedTransaction, User, Wallet, WalletShare
 from .schemas import TransactionIn
 from .ledger_filters import ledger_options, filter_ledger
 from .ledger_accounting import require_regular_transaction
@@ -273,7 +273,7 @@ def shared_wallets(user: User = Depends(current_user), db: Session = Depends(get
     for wallet in wallets:
         owner = owners.get(wallet.user_id); is_owner = wallet.user_id == user.id; incoming_share = incoming_map.get(wallet.id); shares = outgoing_map.get(wallet.id, []) if is_owner else []
         balance = float(wallet.initial_balance) + float(totals.get((wallet.id, "income"), 0)) - float(totals.get((wallet.id, "expense"), 0)) - float(totals.get((wallet.id, "transfer"), 0)) + float(incoming_totals.get(wallet.id, 0))
-        result.append({"wallet_id": wallet.id, "name": wallet.name, "type": wallet.type, "color": wallet.color, "balance": round(balance, 3), "owner_email": owner.email if owner else "", "owner_name": owner.username if owner else "", "is_owner": is_owner, "permission": "edit" if is_owner else incoming_share.permission, "can_edit": is_owner or incoming_share.permission == "edit", "can_add": is_owner or incoming_share.permission in {"edit","add"}, "shares": [{"id": s.id, "email": s.invitee_email, "permission": s.permission, "registered": bool(s.member_user_id)} for s in shares]})
+        result.append({"wallet_id": wallet.id, "name": wallet.name, "type": wallet.type, "color": wallet.color, "balance": round(balance, 3), "owner_id": wallet.user_id, "owner_email": owner.email if owner else "", "owner_name": owner.username if owner else "", "is_owner": is_owner, "permission": "edit" if is_owner else incoming_share.permission, "can_edit": is_owner or incoming_share.permission == "edit", "can_add": is_owner or incoming_share.permission in {"edit","add"}, "shares": [{"id": s.id, "email": s.invitee_email, "permission": s.permission, "registered": bool(s.member_user_id)} for s in shares]})
     return sorted(result, key=lambda item: (not item["is_owner"], item["name"].lower()))
 
 
@@ -381,6 +381,7 @@ def delete_shared_transaction(transaction_id: int, undo: bool = False, user: Use
     if not row: raise HTTPException(404, "Transaction not found")
     if not can_edit_wallet(db, user, row.wallet_id) or (row.type == "transfer" and not can_edit_wallet(db, user, row.transfer_wallet_id)): raise HTTPException(403, "You do not have edit access to this transaction")
     require_regular_transaction(row)
+    db.query(PlannedTransaction).filter_by(posted_transaction_id=transaction_id).update({'posted_transaction_id': None})
     save_recovery(db, db.get(User, row.user_id), user, f"Deleted shared transaction: {row.description}")
     from .recovery import trash
     deleted = trash(db, row, user, 'transaction')

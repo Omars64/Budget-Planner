@@ -17,6 +17,7 @@ const Settings = lazy(() => import('./pages/Settings'))
 const Admin = lazy(() => import('./pages/Admin'))
 const Notes = lazy(() => import('./pages/Notes'))
 const Feedback = lazy(() => import('./pages/Feedback'))
+const Upcoming = lazy(() => import('./pages/Upcoming'))
 const BankMessages = lazy(() => import('./pages/BankMessages'))
 import BrandLogo from './components/BrandLogo'
 import PasswordInput from './components/PasswordInput'
@@ -28,6 +29,9 @@ import PasswordRecovery from './components/PasswordRecovery'
 import { cancelReminder } from './lib/deviceNotifications'
 import { BankSms, smsAvailable } from './lib/bankSms'
 import { readDeviceAppearance, useAppearance } from './lib/appearance'
+import FeedbackPrompt from './components/FeedbackPrompt'
+import { syncPlannedNotifications, cancelPlannedNotifications } from './lib/plannedNotifications'
+import { notificationSettingsChangedEvent } from './lib/notificationSettings'
 
 const AppContext = createContext(null)
 export const useApp = () => useContext(AppContext)
@@ -164,6 +168,7 @@ export default function App() {
   const [appearance, setAppearance] = useState({ profile_image: '', wallpaper_image: '' })
   const [refreshKey, setRefreshKey] = useState(0)
   const [toast, setToast] = useState(null)
+  const [signoutRequested, setSignoutRequested] = useState(false)
 
   const notify = useCallback((message, type = 'success', action = null) => {
     setToast({ id: Date.now(), message, type, action })
@@ -174,6 +179,15 @@ export default function App() {
     return () => window.clearTimeout(timer)
   }, [toast])
   const refresh = useCallback(() => setRefreshKey(v => v + 1), [])
+  useEffect(() => {
+    if (!session.user) return undefined
+    const sync = () => { if (document.visibilityState !== 'hidden') void syncPlannedNotifications(session.user.id).catch(console.error) }
+    sync()
+    const timer = window.setInterval(sync, 60000)
+    window.addEventListener('focus',sync)
+    window.addEventListener(notificationSettingsChangedEvent,sync)
+    return () => {window.clearInterval(timer);window.removeEventListener('focus',sync);window.removeEventListener(notificationSettingsChangedEvent,sync)}
+  }, [session.user?.id, refreshKey])
 
   const loadSettings = useCallback(async () => {
     try { setSettings(await api('/api/settings')); return true } catch (err) {
@@ -218,14 +232,17 @@ export default function App() {
     void resume()
   }, [loadSettings, loadAppearance])
 
-  const signOut = useCallback(() => {
+  const finishSignOut = useCallback(() => {
     void api('/api/account/signout',{method:'POST'}).catch(()=>{})
     if (smsAvailable()) void BankSms.configure({enabled:false}).catch(console.error)
     void cancelReminder().catch(console.error)
+    void cancelPlannedNotifications().catch(console.error)
     auth.clear()
     setAppearance({ profile_image: '', wallpaper_image: '' })
     setSession({ loading: false, user: null })
+    setSignoutRequested(false)
   }, [])
+  const signOut = useCallback(() => setSignoutRequested(true), [])
 
   const completeLogin = useCallback(async user => {
     await loadSettings()
@@ -250,6 +267,7 @@ export default function App() {
         <Route path="/" element={<Overview />} />
         <Route path="/ask-ai" element={<AskAI />} />
         <Route path="/transactions" element={<Transactions />} />
+        <Route path="/upcoming" element={<Upcoming />} />
         <Route path="/shared-transactions" element={<SharedTransactions />} />
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/analytics" element={<Analytics />} />
@@ -265,6 +283,7 @@ export default function App() {
       </Routes>
       </Suspense>
     </AppShell>
+    <FeedbackPrompt signoutRequested={signoutRequested} onSignoutComplete={finishSignOut}/>
     {confirmation}
     <AnimatePresence>{toast && <motion.div role={toast.type === 'error' ? 'alert' : 'status'} className={`toast ${toast.type}`} initial={{ opacity: 0, y: -18, scale: .96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -12 }}>{toast.message}{toast.action && <button className="toast-action" onClick={() => {const action=toast.action;setToast(null);void action.run().catch(err=>notify(err.message,'error'))}}>{toast.action.label}</button>}</motion.div>}</AnimatePresence>
   </AppContext.Provider>
