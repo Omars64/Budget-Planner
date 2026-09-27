@@ -6,5 +6,8 @@
 @media print{body *{visibility:hidden!important}.note-editor,.note-editor *{visibility:visible!important}.note-editor{position:absolute;left:0;top:0;width:100%;background:#fff!important;color:#111!important}.reader-toolbar,.workspace-folders,.workspace-list,.note-editor-controls,.note-folder-picker,.reader-footer,.note-attachment{display:none!important}.note-content{min-height:0!important;color:#111!important}}
 
 .notes-workspace{grid-template-columns:150px 215px minmax(0,1fr);width:100%;height:calc(100dvh - 145px);min-height:690px}.notes-workspace .note-content{font-size:16px;line-height:1.8;padding:16px clamp(20px,4vw,64px);min-height:50dvh}.notes-workspace .note-title{padding-inline:clamp(20px,4vw,64px);font-size:28px}.notes-workspace .note-editor-controls,.notes-workspace .note-folder-picker{padding-inline:clamp(20px,4vw,64px)}.notes-workspace .workspace-reader{min-width:0}.notes-workspace .save-state{font-size:12px}
+.notes-workspace .folder-row{flex-wrap:wrap;justify-content:flex-end}
+.notes-workspace .folder-row>.folder-link{flex:0 0 100%}
+.notes-workspace .folder-row>.icon-button{width:44px;min-width:44px;height:36px}
 @media(max-width:1000px){.notes-workspace{grid-template-columns:170px minmax(0,1fr)}}
 @media(max-width:620px){.notes-workspace{height:auto;min-height:calc(100dvh - 175px)}.notes-workspace .note-content{min-height:60dvh;padding:16px;font-size:16px}.notes-workspace .note-title,.notes-workspace .note-editor-controls,.notes-workspace .note-folder-picker{padding-inline:16px}.notes-workspace .note-title{font-size:24px}}
