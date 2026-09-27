@@ -19,6 +19,7 @@ import 'driver.js/dist/driver.css'
 import './interaction.css'
 import './ledger-clarity.css'
 import './comfort.css'
+import './navigation.css'
 
 applyAppearance(readDeviceAppearance())
 

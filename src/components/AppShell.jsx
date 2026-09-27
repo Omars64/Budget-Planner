@@ -1,6 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { BarChart3, CalendarClock, CalendarDays, Gauge, LayoutDashboard, LogOut, Menu, Mountain, PanelLeftOpen, Plus, ReceiptText, Settings, Share2, ShieldCheck, Target, WalletCards, X } from 'lucide-react'
+import { BarChart3, CalendarClock, CalendarDays, Gauge, LayoutDashboard, LogOut, Menu, Mountain, PanelLeftOpen, Plus, ReceiptText, Search, Settings, Share2, ShieldCheck, Target, WalletCards, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useApp } from '../App'
 import TransactionModal from './TransactionModal'
@@ -16,27 +16,47 @@ import { version } from '../../package.json'
 import { useContainedScroll, useScrollLock } from '../lib/scrollLock'
 
 const nav = [
-  ['/', 'Overview', LayoutDashboard],
-  ['/ask-ai', 'Ask Budgetly', CircleHelp],
-  ['/transactions', 'Transactions', ReceiptText],
-  ['/upcoming', 'Upcoming', CalendarClock],
-  ['/shared-transactions', 'Shared Transactions', Share2],
-  ['/calendar', 'Calendar', CalendarDays],
-  ['/analytics', 'Analytics', BarChart3],
-  ['/budgets', 'Budgets', Gauge],
-  ['/goals', 'Goals & debts', Target],
-  ['/wallets', 'Wallets', WalletCards],
-  ['/notes', 'Notes', NotebookPen],
-  ['/feedback', 'Feedback', MessageSquare],
-  ['/bank-messages', 'Bank messages', ReceiptText],
-  ['/settings', 'Settings', Settings],
+  ['/', 'Overview', LayoutDashboard, 'Money'],
+  ['/transactions', 'Transactions', ReceiptText, 'Money'],
+  ['/shared-transactions', 'Shared Transactions', Share2, 'Money'],
+  ['/wallets', 'Wallets', WalletCards, 'Money'],
+  ['/upcoming', 'Upcoming', CalendarClock, 'Planning'],
+  ['/calendar', 'Calendar', CalendarDays, 'Planning'],
+  ['/budgets', 'Budgets', Gauge, 'Planning'],
+  ['/goals', 'Goals & debts', Target, 'Planning'],
+  ['/analytics', 'Analytics', BarChart3, 'Planning'],
+  ['/ask-ai', 'Ask Budgetly', CircleHelp, 'Workspace'],
+  ['/notes', 'Notes', NotebookPen, 'Workspace'],
+  ['/bank-messages', 'Bank messages', ReceiptText, 'Workspace'],
+  ['/feedback', 'Feedback', MessageSquare, 'Workspace'],
+  ['/settings', 'Settings', Settings, 'Account'],
 ]
+const primaryRoutes = new Set(['/', '/transactions', '/shared-transactions', '/wallets'])
+const groups = ['Money', 'Planning', 'Workspace', 'Account']
 
 export default function AppShell({ children }) {
   const [menu, setMenu] = useState(false)
+  const [navSearch, setNavSearch] = useState('')
   const [txModal, setTxModal] = useState(false)
   const [tutorialRequest, setTutorialRequest] = useState(0)
   const sidebar = useRef(null)
+  const navSearchInput = useRef(null)
+  useEffect(() => {
+    const quickFind = event => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        if (document.querySelector('[aria-modal="true"], dialog[open]')) return
+        event.preventDefault()
+        if (window.matchMedia('(max-width: 820px)').matches) setMenu(true)
+        window.requestAnimationFrame(() => navSearchInput.current?.focus())
+      } else if (event.key === 'Escape' && document.activeElement === navSearchInput.current) {
+        if (navSearch) setNavSearch('')
+        else setMenu(false)
+        navSearchInput.current?.blur()
+      }
+    }
+    window.addEventListener('keydown', quickFind)
+    return () => window.removeEventListener('keydown', quickFind)
+  }, [navSearch])
   useEffect(() => {
     if (!menu) return
     const back = event => {
@@ -50,7 +70,8 @@ export default function AppShell({ children }) {
   useContainedScroll(sidebar)
   const { user, settings, appearance, refresh, notify, lock } = useApp()
   const location = useLocation()
-  const visibleNav = user?.role === 'admin' ? [...nav, ['/admin', 'Admin', ShieldCheck]] : nav
+  const visibleNav = user?.role === 'admin' ? [...nav, ['/admin', 'Admin', ShieldCheck, 'Account']] : nav
+  const matchingNav = visibleNav.filter(([, label]) => label.toLowerCase().includes(navSearch.trim().toLowerCase()))
   const title = visibleNav.find(([path]) => path === location.pathname)?.[1] || 'Budgetly'
   const isLedger = ['/transactions', '/shared-transactions'].includes(location.pathname)
   const nativeAndroid = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android'
@@ -68,10 +89,13 @@ export default function AppShell({ children }) {
         </div>
         <button className="icon-button mobile-only" onClick={() => setMenu(false)} aria-label="Close menu"><X size={19}/></button>
       </div>
+      <label className="nav-finder"><Search size={17}/><input ref={navSearchInput} type="search" aria-label="Find a page" placeholder="Find a page" value={navSearch} onChange={event => setNavSearch(event.target.value)}/><kbd>Ctrl K</kbd></label>
       <nav className="nav-list">
-        {visibleNav.map(([to, label, Icon]) => <NavLink key={to} to={to} end={to === '/'} onClick={() => setMenu(false)} className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-          <Icon size={19}/><span>{label}</span>{label === 'Budgets' && <i className="nav-pulse"/>}
-        </NavLink>)}
+        {groups.map(group => {
+          const pages = matchingNav.filter(([, , , section]) => section === group)
+          return pages.length ? <div className="nav-group" key={group}><span className="nav-group-label">{group}</span>{pages.map(([to, label, Icon]) => <NavLink key={to} to={to} end={to === '/'} onClick={() => {setMenu(false);setNavSearch('')}} className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}><Icon size={19}/><span>{label}</span>{label === 'Budgets' && <i className="nav-pulse"/>}</NavLink>)}</div> : null
+        })}
+        {!matchingNav.length && <p className="nav-no-results">No matching page</p>}
       </nav>
       <button className="button ghost sidebar-signout" onClick={lock}><LogOut size={17}/><span>Sign out</span></button>
       <div className="sidebar-foot glass-subtle">
@@ -96,8 +120,8 @@ export default function AppShell({ children }) {
     {isLedger && nativeAndroid && <button data-tour="add-transaction" className="transaction-fab" aria-label="Add transaction" title="Add transaction" onClick={addTransaction}><Plus size={28}/></button>}
 
     <nav className="mobile-nav glass">
-      {visibleNav.filter(([to]) => ['/', '/transactions', '/shared-transactions', '/wallets'].includes(to)).map(([to, label, Icon]) => <NavLink key={to} to={to} end={to === '/'} className={({isActive}) => isActive ? 'active' : ''}><Icon size={19}/><span>{label === 'Shared Transactions' ? 'Shared' : label}</span></NavLink>)}
-      <button onClick={() => setMenu(true)}><Menu size={19}/><span>More</span></button>
+      {visibleNav.filter(([to]) => primaryRoutes.has(to)).map(([to, label, Icon]) => <NavLink key={to} to={to} end={to === '/'} className={({isActive}) => isActive ? 'active' : ''}><Icon size={19}/><span>{label === 'Shared Transactions' ? 'Shared' : label}</span></NavLink>)}
+      <button className={!primaryRoutes.has(location.pathname) ? 'active' : ''} aria-current={!primaryRoutes.has(location.pathname) ? 'page' : undefined} onClick={() => setMenu(true)}><Menu size={19}/><span>More</span></button>
     </nav>
 
     <TransactionModal open={txModal} onClose={() => setTxModal(false)} onSaved={(_, scheduled) => { setTxModal(false); refresh(); notify(scheduled ? 'Transaction scheduled' : 'Transaction saved') }} />

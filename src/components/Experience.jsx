@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { LoaderCircle } from 'lucide-react'
 import { useApp } from '../App'
 import ResizablePanels from './ResizablePanels'
 import { isNativeApp,quietAt,reminderBody,reminderTimes,configureReminder } from '../lib/deviceNotifications'
@@ -13,6 +12,7 @@ export default function Experience() {
   const location = useLocation()
   const { settings, user, notify } = useApp()
   const [pending, setPending] = useState(0)
+  const [showProgress, setShowProgress] = useState(false)
   const [notificationSettings, setNotificationSettings] = useState(() => readNotificationSettings(settings, user.id))
   useEffect(() => {
     const sync = () => setNotificationSettings(readNotificationSettings(settings, user.id))
@@ -34,24 +34,24 @@ export default function Experience() {
     let active = 0
     const progress = e => { active = e.detail; setPending(active) }
     const failed = e => notify(e.detail, 'error')
-    const submit = e => {
-      if (active && !e.target.matches('[data-reauth]')) { e.preventDefault(); e.stopImmediatePropagation(); notify('Please wait for the current request to finish.') }
-    }
     const invalid = e => {
       const label = e.target.getAttribute('aria-label') || e.target.closest('label')?.querySelector('span')?.textContent || e.target.placeholder || 'This field'
       notify(`${label}: ${e.target.validationMessage}`, 'error')
     }
     window.addEventListener('flowbudget:pending', progress)
     window.addEventListener('flowbudget:error', failed)
-    document.addEventListener('submit', submit, true)
     document.addEventListener('invalid', invalid, true)
     return () => {
       window.removeEventListener('flowbudget:pending', progress)
       window.removeEventListener('flowbudget:error', failed)
-      document.removeEventListener('submit', submit, true)
       document.removeEventListener('invalid', invalid, true)
     }
   }, [notify])
+  useEffect(() => {
+    if (!pending) { setShowProgress(false); return undefined }
+    const timer = window.setTimeout(() => setShowProgress(true), 350)
+    return () => window.clearTimeout(timer)
+  }, [pending])
   useEffect(() => {
     if(isNativeApp()){
       const sync = () => {void configureReminder(notificationSettings,{requestPermission:false}).catch(e=>notify(e.message,'error'))}
@@ -83,5 +83,5 @@ export default function Experience() {
     window.addEventListener('focus', check)
     return () => { window.clearInterval(interval); window.removeEventListener('focus', check) }
   }, [notificationSettings, user.id, notify])
-  return <><SecurityPrompt/><ResizablePanels/>{pending > 0 && location.pathname !== '/ask-ai' && <div className="request-progress" role="status"><LoaderCircle className="request-spinner" size={18}/>Saving...</div>}</>
+  return <><SecurityPrompt/><ResizablePanels/>{showProgress && location.pathname !== '/ask-ai' && <div className="budgetly-request-progress" role="progressbar" aria-label="Updating"/>}</>
 }
