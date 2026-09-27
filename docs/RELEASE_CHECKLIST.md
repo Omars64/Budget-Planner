@@ -10,15 +10,17 @@ Keep the existing design. Overview must never offer Add transaction.
 4. Run `python -m pytest tests` against an isolated test database, never production.
 5. Review Alembic revisions and rehearse them on a restored test database. Confirm a recent external backup and a successful monthly restore test.
 6. Run `npm run android:sync`, then build the APK with `npm run android:apk -- -Release`.
-7. Stop local Vite preview processes before `npm ci` on Windows; loaded native modules cannot be replaced.
+7. On Windows, run `npm run deps:refresh` before a clean install if a local Vite server may be running. Loaded native modules cannot be replaced.
 
 ## Windows dependency installation
 
-Stop the Vite development or preview server in this checkout before reinstalling dependencies. If Node cannot verify the registry certificate on this machine, use the Windows trusted certificate store for the current PowerShell session:
+For a repeatable clean install, run `npm run deps:refresh`. It stops only this checkout's Vite development/preview process, waits for it to exit, and runs `npm ci --offline=false`. Other Node processes are left alone. Plain `npm ci` also works when Vite is already stopped; neither command can replace a native module held open by antivirus or another process.
+
+If Node cannot verify the registry certificate on this machine, use the Windows trusted certificate store for the current PowerShell session:
 
 ```powershell
 $env:NODE_USE_SYSTEM_CA = '1'
-npm ci --offline=false
+npm run deps:refresh
 ```
 
 Keep TLS certificate verification enabled. Restart the development server only after installation finishes.

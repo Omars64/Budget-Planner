@@ -125,6 +125,8 @@ Vite proxies `/api` requests to the local FastAPI server.
 
 ## Android app build
 
+On Windows, if `npm ci` reports `EPERM` while unlinking Rolldown's `.node` file, a running Vite server may be holding it open. Run `npm run deps:refresh` for a clean install that stops only this checkout's Vite process first. Restart Vite after installation. You do not need to reinstall dependencies for every APK build.
+
 The repository includes a Capacitor Android project. The browser build uses relative `/api` requests locally, while the installed Android app automatically uses the production FlowBudget API at `https://budget-planner-ecru-seven.vercel.app`. Override this during development with `VITE_API_BASE_URL`.
 
 ```powershell

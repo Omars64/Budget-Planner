@@ -1,12 +1,13 @@
 {
   "name": "flowbudget",
   "private": true,
-  "version": "4.5.0",
-  "androidVersionCode": 27,
+  "version": "4.5.1",
+  "androidVersionCode": 28,
   "type": "module",
   "scripts": {
     "version:sync": "node scripts/version.mjs",
     "version:check": "node scripts/version.mjs --check",
+    "deps:refresh": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-deps.ps1",
     "prebuild": "npm run version:check",
     "release:check": "npm run version:check && npm run lint && npm test && npm run build",
     "dev": "vite",
