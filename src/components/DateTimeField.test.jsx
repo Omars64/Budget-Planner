@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeAll, expect, it, vi } from 'vitest'
-import DateTimeField from './DateTimeField'
+import DateTimeField, { DateField, TimeField } from './DateTimeField'
 import { calendarDate, dialValue, parseDateTime, timeValue } from '../lib/dateTimePicker'
 import { dateInput, saveDate } from '../lib/time'
 
@@ -83,4 +83,19 @@ it('keeps disabled pickers closed', () => {
   render(<DateTimeField value="2026-09-14T06:29" disabled onChange={vi.fn()}/> )
   expect(screen.getByRole('button', { name: 'Date', exact: true })).toBeDisabled()
   expect(screen.getByRole('button', { name: 'Time', exact: true })).toBeDisabled()
+})
+
+it('uses the same dialogs for standalone dates and times, with date limits and clearing', () => {
+  const onDate = vi.fn(), onTime = vi.fn()
+  render(<><DateField label="Deadline" value="2026-09-21" min="2026-09-20" allowClear onChange={onDate}/><TimeField label="First reminder" value="14:00" onChange={onTime}/></>)
+  fireEvent.click(screen.getByRole('button', { name: 'Deadline' }))
+  expect(screen.getByRole('button', { name: 'Saturday, 19 September 2026' })).toBeDisabled()
+  fireEvent.click(screen.getByRole('button', { name: 'Tuesday, 22 September 2026' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Set date' }))
+  expect(onDate).toHaveBeenCalledWith('2026-09-22')
+  fireEvent.click(screen.getByRole('button', { name: 'Clear date' }))
+  expect(onDate).toHaveBeenCalledWith('')
+  fireEvent.click(screen.getByRole('button', { name: 'First reminder' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Set time' }))
+  expect(onTime).toHaveBeenCalledWith('14:00')
 })

@@ -7,7 +7,7 @@ import TransactionTemplates from './TransactionTemplates'
 import { readDraft, writeDraft, clearDraft } from '../lib/transactionDraft'
 import { useApp } from '../App'
 import Modal from './Modal'
-import DateTimeField from './DateTimeField'
+import DateTimeField, { DateField } from './DateTimeField'
 import { api, jsonBody, money } from '../lib/api'
 import VoiceInputButton from './VoiceInputButton'
 import { applyVoiceTransaction } from '../lib/voiceInput'
@@ -133,7 +133,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
       <details className="form-options" open={advanced} onToggle={e => setAdvanced(e.currentTarget.open)}><summary>More options</summary><div className="stack gap-16">
         {!editing && <button className="button ghost small" type="button" disabled={busy || voiceActive} onClick={() => {clearDraft(draftKey);setForm({...blank(),wallet_id:wallets[0]?.id || ''});setErrors({});setError('')}}>Discard draft</button>}
         <label className="field"><span><Repeat2 size={15}/> Repeat</span><select value={form.recurring_frequency} onChange={e => set('recurring_frequency',e.target.value)}><option value="none">Does not repeat</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select></label>
-        {form.recurring_frequency !== 'none' && <label className="field"><span>Repeat until</span><input aria-label="Repeat until" required aria-invalid={Boolean(errors.recurring_until)} min={form.date.slice(0,10)} type="date" value={form.recurring_until} onChange={e => set('recurring_until',e.target.value)} />{errors.recurring_until && <small className="field-error">{errors.recurring_until}</small>}</label>}
+        {form.recurring_frequency !== 'none' && <div><DateField label="Repeat until" value={form.recurring_until} min={form.date.slice(0,10)} onChange={value => set('recurring_until',value)} disabled={busy || loading}/>{errors.recurring_until && <small className="field-error">{errors.recurring_until}</small>}</div>}
 
         <label className="field"><span>Notes (optional)</span><textarea rows="3" value={form.notes} onChange={e => set('notes', e.target.value)}/></label>
       </div></details>

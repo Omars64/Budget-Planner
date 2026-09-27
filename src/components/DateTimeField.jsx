@@ -23,7 +23,7 @@ function PickerDialog({ title, onClose, children }) {
     }}>{children}</dialog>, document.body)
 }
 
-function DatePicker({ initial, onSave, onClose }) {
+function DatePicker({ initial, onSave, onClose, min, max }) {
   const [picked, setPicked] = useState(initial.date)
   const [view, setView] = useState(() => calendarDate(initial.date.getUTCFullYear(), initial.date.getUTCMonth()))
   const daysRef = useRef(null)
@@ -32,6 +32,7 @@ function DatePicker({ initial, onSave, onClose }) {
   const years = [...new Set([...Array.from({ length: 201 }, (_, i) => 1900 + i), picked.getUTCFullYear()])].sort((a, b) => a - b)
   const days = Array.from({ length: 42 }, (_, i) => calendarDate(year, month, 1 - view.getUTCDay() + i))
   const pick = (date, focus = false) => {
+    if ((min && dayValue(date) < min) || (max && dayValue(date) > max)) return
     focusDay.current = focus
     setPicked(date)
     setView(calendarDate(date.getUTCFullYear(), date.getUTCMonth()))
@@ -65,13 +66,13 @@ function DatePicker({ initial, onSave, onClose }) {
       }}>
         {days.map(date => <button type="button" key={date.toISOString()} data-day={dayValue(date)}
           className={date.getUTCMonth() !== month ? 'outside' : ''}
-          disabled={date.getUTCFullYear() < 1 || date.getUTCFullYear() > 9999}
+          disabled={date.getUTCFullYear() < 1 || date.getUTCFullYear() > 9999 || (min && dayValue(date) < min) || (max && dayValue(date) > max)}
           aria-label={calendarLabel(date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
           aria-pressed={dayValue(date) === dayValue(picked)} onClick={() => pick(date, true)}>{date.getUTCDate()}</button>)}
       </div>
     </div>
     <footer className="transaction-picker-actions">
-      <button type="button" onClick={onClose}>Cancel</button><button type="button" className="apply" onClick={() => onSave(dayValue(picked))}>Set date</button>
+      <button type="button" onClick={onClose}>Cancel</button><button type="button" className="apply" disabled={(min && dayValue(picked) < min) || (max && dayValue(picked) > max)} onClick={() => onSave(dayValue(picked))}>Set date</button>
     </footer>
   </PickerDialog>
 }
@@ -188,4 +189,27 @@ export default function DateTimeField({ value, onChange, disabled = false }) {
       ? <DatePicker initial={picker.initial} onClose={close} onSave={date => { onChange(date + picker.value.slice(10)); close() }}/>
       : <TimePicker initial={picker.initial} onClose={close} onSave={time => { onChange(picker.value.slice(0, 11) + time); close() }}/>) }
   </>
+}
+
+export function DateField({ value, onChange, label = 'Date', disabled = false, min, max, allowClear = false }) {
+  const [open, setOpen] = useState(false)
+  const labelId = useId()
+  const fallback = dateInput().slice(0, 10)
+  const initialValue = value || (max && (min || fallback) > max ? max : min || fallback)
+  const parsed = parseDateTime(`${initialValue}T12:00`)
+  return <div className="transaction-datetime single">
+    <div><span id={labelId}>{label}</span><button type="button" aria-labelledby={labelId} aria-haspopup="dialog" disabled={disabled} onClick={() => setOpen(true)}><CalendarDays size={19}/><span>{value && parsed ? calendarLabel(parsed.date, { day: 'numeric', month: 'short', year: 'numeric' }) : 'Choose date'}</span></button></div>
+    {allowClear && value && <button type="button" className="transaction-picker-clear" disabled={disabled} onClick={() => onChange('')}>Clear date</button>}
+    {open && !disabled && <DatePicker initial={parsed || parseDateTime(`${fallback}T12:00`)} min={min} max={max} onClose={() => setOpen(false)} onSave={date => { onChange(date); setOpen(false) }}/>}
+  </div>
+}
+
+export function TimeField({ value, onChange, label = 'Time', disabled = false }) {
+  const [open, setOpen] = useState(false)
+  const labelId = useId()
+  const parsed = parseDateTime(`${dateInput().slice(0, 10)}T${value || '12:00'}`)
+  return <div className="transaction-datetime single">
+    <div><span id={labelId}>{label}</span><button type="button" aria-labelledby={labelId} aria-haspopup="dialog" disabled={disabled} onClick={() => setOpen(true)}><Clock3 size={19}/><span>{value && parsed ? `${parsed.hour}:${padTime(parsed.minute)} ${parsed.period}` : 'Choose time'}</span></button></div>
+    {open && !disabled && <TimePicker initial={parsed} onClose={() => setOpen(false)} onSave={time => { onChange(time); setOpen(false) }}/>}
+  </div>
 }

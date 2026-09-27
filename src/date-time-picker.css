@@ -1,4 +1,6 @@
 .transaction-datetime { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(0,1fr); gap:12px; }
+.transaction-datetime.single { grid-template-columns:minmax(0,1fr); }
+.transaction-datetime.single .transaction-picker-clear { width:auto; min-height:36px; justify-self:start; padding:4px 8px; border:0; background:transparent; color:var(--accent-text); font-size:13px; }
 .transaction-datetime>div { min-width:0; }
 .transaction-datetime>div>span { display:block; margin-bottom:7px; font-size:14px; font-weight:600; color:var(--muted); }
 .transaction-datetime button { width:100%; min-width:0; min-height:52px; display:flex; align-items:center; gap:10px; padding:12px; border:1px solid var(--line); border-radius:8px; background:var(--surface); color:var(--text); font:inherit; font-size:16px; text-align:left; font-variant-numeric:tabular-nums; }
