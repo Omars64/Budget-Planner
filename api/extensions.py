@@ -172,7 +172,7 @@ def shared_tx_payload(db: Session, user: User, tx: Transaction, visible_ids: set
         'revision': transaction_revision(tx),
         'is_opening_balance': tx.is_opening_balance,
         'recorded_by_name': recorder.username if recorder else None,
-        "id": tx.id, "type": tx.type, "amount": float(tx.amount), "description": tx.description, "notes": tx.notes or "", "date": ledger_iso(tx.date),
+        "id": tx.id, "type": tx.type, "amount": float(tx.amount), "description": tx.description, "notes": tx.notes or "", "date": ledger_iso(tx.date), "reporting_month": tx.reporting_month,
         "wallet_id": tx.wallet_id, "transfer_wallet_id": tx.transfer_wallet_id, "category_id": tx.category_id,
         "wallet_name": tx.wallet.name if tx.wallet_id in visible_ids and tx.wallet else "Shared wallet",
         "transfer_wallet_name": tx.transfer_wallet.name if tx.transfer_wallet_id in visible_ids and tx.transfer_wallet else ("Private wallet" if tx.transfer_wallet_id else None),
@@ -273,7 +273,7 @@ def shared_wallets(user: User = Depends(current_user), db: Session = Depends(get
     for wallet in wallets:
         owner = owners.get(wallet.user_id); is_owner = wallet.user_id == user.id; incoming_share = incoming_map.get(wallet.id); shares = outgoing_map.get(wallet.id, []) if is_owner else []
         balance = float(wallet.initial_balance) + float(totals.get((wallet.id, "income"), 0)) - float(totals.get((wallet.id, "expense"), 0)) - float(totals.get((wallet.id, "transfer"), 0)) + float(incoming_totals.get(wallet.id, 0))
-        result.append({"wallet_id": wallet.id, "name": wallet.name, "type": wallet.type, "color": wallet.color, "balance": round(balance, 3), "owner_id": wallet.user_id, "owner_email": owner.email if owner else "", "owner_name": owner.username if owner else "", "is_owner": is_owner, "permission": "edit" if is_owner else incoming_share.permission, "can_edit": is_owner or incoming_share.permission == "edit", "can_add": is_owner or incoming_share.permission in {"edit","add"}, "shares": [{"id": s.id, "email": s.invitee_email, "permission": s.permission, "registered": bool(s.member_user_id)} for s in shares]})
+        result.append({"wallet_id": wallet.id, "name": wallet.name, "type": wallet.type, "color": wallet.color, "card_network": wallet.card_network or ("visa" if wallet.type in {"bank", "card"} else None), "balance": round(balance, 3), "owner_id": wallet.user_id, "owner_email": owner.email if owner else "", "owner_name": owner.username if owner else "", "is_owner": is_owner, "permission": "edit" if is_owner else incoming_share.permission, "can_edit": is_owner or incoming_share.permission == "edit", "can_add": is_owner or incoming_share.permission in {"edit","add"}, "shares": [{"id": s.id, "email": s.invitee_email, "permission": s.permission, "registered": bool(s.member_user_id)} for s in shares]})
     return sorted(result, key=lambda item: (not item["is_owner"], item["name"].lower()))
 
 

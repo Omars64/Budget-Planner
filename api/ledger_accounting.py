@@ -43,6 +43,7 @@ def set_opening_balance(db, wallet, amount, actor_id=None):
                            type='income' if amount > 0 else 'expense', amount=abs(amount),
                            description='Opening balance', notes='', date=wallet.created_at or now(),
                            is_opening_balance=True, recorded_by_id=actor_id,
+                           reporting_month=(wallet.created_at or now()).strftime('%Y-%m'),
                            recurring_frequency='none'))
     db.flush()
 

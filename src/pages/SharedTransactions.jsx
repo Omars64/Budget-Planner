@@ -22,6 +22,7 @@ import { useViewState } from '../lib/viewState'
 import BalancePreview from '../components/BalancePreview'
 import { transactionSaved } from '../lib/savedFeedback'
 import AnimatedMoney from '../components/AnimatedMoney'
+import ReportingMonthField from '../components/ReportingMonthField'
 
 const nowLocal = () => {
   return dateInput()
@@ -29,6 +30,7 @@ const nowLocal = () => {
 
 const blankTx = walletId => ({
   type: 'expense', amount: '', description: '', notes: '', date: nowLocal(),
+  reporting_month: '',
   wallet_id: walletId || '', transfer_wallet_id: '', category_id: '',
   recurring_frequency: 'none', recurring_until: null,
 })
@@ -192,6 +194,7 @@ export default function SharedTransactions() {
     setDraft({
       type: tx.type, amount: String(tx.amount), description: tx.description, notes: tx.notes || '',
       date: dateInput(tx.date), wallet_id: tx.wallet_id, transfer_wallet_id: tx.transfer_wallet_id || '',
+      reporting_month: tx.reporting_month || String(tx.date || '').slice(0, 7),
       category_id: tx.category_id || '', recurring_frequency: 'none', recurring_until: null,
     })
     setModal(true)
@@ -214,6 +217,7 @@ export default function SharedTransactions() {
         wallet_id: Number(draft.wallet_id),
         transfer_wallet_id: draft.type === 'transfer' && draft.transfer_wallet_id ? Number(draft.transfer_wallet_id) : null,
         category_id: draft.type !== 'transfer' && draft.category_id ? Number(draft.category_id) : null,
+        reporting_month: draft.reporting_month || null,
         date: saveDate(draft.date),
         recurring_frequency: 'none', recurring_until: null,
       }
@@ -312,7 +316,7 @@ export default function SharedTransactions() {
           const wallet = editableWallets.find(w => String(w.wallet_id) === String(item.wallet_id))
           if (!wallet) { setFormError('This template wallet is no longer available with add access.'); return }
           const category = filterCategories.find(c=>String(c.wallet_id)===String(wallet.wallet_id) && String(c.id)===String(item.category_id) && c.kind===item.type)
-          setDraft(current => ({...current,type:item.type,amount:item.amount,description:item.description,wallet_id:wallet.wallet_id,transfer_wallet_id:editableWallets.some(w=>String(w.wallet_id)===String(item.transfer_wallet_id) && w.owner_email===wallet.owner_email) ? item.transfer_wallet_id : '',category_id:category?.id || ''}))
+          setDraft(current => ({...current,type:item.type,amount:item.amount,description:item.description,wallet_id:wallet.wallet_id,transfer_wallet_id:editableWallets.some(w=>String(w.wallet_id)===String(item.transfer_wallet_id) && w.owner_email===wallet.owner_email) ? item.transfer_wallet_id : '',category_id:category?.id || '',reporting_month:item.type==='income'?'':current.reporting_month}))
           setErrors({}); setFormError('')
         }}/>}
         <label className="amount-input"><span>Amount ({settings.currency})</span><input aria-label="Amount" aria-invalid={Boolean(errors.amount)} aria-describedby={errors.amount ? 'shared-amount-error' : undefined} required min="0.001" step="0.001" type="number" placeholder="0.000" value={draft.amount} onChange={e => {setDraft({ ...draft, amount: e.target.value });setErrors(v=>({...v,amount:''}))}}/></label>
@@ -320,6 +324,7 @@ export default function SharedTransactions() {
         <label className="field"><span>Description</span><input maxLength="160" placeholder="What was this for?" value={draft.description} onChange={e => setDraft({ ...draft, description: e.target.value })}/></label>
         <DateTimeField value={draft.date} onChange={date => setDraft(current => ({ ...current, date }))} disabled={saving}/>
         {errors.date && <small className="field-error">{errors.date}</small>}
+        {draft.type !== 'transfer' && <ReportingMonthField value={draft.reporting_month} type={draft.type} error={errors.reporting_month} disabled={saving} onChange={value => {setDraft(current => ({...current, reporting_month:value}));setErrors(current => ({...current, reporting_month:''}))}}/>}
         <div className="form-grid two transaction-wallet-fields">
           <SearchableSelect label="Shared wallet" value={draft.wallet_id} onChange={changeWallet} disabled={saving} error={errors.wallet_id} recentKey={`budgetly:recent:${user?.id}:shared-wallets`} options={editableWallets.map(w=>({value:w.wallet_id,label:`${w.name} · ${w.owner_name || w.owner_email}`}))}/>
           {draft.type === 'transfer' ? <SearchableSelect label="Destination shared wallet" value={draft.transfer_wallet_id} onChange={v=>setDraft({...draft,transfer_wallet_id:v})} disabled={saving} error={errors.transfer_wallet_id} options={transferWallets.map(w=>({value:w.wallet_id,label:w.name}))}/> : <SearchableSelect label="Category" value={draft.category_id} onChange={v=>setDraft({...draft,category_id:v})} placeholder="Uncategorized" disabled={saving} recentKey={`budgetly:recent:${user?.id}:shared-categories`} options={filteredCategories.map(c=>({value:c.id,label:c.name}))}/>}

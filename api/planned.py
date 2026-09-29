@@ -52,7 +52,7 @@ def serialize(db, row, user):
     category = db.get(Category, row.category_id) if row.category_id else None
     return {
         'id': row.id, 'type': row.type, 'amount': float(row.amount),
-        'description': row.description, 'notes': row.notes, 'date': ledger_iso(row.due_at),
+        'description': row.description, 'notes': row.notes, 'date': ledger_iso(row.due_at), 'reporting_month': row.reporting_month,
         'wallet_id': row.wallet_id, 'wallet_name': wallet.name if wallet else 'Deleted wallet',
         'transfer_wallet_id': row.transfer_wallet_id, 'category_id': row.category_id,
         'category_name': category.name if category else None,
@@ -87,6 +87,7 @@ def post_due(db: Session, limit=100):
         tx = Transaction(user_id=row.owner_id, recorded_by_id=row.created_by_id,
                          type=row.type, amount=row.amount, description=row.description,
                          notes=row.notes, date=row.due_at, wallet_id=row.wallet_id,
+                         reporting_month=row.reporting_month,
                          transfer_wallet_id=row.transfer_wallet_id, category_id=row.category_id,
                          recurring_frequency='none')
         db.add(tx); db.flush()
@@ -116,6 +117,7 @@ def create_plan(payload: PlanIn, user: User = Depends(current_user), db: Session
     row = PlannedTransaction(owner_id=wallet.user_id, created_by_id=user.id, wallet_id=tx.wallet_id,
         transfer_wallet_id=tx.transfer_wallet_id, category_id=tx.category_id, type=tx.type,
         amount=tx.amount, description=tx.description, notes=tx.notes, due_at=tx.date,
+        reporting_month=tx.reporting_month,
         status=payload.status, reminder_enabled=payload.reminder_enabled)
     db.add(row); db.commit(); db.refresh(row)
     return serialize(db, row, user)
@@ -135,6 +137,7 @@ def update_plan(plan_id: int, payload: PlanIn, user: User = Depends(current_user
     for key, value in [('wallet_id', tx.wallet_id), ('transfer_wallet_id', tx.transfer_wallet_id),
         ('category_id', tx.category_id), ('type', tx.type), ('amount', tx.amount),
         ('description', tx.description), ('notes', tx.notes), ('due_at', tx.date),
+        ('reporting_month', tx.reporting_month),
         ('status', payload.status), ('reminder_enabled', payload.reminder_enabled)]:
         setattr(row, key, value)
     row.error = None

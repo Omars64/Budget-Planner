@@ -8,6 +8,8 @@ export function ledgerQuery(filters, offset = 0) {
   const query = new URLSearchParams({ search: filters.search, tx_type: filters.type, sort: filters.sort, limit: String(PAGE_SIZE + 1), offset: String(offset) })
   if (filters.wallet) query.set('wallet_id', filters.wallet)
   if (filters.month) query.set('month', filters.month)
+  if (filters.reporting_from) query.set('reporting_from', filters.reporting_from)
+  if (filters.reporting_to) query.set('reporting_to', filters.reporting_to)
   if (filters.category) query.set('category_id', filters.category)
   if (filters.scope) query.set('scope', filters.scope)
   if (filters.exclude_opening) query.set('exclude_opening', 'true')

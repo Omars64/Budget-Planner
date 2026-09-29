@@ -16,7 +16,7 @@ from .account_security import audit, limit
 
 router = APIRouter()
 HEADINGS = ['Date', 'Time', 'Wallet', 'Owner', 'Entry', 'Description', 'Category',
-            'Money out', 'Money in', 'Balance', 'Currency', 'Notes', 'Recorded by']
+            'Money out', 'Money in', 'Balance', 'Currency', 'Notes', 'Recorded by', 'Reporting month']
 
 
 def allowed_wallets(db, user):
@@ -79,7 +79,7 @@ def statement_rows(db, user, wallet_id, start, end):
             entries.append((tx, money_out, money_in, incoming))
         rows.append([start.isoformat(), '', wallet.name, owner_names.get(wallet.user_id, ''),
                      'Opening balance', 'Balance before selected period', '', '', '',
-                     float(balance), currency, '', ''])
+                     float(balance), currency, '', '', ''])
         for tx, money_out, money_in, incoming in entries:
             balance += money_in - money_out
             entry = 'Opening funds' if tx.is_opening_balance else ('Transfer in' if incoming else 'Transfer out' if tx.type == 'transfer' else tx.type.title())
@@ -87,7 +87,7 @@ def statement_rows(db, user, wallet_id, start, end):
                          owner_names.get(wallet.user_id, ''), entry, tx.description,
                          categories.get(tx.category_id, ''), float(money_out) if money_out else '',
                          float(money_in) if money_in else '', float(balance), currency,
-                         tx.notes or '', recorders.get(tx.recorded_by_id, '')])
+                         tx.notes or '', recorders.get(tx.recorded_by_id, ''), tx.reporting_month])
     return rows
 
 
@@ -131,7 +131,7 @@ def as_xlsx(rows):
         cell.fill = PatternFill('solid', fgColor='17324A')
         cell.font = Font(color='FFFFFF', bold=True)
         cell.alignment = Alignment(wrap_text=True)
-    widths = [13, 9, 22, 20, 19, 34, 20, 15, 15, 17, 12, 38, 20]
+    widths = [13, 9, 22, 20, 19, 34, 20, 15, 15, 17, 12, 38, 20, 16]
     for index, width in enumerate(widths, 1):
         ws.column_dimensions[get_column_letter(index)].width = width
     for row in ws.iter_rows(min_row=2):
@@ -161,7 +161,7 @@ def as_pdf(rows, title):
     data = [[HEADINGS[i] for i in visible]]
     for row in rows:
         data.append([Paragraph(escape(str(display_row(row)[i])) if row[i] != '' else '', styles['BodyText']) for i in visible])
-    table = Table(data, colWidths=[67, 38, 85, 77, 83, 135, 85, 69, 69, 72, 53, 170, 76], repeatRows=1)
+    table = Table(data, colWidths=[62, 38, 76, 70, 78, 125, 78, 64, 64, 68, 48, 150, 68, 58], repeatRows=1)
     table.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#17324A')),
                                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
                                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F3F6F8')]),

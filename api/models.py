@@ -8,6 +8,16 @@ def utc_now():
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
+def transaction_month_default(context):
+    values = context.get_current_parameters()
+    value = values.get("date") or values.get("due_at")
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m")
+    if value:
+        return str(value)[:7]
+    return datetime.now().strftime("%Y-%m")
+
+
 class Wallet(Base):
     __tablename__ = "wallets"
     id = Column(Integer, primary_key=True)
@@ -17,6 +27,7 @@ class Wallet(Base):
     initial_balance = Column(Numeric(16, 3), default=0, nullable=False)
     icon = Column(String(40), default="wallet")
     color = Column(String(20), default="#0a4173")
+    card_network = Column(String(12), nullable=True)
     archived = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.now)
 
@@ -46,6 +57,7 @@ class Transaction(Base):
     description = Column(String(160), nullable=False)
     notes = Column(Text, default="")
     date = Column(DateTime, nullable=False, default=datetime.now)
+    reporting_month = Column(String(7), nullable=False, default=transaction_month_default)
     wallet_id = Column(Integer, ForeignKey("wallets.id"), nullable=False)
     transfer_wallet_id = Column(Integer, ForeignKey("wallets.id"), nullable=True)
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
@@ -79,6 +91,7 @@ class PlannedTransaction(Base):
     description = Column(String(160), nullable=False)
     notes = Column(Text, nullable=False, default="")
     due_at = Column(DateTime, nullable=False, index=True)
+    reporting_month = Column(String(7), nullable=False, default=transaction_month_default)
     status = Column(String(20), nullable=False, default="planned", index=True)
     reminder_enabled = Column(Boolean, nullable=False, default=True)
     posted_transaction_id = Column(Integer, ForeignKey("transactions.id"), nullable=True, unique=True)

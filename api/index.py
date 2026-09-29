@@ -67,7 +67,10 @@ def ensure_note_columns(connection):
         "transactions": {
             "is_opening_balance": "BOOLEAN NOT NULL DEFAULT FALSE",
             "recorded_by_id": "INTEGER",
+            "reporting_month": "VARCHAR(7)",
         },
+        "wallets": {"card_network": "VARCHAR(12)"},
+        "planned_transactions": {"reporting_month": "VARCHAR(7)"},
         "note_folders": {
             "color": "VARCHAR(20) NOT NULL DEFAULT '#0a4173'",
         },
@@ -83,16 +86,27 @@ def ensure_note_columns(connection):
     }
     inspector = sa_inspect(connection)
     for table, columns in tables.items():
+        if table not in inspector.get_table_names():
+            continue
         existing = {column["name"] for column in inspector.get_columns(table)}
         for name, definition in columns.items():
             if name not in existing:
                 connection.execute(text(f'ALTER TABLE {table} ADD COLUMN {name} {definition}'))
+    for table, date_column in (("transactions", "date"), ("planned_transactions", "due_at")):
+        if table not in inspector.get_table_names():
+            continue
+        rows = connection.execute(text(f"SELECT id, {date_column} FROM {table} WHERE reporting_month IS NULL")).all()
+        for row_id, value in rows:
+            parsed = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            connection.execute(text(f"UPDATE {table} SET reporting_month = :month WHERE id = :id"), {"month": parsed.strftime("%Y-%m"), "id": row_id})
 
 
 def ensure_indexes(connection):
     """Add the read-path indexes that matter once a workspace grows."""
     statements = (
         "CREATE INDEX IF NOT EXISTS ix_transactions_user_date ON transactions (user_id, date)",
+        "CREATE INDEX IF NOT EXISTS ix_transactions_user_reporting_month ON transactions (user_id, reporting_month)",
+        "CREATE INDEX IF NOT EXISTS ix_transactions_wallet_reporting_month ON transactions (wallet_id, reporting_month)",
         "CREATE INDEX IF NOT EXISTS ix_transactions_wallet_date ON transactions (wallet_id, date)",
         "CREATE INDEX IF NOT EXISTS ix_transactions_category_user ON transactions (category_id, user_id)",
         "CREATE INDEX IF NOT EXISTS ix_wallet_shares_owner_wallet ON wallet_shares (owner_id, wallet_id)",
@@ -332,6 +346,7 @@ def materialize_recurring(db: Session) -> int:
                 db.add(Transaction(
                     type=template.type, amount=template.amount, description=template.description,
                     notes=template.notes, date=occurrence, wallet_id=template.wallet_id,
+                    reporting_month=occurrence.strftime("%Y-%m"),
                     transfer_wallet_id=template.transfer_wallet_id, category_id=template.category_id,
                     recurring_frequency="none", recurring_until=None, recurring_parent_id=template.id,
                 ))
@@ -361,6 +376,7 @@ def materialize_recurring_for_user(db: Session, user_id: int) -> int:
                 db.add(Transaction(
                     user_id=user_id, type=template.type, amount=template.amount, description=template.description,
                     notes=template.notes, date=occurrence, wallet_id=template.wallet_id,
+                    reporting_month=occurrence.strftime("%Y-%m"),
                     transfer_wallet_id=template.transfer_wallet_id, category_id=template.category_id,
                     recurring_frequency="none", recurring_until=None, recurring_parent_id=template.id,
                 ))
@@ -379,6 +395,7 @@ def tx_payload(tx: Transaction):
         "transfer_wallet_id": tx.transfer_wallet_id, "category_id": tx.category_id,
         "recurring_frequency": tx.recurring_frequency or "none",
         "recurring_until": tx.recurring_until.isoformat() if tx.recurring_until else None,
+        "reporting_month": tx.reporting_month,
         "wallet_name": tx.wallet.name if tx.wallet else "",
         "transfer_wallet_name": tx.transfer_wallet.name if tx.transfer_wallet else None,
         "category_name": tx.category.name if tx.category else None,
@@ -427,8 +444,14 @@ def budget_spent(db: Session, budget: Budget, as_of=None, personal_only=False) -
         Transaction.user_id == budget.user_id,
         Transaction.type == "expense",
         Transaction.is_opening_balance.is_(False),
-        Transaction.date >= datetime.combine(start, datetime.min.time()),
     )
+    if budget.period == "monthly":
+        q = q.filter(Transaction.reporting_month == as_of.strftime("%Y-%m"))
+    elif budget.period == "yearly":
+        q = q.filter(Transaction.reporting_month >= start.strftime("%Y-%m"),
+                     Transaction.reporting_month <= as_of.strftime("%Y-%m"))
+    else:
+        q = q.filter(Transaction.date >= datetime.combine(start, datetime.min.time()))
     if personal_only:
         q = q.filter(Transaction.wallet_id.in_(personal_wallet_ids(db, budget.user_id)))
         q = q.filter(Transaction.date < datetime.combine(as_of + timedelta(days=1), datetime.min.time()))
@@ -708,7 +731,7 @@ def wallets(user: User = Depends(current_user), db: Session = Depends(get_db)):
     materialize_recurring_for_user(db, user.id)
     rows = db.query(Wallet).filter(Wallet.user_id == user.id).order_by(Wallet.archived, Wallet.created_at).all()
     shared = {r[0] for r in db.query(WalletShare.wallet_id).filter_by(owner_id=user.id).all()}
-    return [{"id": w.id, "name": w.name, "type": w.type, "initial_balance": float(opening_amount(db, w)), "icon": w.icon, "color": w.color, "archived": w.archived, "balance": wallet_balance(db, w), "is_shared": w.id in shared} for w in rows]
+    return [{"id": w.id, "name": w.name, "type": w.type, "initial_balance": float(opening_amount(db, w)), "icon": w.icon, "color": w.color, "card_network": w.card_network or ("visa" if w.type in {"bank", "card"} else None), "archived": w.archived, "balance": wallet_balance(db, w), "is_shared": w.id in shared} for w in rows]
 
 
 @app.post("/api/wallets", status_code=201)
@@ -992,7 +1015,8 @@ def dashboard(month: Optional[str] = None, user: User = Depends(current_user), d
     start = datetime(current.year, current.month, 1)
     next_month = datetime(current.year + (current.month == 12), 1 if current.month == 12 else current.month + 1, 1)
     personal = personal_records(db, user.id)
-    month_txs = personal.filter(Transaction.date >= start, Transaction.date < next_month).all()
+    report_month = current.strftime("%Y-%m")
+    month_txs = personal.filter(Transaction.reporting_month == report_month).all()
     income = sum(float(t.amount) for t in month_txs if t.type == "income")
     opening = sum(float(t.amount) for t in month_txs if t.type == 'income' and t.is_opening_balance)
     opening_debt = sum(float(t.amount) for t in month_txs if t.type == 'expense' and t.is_opening_balance)
@@ -1016,9 +1040,11 @@ def dashboard(month: Optional[str] = None, user: User = Depends(current_user), d
     today = ledger_today()
     visible_days = today.day if current.year == today.year and current.month == today.month else days_in_month
     for day in range(1, visible_days + 1):
-        day_rows = [t for t in month_txs if t.date.day == day]
+        day_rows = [t for t in month_txs if t.date.year == current.year and t.date.month == current.month and t.date.day == day]
+        if day == 1:
+            day_rows.extend(t for t in month_txs if (t.date.year, t.date.month) != (current.year, current.month))
         days.append({"day": str(day), "income": round(sum(float(t.amount) for t in day_rows if t.type == "income"), 3), "expense": round(sum(float(t.amount) for t in day_rows if t.type == "expense" and not t.is_opening_balance), 3)})
-    recent = personal.filter(Transaction.date >= start, Transaction.date < next_month).order_by(Transaction.date.desc(), Transaction.id.desc()).limit(5).all()
+    recent = personal.filter(Transaction.reporting_month == report_month).order_by(Transaction.date.desc(), Transaction.id.desc()).limit(5).all()
     bdata = []
     as_of = today if (current.year, current.month) == (today.year, today.month) else (next_month - timedelta(days=1)).date()
     for b in db.query(Budget).filter(Budget.user_id == user.id, Budget.start_date <= as_of).all():
@@ -1044,7 +1070,7 @@ def analytics(months: int = Query(6, ge=1, le=24), user: User = Depends(current_
         y = now.year; m = now.month - offset
         while m <= 0: m += 12; y -= 1
         start = datetime(y, m, 1); end = datetime(y + (m == 12), 1 if m == 12 else m + 1, 1)
-        txs = personal.filter(Transaction.date >= start, Transaction.date < end).all()
+        txs = personal.filter(Transaction.reporting_month == start.strftime("%Y-%m")).all()
         rows.append({"month": start.strftime("%b"), "month_key": start.strftime("%Y-%m"), "income": round(sum(float(t.amount) for t in txs if t.type == "income"), 3), "expense": round(sum(float(t.amount) for t in txs if t.type == "expense" and not t.is_opening_balance), 3)})
     category_rows = db.query(Category).filter(Category.user_id == user.id, Category.kind == "expense").all()
     category_totals = dict(personal.with_entities(Transaction.category_id, func.sum(Transaction.amount)).filter(
@@ -1081,7 +1107,7 @@ def export_backup(user: User = Depends(current_user), db: Session = Depends(get_
         "wallets": [{c.name: getattr(w, c.name) for c in Wallet.__table__.columns if c.name not in {"created_at", "user_id"}} for w in db.query(Wallet).filter(Wallet.user_id == user.id).all()],
         "categories": [{c.name: getattr(x, c.name) for c in Category.__table__.columns if c.name not in {"created_at", "user_id"}} for x in db.query(Category).filter(Category.user_id == user.id).all()],
         "transactions": [{**{c.name: getattr(t, c.name) for c in Transaction.__table__.columns if c.name not in {"created_at", "user_id"}}, "date": t.date.isoformat(), "recurring_until": t.recurring_until.isoformat() if t.recurring_until else None} for t in db.query(Transaction).filter(Transaction.user_id == user.id).all()],
-        "planned_transactions": [{"id": p.id, "wallet_id": p.wallet_id, "transfer_wallet_id": p.transfer_wallet_id, "category_id": p.category_id, "type": p.type, "amount": float(p.amount), "description": p.description, "notes": p.notes, "due_at": p.due_at.isoformat(), "status": p.status, "reminder_enabled": p.reminder_enabled, "posted_transaction_id": p.posted_transaction_id} for p in db.query(PlannedTransaction).filter(PlannedTransaction.owner_id == user.id).all()],
+        "planned_transactions": [{"id": p.id, "wallet_id": p.wallet_id, "transfer_wallet_id": p.transfer_wallet_id, "category_id": p.category_id, "type": p.type, "amount": float(p.amount), "description": p.description, "notes": p.notes, "due_at": p.due_at.isoformat(), "reporting_month": p.reporting_month, "status": p.status, "reminder_enabled": p.reminder_enabled, "posted_transaction_id": p.posted_transaction_id} for p in db.query(PlannedTransaction).filter(PlannedTransaction.owner_id == user.id).all()],
         "budgets": [{**{c.name: getattr(b, c.name) for c in Budget.__table__.columns if c.name not in {"created_at", "user_id"}}, "start_date": b.start_date.isoformat()} for b in db.query(Budget).filter(Budget.user_id == user.id).all()],
         "goals": [{**{c.name: getattr(g, c.name) for c in Goal.__table__.columns if c.name not in {"created_at", "user_id"}}, "deadline": g.deadline.isoformat() if g.deadline else None} for g in db.query(Goal).filter(Goal.user_id == user.id).all()],
         "debts": [{**{c.name: getattr(d, c.name) for c in Debt.__table__.columns if c.name not in {"created_at", "user_id"}}, "due_date": d.due_date.isoformat() if d.due_date else None} for d in db.query(Debt).filter(Debt.user_id == user.id).all()],
@@ -1170,6 +1196,7 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
         old_id = t.get("id")
         t = {k: v for k, v in dict(t).items() if k not in {"id", "user_id"}}
         t["date"] = datetime.fromisoformat(t["date"])
+        t.setdefault("reporting_month", t["date"].strftime("%Y-%m"))
         t["recurring_until"] = date.fromisoformat(t["recurring_until"]) if t.get("recurring_until") else None
         t["wallet_id"] = wallet_map.get(t["wallet_id"], t["wallet_id"])
         if t.get("transfer_wallet_id"):
@@ -1189,6 +1216,7 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
         payload['category_id'] = category_map.get(payload.get('category_id'))
         payload['posted_transaction_id'] = tx_map.get(payload.get('posted_transaction_id'))
         payload['due_at'] = datetime.fromisoformat(payload['due_at'])
+        payload.setdefault('reporting_month', payload['due_at'].strftime('%Y-%m'))
         if payload['status'] == 'posted' and not payload['posted_transaction_id']:
             payload['status'] = 'planned'
         db.add(PlannedTransaction(owner_id=user.id, created_by_id=user.id, **payload))

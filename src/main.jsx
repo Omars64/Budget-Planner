@@ -21,6 +21,7 @@ import './ledger-clarity.css'
 import './comfort.css'
 import './navigation.css'
 import './auth-expanded.css'
+import './coherent-app.css'
 
 applyAppearance(readDeviceAppearance())
 

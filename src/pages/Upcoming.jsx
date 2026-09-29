@@ -3,11 +3,13 @@ import { Bell, CalendarClock, Check, ChevronDown, ListFilter, Pencil, Plus, Tras
 import { api, jsonBody, money } from '../lib/api'
 import { dateInput, saveDate, showTime } from '../lib/time'
 import DateTimeField from '../components/DateTimeField'
+import ReportingMonthField from '../components/ReportingMonthField'
 import { useApp } from '../App'
 import '../upcoming.css'
 
 const statuses = [['upcoming', 'Upcoming'], ['all', 'All records'], ['planned', 'Planned'], ['scheduled', 'Scheduled'], ['failed', 'Needs attention'], ['posted', 'Recorded']]
-const empty = () => ({ type: 'expense', amount: '', description: '', notes: '', date: dateInput(new Date(Date.now() + 86400000)), wallet_id: '', transfer_wallet_id: '', category_id: '', status: 'planned', reminder_enabled: true })
+const empty = () => ({ type: 'expense', amount: '', description: '', notes: '', date: dateInput(new Date(Date.now() + 86400000)), reporting_month: '', wallet_id: '', transfer_wallet_id: '', category_id: '', status: 'planned', reminder_enabled: true })
+const reportingMonthLabel = month => new Intl.DateTimeFormat('en', { month: 'short', year: 'numeric' }).format(new Date(`${month}-01T12:00:00`))
 
 function StatusFilter({ value, onChange }) {
   const [open, setOpen] = useState(false)
@@ -60,11 +62,11 @@ export default function Upcoming() {
 
   const start = row => {
     setError('')
-    if (row) setDraft({ ...row, status: row.status === 'failed' ? 'planned' : row.status, amount: String(row.amount), date: dateInput(row.date), wallet_id: String(row.wallet_id), transfer_wallet_id: row.transfer_wallet_id ? String(row.transfer_wallet_id) : '', category_id: row.category_id ? String(row.category_id) : '' })
+    if (row) setDraft({ ...row, status: row.status === 'failed' ? 'planned' : row.status, amount: String(row.amount), date: dateInput(row.date), reporting_month: row.reporting_month || String(row.date || '').slice(0, 7), wallet_id: String(row.wallet_id), transfer_wallet_id: row.transfer_wallet_id ? String(row.transfer_wallet_id) : '', category_id: row.category_id ? String(row.category_id) : '' })
     else setDraft({ ...empty(), wallet_id: String(wallets.find(w => w.editable)?.id || '') })
     window.requestAnimationFrame?.(() => editor.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' }))
   }
-  const change = (key, value) => setDraft(current => ({ ...current, [key]: value, ...(key === 'wallet_id' || key === 'type' ? { category_id: '', transfer_wallet_id: '' } : {}) }))
+  const change = (key, value) => setDraft(current => ({ ...current, [key]: value, ...(key === 'wallet_id' || key === 'type' ? { category_id: '', transfer_wallet_id: '' } : {}), ...(key === 'type' && value !== 'expense' ? { reporting_month: '' } : {}) }))
   const wallet = wallets.find(w => String(w.id) === String(draft?.wallet_id))
   useEffect(() => {
     if (!draft?.wallet_id || wallet?.owner_id === user.id) return
@@ -87,7 +89,7 @@ export default function Upcoming() {
     if (draft.status === 'scheduled' && new Date(saveDate(draft.date)).getTime() <= Date.now()) { setError('Choose a future date and time for automatic recording.'); return }
     setBusy(true); setError('')
     try {
-      await api(draft.id ? `/api/planned-transactions/${draft.id}` : '/api/planned-transactions', { method: draft.id ? 'PUT' : 'POST', ...jsonBody({ status: draft.status === 'failed' ? 'planned' : draft.status, reminder_enabled: draft.reminder_enabled, transaction: { type: draft.type, amount: Number(draft.amount), description: draft.description.trim(), notes: draft.notes || '', date: saveDate(draft.date), wallet_id: Number(draft.wallet_id), transfer_wallet_id: draft.type === 'transfer' ? Number(draft.transfer_wallet_id) : null, category_id: draft.type === 'transfer' || !draft.category_id ? null : Number(draft.category_id), recurring_frequency: 'none', recurring_until: null } }) })
+      await api(draft.id ? `/api/planned-transactions/${draft.id}` : '/api/planned-transactions', { method: draft.id ? 'PUT' : 'POST', ...jsonBody({ status: draft.status === 'failed' ? 'planned' : draft.status, reminder_enabled: draft.reminder_enabled, transaction: { type: draft.type, amount: Number(draft.amount), description: draft.description.trim(), notes: draft.notes || '', date: saveDate(draft.date), reporting_month: draft.type === 'transfer' ? null : draft.reporting_month || null, wallet_id: Number(draft.wallet_id), transfer_wallet_id: draft.type === 'transfer' ? Number(draft.transfer_wallet_id) : null, category_id: draft.type === 'transfer' || !draft.category_id ? null : Number(draft.category_id), recurring_frequency: 'none', recurring_until: null } }) })
       setDraft(null); await load(); notify('Upcoming entry saved')
     } catch (err) { setError(err.message) } finally { setBusy(false) }
   }
@@ -111,6 +113,7 @@ export default function Upcoming() {
         <label className="field"><span>Type</span><select value={draft.type} onChange={event => change('type', event.target.value)}><option value="expense">Expense</option><option value="income">Income</option><option value="transfer">Transfer</option></select></label>
         <label className="field"><span>Amount ({settings.currency})</span><input required type="number" min="0.001" step="0.001" value={draft.amount} onChange={event => change('amount', event.target.value)}/></label>
       </div>
+      {draft.type !== 'transfer' && <ReportingMonthField value={draft.reporting_month} type={draft.type} disabled={busy} onChange={value => change('reporting_month', value)}/>}
       <label className="field"><span>Description</span><input required maxLength="160" placeholder="What is this for?" value={draft.description} onChange={event => change('description', event.target.value)}/></label>
       <div className="form-grid two">
         <label className="field"><span>Wallet</span><select required value={draft.wallet_id} onChange={event => change('wallet_id', event.target.value)}><option value="">Choose wallet</option>{wallets.filter(w => w.editable).map(w => <option key={w.id} value={w.id}>{w.name}{w.shared ? ' · Shared' : ''}</option>)}</select></label>
@@ -124,7 +127,7 @@ export default function Upcoming() {
       {loading ? <p className="upcoming-empty">Loading upcoming records...</p> : displayed.length === 0 ? <p className="upcoming-empty">No entries in this view.</p> : displayed.map(row => <article className="upcoming-record" key={row.id}>
         <div className="upcoming-record-main">
           <div className="upcoming-record-title"><strong>{row.description}</strong><span className={`upcoming-status ${row.status}`}>{row.status === 'posted' ? 'Recorded' : row.status === 'failed' ? 'Needs attention' : row.status}</span></div>
-          <div className="upcoming-record-details"><span><CalendarClock size={15}/>{showTime(row.date)}</span><span className="upcoming-type">{row.type}</span><span>{row.wallet_name}{row.shared ? ` · Shared with ${row.owner_name}` : ''}</span><span>{categoryLabel(row)}</span>{row.reminder_enabled && row.status !== 'posted' && <span><Bell size={15}/>Reminder on</span>}</div>
+          <div className="upcoming-record-details"><span><CalendarClock size={15}/>{showTime(row.date)}</span><span className="upcoming-type">{row.type}</span>{row.reporting_month && row.reporting_month !== String(row.date || '').slice(0, 7) && <span>For {reportingMonthLabel(row.reporting_month)}</span>}<span>{row.wallet_name}{row.shared ? ` · Shared with ${row.owner_name}` : ''}</span><span>{categoryLabel(row)}</span>{row.reminder_enabled && row.status !== 'posted' && <span><Bell size={15}/>Reminder on</span>}</div>
           {row.error && <p className="upcoming-error" role="status">{row.error}</p>}
         </div>
         <div className="upcoming-record-end"><strong className={`upcoming-amount ${row.type}`}>{row.type === 'expense' ? '-' : row.type === 'income' ? '+' : ''}{money(row.amount, settings.currency)}</strong>{row.can_edit && row.status !== 'posted' && <div className="button-row"><button type="button" className="icon-button" title="Edit entry" aria-label={`Edit ${row.description}`} onClick={() => start(row)}><Pencil size={17}/></button><button type="button" className="icon-button" title="Delete entry" aria-label={`Delete ${row.description}`} onClick={() => remove(row)}><Trash2 size={17}/></button></div>}</div>

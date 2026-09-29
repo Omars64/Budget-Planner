@@ -69,6 +69,7 @@ def test_viewer_can_export_statement_with_prior_opening_balance(workspace):
     assert rows[0]['Entry'] == 'Opening balance'
     assert rows[0]['Balance'] == '50.000'
     assert rows[1]['Description'] == 'Breakfast'
+    assert rows[1]['Reporting month'] == '2026-09'
     assert rows[1]['Money out'] == '2.250'
     assert rows[1]['Balance'] == '47.750'
     assert rows[1]['Notes'] == 'Cafe'
@@ -84,6 +85,8 @@ def test_xlsx_uses_real_numeric_columns_and_pdf_renders(workspace):
     assert response.status_code == 200, response.text
     sheet = load_workbook(io.BytesIO(response.content), read_only=True).active
     assert sheet['A1'].value == 'Date'
+    assert sheet['I1'].value == 'Money in'
+    assert sheet['N1'].value == 'Reporting month'
     assert sheet['J3'].value == 47.75
     assert sheet['H3'].value == 2.25
     pdf = client.get('/api/backup/statement', params={**params(wallet), 'format': 'pdf'})
@@ -125,7 +128,7 @@ def test_transfer_appears_as_money_out_and_money_in_for_accessible_wallets(works
 
 def test_user_text_is_not_spreadsheet_formula():
     row = ['2026-09-01', '', '=HYPERLINK("bad")', 'Owner', 'Expense',
-           '  =1+1', '', 2.25, '', 47.75, 'KWD', '', '']
+           '  =1+1', '', 2.25, '', 47.75, 'KWD', '', '', '2026-09']
     csv_rows = list(csv.reader(io.StringIO(as_csv([row]).lstrip('\ufeff'))))
     assert csv_rows[1][2].startswith("'=")
     assert csv_rows[1][5].startswith("'  =")

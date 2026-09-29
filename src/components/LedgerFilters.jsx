@@ -3,21 +3,21 @@ import { ChevronLeft, ChevronRight, ListFilter, X } from 'lucide-react'
 import Modal from './Modal'
 import { dateInput } from '../lib/time'
 
-export const defaultLedgerFilters = { search: '', type: 'all', wallet: '', month: '', sort: 'newest', category: '', date_from:'', date_to:'', exclude_opening:false }
+export const defaultLedgerFilters = { search: '', type: 'all', wallet: '', month: '', sort: 'newest', category: '', date_from:'', date_to:'', reporting_from:'', reporting_to:'', exclude_opening:false }
 
 export default function LedgerFilters({ value, onChange, wallets, categories = [], shared = false, children }) {
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState(value)
-  const update = (key, next) => setDraft(current => ({ ...current, [key]: next, ...(key === 'wallet' || key === 'type' ? { category: '' } : {}), ...(key === 'month' ? {date_from:'',date_to:''} : {}) }))
+  const update = (key, next) => setDraft(current => ({ ...current, [key]: next, ...(key === 'wallet' || key === 'type' ? { category: '' } : {}), ...(key === 'month' ? {date_from:'',date_to:'',reporting_from:'',reporting_to:''} : {}) }))
   const active = Object.keys(defaultLedgerFilters).filter(key => (value[key] ?? defaultLedgerFilters[key]) !== defaultLedgerFilters[key])
   const availableCategories = [...new Map(categories.filter(c => (draft.type === 'all' || c.kind === draft.type) && (!shared || !draft.wallet || String(c.wallet_id) === draft.wallet)).map(c => [c.id, c])).values()]
   const monthLabel = value.month ? new Intl.DateTimeFormat('en', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(value.month + '-01T12:00:00Z')) : 'All months'
   const shiftMonth = offset => {
     const date = new Date((value.month || dateInput().slice(0, 7)) + '-01T12:00:00Z')
     date.setUTCMonth(date.getUTCMonth() + (value.month ? offset : 0))
-    onChange({ ...value, month: date.toISOString().slice(0, 7), date_from:'', date_to:'' })
+    onChange({ ...value, month: date.toISOString().slice(0, 7), date_from:'', date_to:'', reporting_from:'', reporting_to:'' })
   }
-  const label = key => key === 'exclude_opening' ? 'Starting balances excluded' : key === 'date_from' ? `From ${value.date_from.slice(0,10)}` : key === 'date_to' ? `To ${value.date_to.slice(0,10)}` : key === 'category' ? (value.category === '0' ? 'Uncategorized' : categories.find(c => String(c.id) === value.category)?.name || 'Category') : key === 'wallet' ? wallets.find(w => String(w.wallet_id ?? w.id) === value.wallet)?.name || 'Wallet' : key === 'month' ? monthLabel : key === 'search' ? 'Search: ' + value.search : key === 'sort' ? 'Oldest first' : value.type
+  const label = key => key === 'exclude_opening' ? 'Starting balances excluded' : key === 'date_from' ? `From ${value.date_from.slice(0,10)}` : key === 'date_to' ? `To ${value.date_to.slice(0,10)}` : key === 'reporting_from' ? `Reporting from ${value.reporting_from}` : key === 'reporting_to' ? `Reporting through ${value.reporting_to}` : key === 'category' ? (value.category === '0' ? 'Uncategorized' : categories.find(c => String(c.id) === value.category)?.name || 'Category') : key === 'wallet' ? wallets.find(w => String(w.wallet_id ?? w.id) === value.wallet)?.name || 'Wallet' : key === 'month' ? monthLabel : key === 'search' ? 'Search: ' + value.search : key === 'sort' ? 'Oldest first' : value.type
   return <section className="ledger-filter-bar" aria-label="Transaction filters">
     <div className="ledger-toolbar">
       <div className="ledger-month"><button className="icon-button" aria-label="Previous month" onClick={() => shiftMonth(-1)}><ChevronLeft size={18}/></button><strong>{monthLabel}</strong><button className="icon-button" aria-label="Next month" onClick={() => shiftMonth(1)}><ChevronRight size={18}/></button></div>

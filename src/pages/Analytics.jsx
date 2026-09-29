@@ -30,8 +30,7 @@ export default function Analytics(){
   const income=data.trend.reduce((a,b)=>a+b.income,0), expense=data.trend.reduce((a,b)=>a+b.expense,0)
   const firstMonth = data.trend[0]?.month_key
   const lastMonth = data.trend.at(-1)?.month_key
-  const lastDay = lastMonth ? new Date(Date.UTC(Number(lastMonth.slice(0,4)),Number(lastMonth.slice(5)),0)).toISOString().slice(0,10) : ''
-  const range = type => records({type,date_from:firstMonth ? `${firstMonth}-01T00:00:00` : '',date_to:lastDay ? `${lastDay}T23:59:59.999999` : '',exclude_opening:type==='expense'})
+  const range = type => records({type,reporting_from:firstMonth || '',reporting_to:lastMonth || '',exclude_opening:type==='expense'})
   return <div className="stack gap-22">
     {error && <div className="form-error" role="alert">{error}<button className="button ghost small" onClick={()=>setRetry(value=>value+1)}>Retry</button></div>}
     <section className="insight-banner glass"><div className="insight-icon"><Activity/></div><div><p className="eyebrow">Personal six-month signal</p><h2>{income>=expense?'Income is staying ahead of spending.':'Spending has overtaken income across the period.'}</h2><p className="muted">{fmt(income)} income vs {fmt(expense)} expenses in the visible range. Shared wallets are kept out of this view.</p></div></section>

@@ -1,0 +1,467 @@
+.app-shell {
+  position: relative;
+  isolation: isolate;
+  min-height: 100dvh;
+}
+
+.app-shell::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: url('/budgetly-symbol-gray.png') no-repeat right 4vw center / min(66vw, 860px);
+  opacity: .12;
+  pointer-events: none;
+}
+
+.budgetly-v2 .main-area {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+.budgetly-v2 .page-wrap {
+  width: 100%;
+  flex: 1 0 auto;
+}
+
+.brand-footer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  width: 100%;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.brand-footer span {
+  overflow-wrap: anywhere;
+}
+
+.brand-footer span + span {
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
+}
+
+.budgetly-v2 .app-footer {
+  flex: 0 0 auto;
+  margin-top: auto;
+  padding: 20px 12px max(16px, env(safe-area-inset-bottom));
+}
+
+.expanded-auth {
+  min-height: 100svh;
+  min-height: 100dvh;
+}
+
+.expanded-auth .auth-footer {
+  flex: 0 0 auto;
+  align-self: stretch;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+  min-height: 0;
+  margin-top: auto;
+  padding: 18px 0 0;
+  border-top: 1px solid var(--line);
+  text-align: center;
+}
+
+.auth-footer-action {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  line-height: 1.5;
+}
+
+.auth-footer .brand-footer {
+  padding: 0 0 max(2px, env(safe-area-inset-bottom));
+}
+
+.wallet-card.payment-card {
+  border-color: transparent;
+  background: linear-gradient(140deg,
+    color-mix(in srgb, var(--wallet-card-color) 92%, white),
+    color-mix(in srgb, var(--wallet-card-color) 72%, #111827));
+  color: #f8fbff;
+}
+
+.wallet-card.payment-card .wallet-type,
+.wallet-card.payment-card p.muted {
+  color: rgb(255 255 255 / 76%);
+}
+
+.wallet-card.payment-card h2,
+.wallet-card.payment-card strong {
+  color: #fff;
+}
+
+.wallet-card.payment-card .round-icon {
+  color: #fff !important;
+  background: rgb(255 255 255 / 16%);
+}
+
+.wallet-card.payment-card .wallet-actions {
+  min-height: 30px;
+  padding-right: 66px;
+}
+
+.wallet-card.payment-card .wallet-actions button {
+  background: rgb(255 255 255 / 15%);
+  color: #fff;
+}
+
+.wallet-card.payment-card .wallet-actions button.danger {
+  color: #ffe0e0;
+}
+
+.card-network-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 50px;
+  height: 30px;
+}
+
+.card-network-mark.visa {
+  color: currentColor;
+  font-family: Arial, sans-serif;
+  font-size: 20px;
+  font-style: italic;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.card-network-mark.mastercard {
+  position: relative;
+}
+
+.card-network-mark.mastercard i {
+  display: block;
+  width: 23px;
+  height: 23px;
+  border-radius: 50%;
+}
+
+.card-network-mark.mastercard i:first-child {
+  margin-right: -8px;
+  background: #eb3323;
+}
+
+.card-network-mark.mastercard i:last-child {
+  background: #f5a623;
+  mix-blend-mode: screen;
+}
+
+.wallet-card.payment-card .wallet-actions > .card-network-mark {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+}
+
+.wallet-card-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(210px, 1.15fr);
+  align-items: center;
+  gap: 16px;
+}
+
+.wallet-card-setting {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.wallet-card-setting legend {
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.wallet-network-options,
+.wallet-color-options {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wallet-network-options button {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-soft);
+  color: var(--text);
+}
+
+.wallet-network-options button.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.wallet-color-options button {
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  outline: 1px solid transparent;
+  background: var(--swatch);
+}
+
+.wallet-color-options button.selected {
+  outline-color: var(--text);
+}
+
+.wallet-card-preview {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-width: 0;
+  min-height: 142px;
+  padding: 13px 15px;
+  border-radius: 8px;
+  background: linear-gradient(140deg,
+    color-mix(in srgb, var(--wallet-card-color) 92%, white),
+    color-mix(in srgb, var(--wallet-card-color) 72%, #111827));
+  color: #fff;
+}
+
+.wallet-card-preview > div,
+.wallet-card-preview footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.wallet-card-preview > div > span:first-child {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.wallet-card-preview > strong {
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.wallet-card-preview footer > span {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wallet-card-preview .card-network-mark {
+  height: 28px;
+  color: #fff;
+}
+
+.reporting-month-label {
+  color: var(--accent-text);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.preview-chip {
+  width: 25px;
+  height: 19px;
+  border: 1px solid rgb(255 255 255 / 70%);
+  border-radius: 4px;
+  background: linear-gradient(90deg, transparent 47%, rgb(255 255 255 / 60%) 48% 52%, transparent 53%),
+    linear-gradient(transparent 45%, rgb(255 255 255 / 60%) 46% 54%, transparent 55%);
+}
+
+:root[data-theme=dark] body:has(.budgetly-v2)::before {
+  background: var(--page);
+}
+
+:root[data-theme=dark] .app-shell::before {
+  opacity: .19;
+  filter: brightness(1.35);
+}
+
+:root[data-theme=dark] body.has-wallpaper .app-shell::before {
+  opacity: .08;
+}
+
+:root[data-theme=dark] .budgetly-v2 :is(.panel, .workspace, .workspace-folders, .workspace-list, .workspace-reader, .ledger-page, .settings-grid, .transaction-wallets) {
+  background-color: var(--surface);
+  color: var(--text);
+}
+
+:root[data-theme=dark] .budgetly-v2 :is(.message-row:hover, .message-row.selected, .calendar-day:hover, .ledger-entry:hover) {
+  background: var(--surface-hover);
+}
+
+:root[data-theme=dark] .budgetly-v2 :is(.field input, .field select, .field textarea, .toolbar-select, .search-box, .note-folder-picker select, .feedback-filter) {
+  background-color: var(--surface);
+  color: var(--text);
+  border-color: var(--line);
+}
+
+:root[data-theme=dark] dialog.confirmation-dialog {
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--text);
+}
+
+:root[data-theme=dark] dialog.confirmation-dialog::backdrop {
+  background: rgb(0 0 0 / 66%);
+}
+
+:root[data-theme=dark] .expanded-auth .auth-footer {
+  border-color: var(--line);
+}
+
+@media (max-width: 820px) {
+  .app-shell::before {
+    background-position: right -30vw center;
+    background-size: min(98vw, 540px);
+    opacity: .09;
+  }
+
+  .brand-footer {
+    gap: 4px;
+    flex-direction: column;
+    font-size: 10px;
+  }
+
+  .brand-footer span + span {
+    padding: 0;
+    border: 0;
+  }
+
+  .budgetly-v2 .app-footer {
+    padding: 12px 10px calc(12px + env(safe-area-inset-bottom));
+  }
+
+  .wallet-card-editor {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .expanded-auth .auth-footer {
+    padding-top: 14px;
+  }
+}
+
+@media (min-width: 701px) and (max-height: 700px) {
+  .expanded-auth {
+    padding: 8px 5vw 6px;
+  }
+
+  .auth-brand {
+    gap: 10px;
+  }
+
+  .auth-brand .brand-logo {
+    width: 36px;
+    height: 36px;
+  }
+
+  .auth-brand strong {
+    font-size: 19px;
+  }
+
+  .auth-brand small {
+    font-size: 10px;
+  }
+
+  .auth-main {
+    width: min(100%, 680px);
+    padding: 0;
+  }
+
+  .auth-main h1 {
+    font-size: 44px;
+  }
+
+  .auth-main .eyebrow {
+    margin-bottom: 8px;
+  }
+
+  .auth-intro {
+    margin: 7px 0 12px;
+    font-size: 14px;
+  }
+
+  .expanded-auth .signin-method {
+    gap: 18px;
+    margin-bottom: 14px;
+  }
+
+  .expanded-auth .signin-method button {
+    min-height: 38px;
+    padding: 7px 0 9px;
+  }
+
+  .auth-form {
+    gap: 12px;
+  }
+
+  .auth-entry > input,
+  .auth-entry > .password-input {
+    min-height: 38px;
+  }
+
+  .auth-entry > input,
+  .auth-entry .password-input input {
+    font-size: 15px;
+  }
+
+  .auth-options {
+    margin-top: 10px;
+  }
+
+  .auth-form .auth-options {
+    margin-top: 0;
+  }
+
+  .auth-action-row {
+    margin-top: 0;
+  }
+
+  .expanded-auth .button.primary {
+    min-height: 44px;
+    padding: 9px 22px;
+  }
+
+  .expanded-auth .device-signin-preference {
+    margin-top: 5px;
+    font-size: 12px;
+  }
+
+  .expanded-auth .auth-footer {
+    gap: 3px;
+    padding-top: 4px;
+    font-size: 11px;
+  }
+
+  .auth-footer-action {
+    line-height: 1.25;
+  }
+
+  .auth-footer .brand-footer {
+    align-self: stretch;
+    font-size: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell::before {
+    transition: none !important;
+  }
+}

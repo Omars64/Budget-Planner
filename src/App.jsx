@@ -20,6 +20,7 @@ const Feedback = lazy(() => import('./pages/Feedback'))
 const Upcoming = lazy(() => import('./pages/Upcoming'))
 const BankMessages = lazy(() => import('./pages/BankMessages'))
 import BrandLogo from './components/BrandLogo'
+import BrandFooter from './components/BrandFooter'
 import PasswordInput from './components/PasswordInput'
 import { useConfirmation } from './components/Confirmation'
 import Experience from './components/Experience'
@@ -156,8 +157,11 @@ export function LoginScreen({ onLogin }) {
         </div>
       </>}
     </motion.main>
-    {mode === 'login' && <footer className="auth-footer">New to Budgetly? <button className="auth-switch" type="button" onClick={() => { setError(''); setMode('signup') }}>Create an account</button></footer>}
-    {mode === 'signup' && <footer className="auth-footer">Already have an account? <button className="auth-switch" type="button" onClick={() => { setError(''); setMode('login') }}>Sign in</button></footer>}
+    {mode !== 'verify' && <footer className="auth-footer">
+      {mode === 'login' && <div className="auth-footer-action">New to Budgetly? <button className="auth-switch" type="button" onClick={() => { setError(''); setMode('signup') }}>Create an account</button></div>}
+      {mode === 'signup' && <div className="auth-footer-action">Already have an account? <button className="auth-switch" type="button" onClick={() => { setError(''); setMode('login') }}>Sign in</button></div>}
+      <BrandFooter/>
+    </footer>}
   </div>
 }
 

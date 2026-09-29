@@ -58,7 +58,7 @@ def cash(value):
 def transaction_fact(tx, visible_ids):
     return {'reference': f'transaction:{tx.id}', 'id': tx.id, 'type': tx.type,
             'amount': cash(tx.amount), 'description': tx.description,
-            'date': ledger_iso(tx.date),
+            'date': ledger_iso(tx.date), 'reporting_month': tx.reporting_month,
             'wallet_id': tx.wallet_id if tx.wallet_id in visible_ids else None,
             'wallet': tx.wallet.name if tx.wallet_id in visible_ids else 'Private wallet',
             'transfer_wallet_id': tx.transfer_wallet_id if tx.transfer_wallet_id in visible_ids else None,
@@ -80,7 +80,7 @@ def lookup(db, user, chat, month=None, search='', category_id=None):
     if not ids:
         return {'records': [], 'message': 'No financial data is attached in this context.'}, []
     start, end = month_range(month or chat.month)
-    q = ledger_query(db, user, chat, ids).filter(Transaction.date >= start, Transaction.date < end)
+    q = ledger_query(db, user, chat, ids).filter(Transaction.reporting_month == start.strftime('%Y-%m'))
     if search:
         q = q.filter(Transaction.description.ilike('%' + search[:100] + '%'))
     if category_id:

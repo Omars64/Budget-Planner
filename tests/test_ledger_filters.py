@@ -84,6 +84,64 @@ def test_shared_destination_filter_and_access(ledger):
     assert len(client.get('/api/shared/transactions', params={**params, 'tx_type': 'transfer', 'search': 'September'}).json()) == 1
 
 
+def test_income_reporting_month_preserves_actual_date_and_filters_both_ledgers(ledger):
+    client, actor, member, wallets, _, _, db = ledger
+    personal_wallet = wallets[2]
+    income = {
+        'type': 'income', 'amount': 125.5, 'description': 'Reporting month salary',
+        'date': '2026-08-31T18:00:00', 'wallet_id': personal_wallet.id,
+        'transfer_wallet_id': None, 'category_id': None,
+        'recurring_frequency': 'none', 'recurring_until': None,
+    }
+    before = client.get('/api/dashboard?month=2026-09').json()['income']
+    assert client.post('/api/transactions', json=income).status_code == 422
+    created = client.post('/api/transactions', json={**income, 'reporting_month': '2026-09'})
+    assert created.status_code == 201, created.text
+    assert created.json()['date'].startswith('2026-08-31')
+    assert created.json()['reporting_month'] == '2026-09'
+    assert client.get('/api/dashboard?month=2026-09').json()['income'] == before + 125.5
+    assert any(row['id'] == created.json()['id'] for row in client.get(
+        '/api/transactions', params={'month': '2026-09', 'search': 'Reporting month salary'}
+    ).json())
+    assert len(client.get('/api/transactions', params={
+        'reporting_from': '2026-09', 'reporting_to': '2026-09',
+        'search': 'Reporting month salary',
+    }).json()) == 1
+    assert client.get('/api/transactions', params={
+        'reporting_from': '2026-10', 'reporting_to': '2026-09',
+    }).status_code == 422
+
+    share = db.query(WalletShare).filter_by(wallet_id=wallets[0].id).one()
+    share.permission = 'edit'
+    db.commit()
+    actor['user'] = member
+    shared_income = {**income, 'wallet_id': wallets[0].id, 'description': 'Shared reporting salary'}
+    assert client.post('/api/shared/transactions', json=shared_income).status_code == 422
+    shared_created = client.post('/api/shared/transactions', json={
+        **shared_income, 'reporting_month': '2026-09',
+    })
+    assert shared_created.status_code == 201, shared_created.text
+    assert shared_created.json()['date'].startswith('2026-08-31')
+    assert shared_created.json()['reporting_month'] == '2026-09'
+    assert any(row['id'] == shared_created.json()['id'] for row in client.get(
+        '/api/shared/transactions', params={'month': '2026-09', 'search': 'Shared reporting salary'}
+    ).json())
+
+    editable = {**shared_income, 'reporting_month': '2026-10'}
+    updated = client.put(
+        f"/api/shared/transactions/{shared_created.json()['id']}",
+        json=editable, headers={'If-Match': shared_created.json()['revision']},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()['reporting_month'] == '2026-10'
+    assert client.get('/api/shared/transactions', params={
+        'month': '2026-09', 'search': 'Shared reporting salary',
+    }).json() == []
+    assert len(client.get('/api/shared/transactions', params={
+        'month': '2026-10', 'search': 'Shared reporting salary',
+    }).json()) == 1
+
+
 @pytest.mark.parametrize('endpoint', ['/api/transactions', '/api/shared/transactions'])
 @pytest.mark.parametrize('params', [{'month': '2026-13'}, {'month': 'bad'}, {'sort': 'random'}, {'offset': -1}])
 def test_invalid_filters_rejected(ledger, endpoint, params):

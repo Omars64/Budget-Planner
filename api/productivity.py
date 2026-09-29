@@ -73,7 +73,9 @@ def preview(payload:CsvIn,user=Depends(current_user),db=Depends(get_db)):
         try:
             amount=Decimal((row.get('amount') or row.get('debit') or row.get('credit') or '').replace(',',''))
             kind=(row.get('type') or ('income' if row.get('credit') and not row.get('debit') else 'expense')).strip().lower()
-            tx=TransactionIn(type=kind,amount=abs(amount),description=row.get('description','').strip(),date=datetime.fromisoformat(row.get('date','').strip()),wallet_id=payload.wallet_id)
+            row_date = datetime.fromisoformat(row.get('date','').strip())
+            reporting_month = row.get('reporting_month', '').strip() or row_date.strftime('%Y-%m')
+            tx=TransactionIn(type=kind,amount=abs(amount),description=row.get('description','').strip(),date=row_date,wallet_id=payload.wallet_id,reporting_month=reporting_month)
             if tx.type=='transfer':raise ValueError('Transfers must be entered separately')
             rows.append({'line':number,'transaction':jsonable_encoder(tx),'duplicate':duplicate(db,user.id,tx),'error':None})
         except (ValueError,InvalidOperation,ValidationError):

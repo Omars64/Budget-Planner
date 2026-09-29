@@ -13,8 +13,9 @@ import VoiceInputButton from './VoiceInputButton'
 import { applyVoiceTransaction } from '../lib/voiceInput'
 import BalancePreview from './BalancePreview'
 import { transactionSaved } from '../lib/savedFeedback'
+import ReportingMonthField from './ReportingMonthField'
 
-const blank = () => ({ type: 'expense', amount: '', description: '', notes: '', date: dateInput(), wallet_id: '', transfer_wallet_id: '', category_id: '', recurring_frequency: 'none', recurring_until: '' })
+const blank = () => ({ type: 'expense', amount: '', description: '', notes: '', date: dateInput(), reporting_month: '', wallet_id: '', transfer_wallet_id: '', category_id: '', recurring_frequency: 'none', recurring_until: '' })
 
 export default function TransactionModal({ open, onClose, onSaved, editing = null }) {
   const {user, settings, notify} = useApp()
@@ -46,6 +47,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
       const base = editing ? {
         ...editing,
         date: dateInput(editing.date),
+        reporting_month: editing.reporting_month || String(editing.date || '').slice(0, 7),
         transfer_wallet_id: editing.transfer_wallet_id || '', category_id: editing.category_id || '', recurring_until: editing.recurring_until || ''
       } : (readDraft(draftKey) || blank())
       if (!base.wallet_id || !w.some(wallet => String(wallet.id) === String(base.wallet_id))) base.wallet_id = w.find(wallet => !wallet.archived)?.id || ''
@@ -89,6 +91,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
       ...form, description: form.description.trim() || visibleCategories.find(c => String(c.id) === String(form.category_id))?.name || (form.type === 'transfer' ? 'Transfer' : form.type === 'income' ? 'Income' : 'Expense'), amount: Number(form.amount), wallet_id: Number(form.wallet_id),
       transfer_wallet_id: form.type === 'transfer' ? Number(form.transfer_wallet_id) : null,
       category_id: form.type === 'transfer' || !form.category_id ? null : Number(form.category_id),
+      reporting_month: form.reporting_month || null,
       date: saveDate(form.date), recurring_until: form.recurring_frequency === 'none' ? null : form.recurring_until,
     }
       const saved = await api(schedule ? '/api/planned-transactions' : editing ? `/api/transactions/${editing.id}` : '/api/transactions', { method: editing ? 'PUT' : 'POST', ...jsonBody(schedule ? {transaction: payload, status: 'scheduled', reminder_enabled: true} : payload) })
@@ -114,7 +117,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
       {!editing && <TransactionTemplates userId={user.id} scope="personal" draft={form} disabled={busy || loading} onApply={item => {
         const wallet = wallets.find(w => String(w.id) === String(item.wallet_id))
         if (!wallet) { setError('This template wallet is no longer available. Choose another template or enter the fields.'); return }
-        const next = {...form, type:item.type, amount:item.amount, description:item.description, wallet_id:wallet.id, transfer_wallet_id:wallets.some(w => String(w.id) === String(item.transfer_wallet_id)) ? item.transfer_wallet_id : '', category_id:categories.some(c => String(c.id) === String(item.category_id) && c.kind === item.type) ? item.category_id : ''}
+        const next = {...form, type:item.type, amount:item.amount, description:item.description, wallet_id:wallet.id, transfer_wallet_id:wallets.some(w => String(w.id) === String(item.transfer_wallet_id)) ? item.transfer_wallet_id : '', category_id:categories.some(c => String(c.id) === String(item.category_id) && c.kind === item.type) ? item.category_id : '', reporting_month:item.type === 'income' ? '' : form.reporting_month}
         setForm(next); setError(''); setErrors({})
         writeDraft(draftKey,next)
       }}/>}
@@ -125,6 +128,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
 
       <DateTimeField value={form.date} onChange={value => set('date',value)} disabled={busy || loading}/>
       {errors.date && <small className="field-error">{errors.date}</small>}
+      {form.type !== 'transfer' && <ReportingMonthField value={form.reporting_month} type={form.type} error={errors.reporting_month} disabled={busy || loading} onChange={value => set('reporting_month',value)}/>}
       <div className="form-grid two transaction-wallet-fields">
         <SearchableSelect label={form.type === 'transfer' ? 'From wallet' : 'Wallet'} value={form.wallet_id} onChange={v => set('wallet_id',v)} disabled={busy || loading} error={errors.wallet_id} recentKey={`budgetly:recent:${user.id}:wallets`} options={wallets.map(w => ({value:w.id,label:`${w.name} · ${money(w.balance,settings.currency)}`}))}/>
         {form.type === 'transfer' ? <SearchableSelect label="To wallet" value={form.transfer_wallet_id} onChange={v => set('transfer_wallet_id',v)} disabled={busy || loading} error={errors.transfer_wallet_id} options={wallets.filter(w => String(w.id) !== String(form.wallet_id)).map(w => ({value:w.id,label:w.name}))}/> : <SearchableSelect label="Category" placeholder="Uncategorized" value={form.category_id} onChange={v => set('category_id',v)} disabled={busy || loading} recentKey={`budgetly:recent:${user.id}:categories`} options={visibleCategories.map(c => ({value:c.id,label:c.name}))}/>}

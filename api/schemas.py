@@ -15,7 +15,16 @@ class WalletIn(BaseModel):
     initial_balance: Decimal = Field(default=Decimal('0'), max_digits=16, decimal_places=3)
     icon: str = "wallet"
     color: str = "#0a4173"
+    card_network: Optional[Literal["visa", "mastercard"]] = None
     archived: bool = False
+
+    @model_validator(mode="after")
+    def normalize_card_network(self):
+        if self.type in {"bank", "card"}:
+            self.card_network = self.card_network or "visa"
+        else:
+            self.card_network = None
+        return self
 
 
 class LoginPayload(BaseModel):
@@ -70,6 +79,7 @@ class TransactionIn(BaseModel):
     description: str = Field(min_length=1, max_length=160)
     notes: str = ""
     date: datetime
+    reporting_month: Optional[str] = Field(default=None, pattern=r"^[1-9][0-9]{3}-(0[1-9]|1[0-2])$")
     wallet_id: int
     transfer_wallet_id: Optional[int] = None
     category_id: Optional[int] = None
@@ -79,6 +89,12 @@ class TransactionIn(BaseModel):
     @model_validator(mode="after")
     def validate_transaction(self):
         self.date = ledger_time(self.date)
+        if self.type == "transfer":
+            self.reporting_month = self.date.strftime("%Y-%m")
+        if self.type == "income" and not self.reporting_month:
+            raise ValueError("Choose the reporting month for this income")
+        if self.reporting_month is None:
+            self.reporting_month = self.date.strftime("%Y-%m")
         if self.type == "transfer":
             if not self.transfer_wallet_id:
                 raise ValueError("A destination wallet is required for transfers")
