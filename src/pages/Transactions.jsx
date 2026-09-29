@@ -28,6 +28,13 @@ export default function Transactions() {
   const [wallets, setWallets] = useState([])
   const [categories, setCategories] = useState([])
 
+  useEffect(() => {
+    if (location.state?.aiDraft) {
+      setEditing(null)
+      setModal(true)
+    }
+  }, [location.key])
+
   useEffect(() => { api('/api/wallets').then(rows => setWallets(rows.filter(w => !w.is_shared))).catch(() => setWallets([])); api('/api/categories').then(setCategories).catch(() => setCategories([])) }, [refreshKey])
 
   const fmt = v => money(v, settings.currency, settings.compact_numbers)

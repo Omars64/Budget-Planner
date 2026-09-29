@@ -38,8 +38,29 @@ function Answer({ text }) {
   })}</div>
 }
 
+function TransactionDraftCard({ draft, shared, canUse, onUse }) {
+  const details = [
+    ['Type', human(draft.type || 'transaction')],
+    ['Amount', draft.amount || 'Needs amount'],
+    ['Description', draft.description || 'No description'],
+    ['Wallet', draft.wallet_name || 'Needs wallet'],
+    [draft.type === 'transfer' ? 'To wallet' : 'Category', draft.type === 'transfer' ? (draft.transfer_wallet_name || 'Needs destination wallet') : (draft.category_name || 'Needs category')],
+    ['Date', draft.date ? new Date(`${draft.date}:00+03:00`).toLocaleString(undefined, { timeZone: 'Asia/Kuwait', dateStyle: 'medium', timeStyle: 'short' }) : 'Needs date'],
+  ]
+  return <section className="ai-proposal ai-draft" aria-label="Transaction draft">
+    <div>
+      <strong>Transaction draft</strong>
+      <small>Review every field. Nothing has been recorded.</small>
+      <dl className="ai-review-fields">{details.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+      {draft.missing?.length > 0 && <p className="form-note">Choose {draft.missing.join(' and ')} before saving.</p>}
+      {shared && !canUse && <p className="form-note">You have view-only access to this shared wallet, so the draft cannot be saved here.</p>}
+    </div>
+    <button className="button primary small" type="button" disabled={!canUse} onClick={() => onUse(draft)}>{shared ? (canUse ? 'Review shared transaction' : 'View-only access') : 'Review in Transactions'}</button>
+  </section>
+}
+
 export default function AskAI() {
-  const { notify, confirm, refresh } = useApp()
+  const { user, notify, confirm, refresh } = useApp()
   const location = useLocation()
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
@@ -234,6 +255,19 @@ export default function AskAI() {
     await loadChat(chatId)
     notify(value === 'incorrect' ? 'Answer marked for review' : 'Feedback recorded')
   })
+  const useDraft = draft => {
+    const shared = selectedScope === 'shared'
+    const sharedWallet = wallets?.find(wallet => wallet.id === Number(selectedWallet))
+    if (shared && !['add', 'edit'].includes(sharedWallet?.permission)) { notify('You have view-only access to this shared wallet.', 'error'); return }
+    const key = `flowbudget_${shared ? 'shared_' : ''}tx_draft_${user.id}`
+    const formDraft = {
+      type: draft.type || 'expense', amount: draft.amount || '', description: draft.description || '', notes: draft.notes || '',
+      date: draft.date || dateInput(), reporting_month: draft.reporting_month || '', wallet_id: draft.wallet_id || '',
+      transfer_wallet_id: draft.transfer_wallet_id || '', category_id: draft.category_id || '', recurring_frequency: 'none', recurring_until: '',
+    }
+    try { sessionStorage.setItem(key, JSON.stringify(formDraft)) } catch { notify('Allow device storage to open the draft in the transaction form.', 'error'); return }
+    navigate(shared ? '/shared-transactions' : '/transactions', { state: { aiDraft: true } })
+  }
   const wallets = selectedScope === 'shared' ? config?.shared_wallets : config?.wallets
   const label = selectedScope === 'general' ? 'General & economy' : wallets?.find(w => w.id === Number(selectedWallet))?.name || 'My wallets'
   const historyList = <div className="ai-chat-list">
@@ -268,6 +302,7 @@ export default function AskAI() {
             {turn.status === 'pending' && <p className="ai-thinking" role="status"><LoaderCircle className="ai-spinner" size={17}/>Working on your question...</p>}
             {['failed', 'stopped'].includes(turn.status) && <div className="ai-answer-error"><p>{turn.error || 'Response stopped. Your question is saved.'}</p><button className="button ghost small" disabled={pending} onClick={event => send(event, turn.id)}><RefreshCw size={16}/>Retry</button></div>}
             {turn.answer && <><Answer text={turn.answer}/>
+              {turn.drafts?.map((draft, index) => <TransactionDraftCard key={`${turn.id}-draft-${index}`} draft={draft} shared={selectedScope === 'shared'} canUse={selectedScope !== 'shared' || ['add', 'edit'].includes(wallets?.find(wallet => wallet.id === Number(selectedWallet))?.permission)} onUse={useDraft}/>)}
               {!!turn.sources.length && <details className="ai-sources"><summary>Sources & records ({turn.sources.length})</summary>{turn.sources.map(ref => ref.url ? <a key={ref.key} href={safeUrl(ref.url)} target="_blank" rel="noopener noreferrer"><Globe size={14}/>{ref.label}</a> : <button key={ref.key} onClick={() => openSource(ref)}>{ref.label}</button>)}</details>}
               <div className="ai-answer-tools"><button className="icon-button" title="Copy answer" aria-label="Copy answer" onClick={async () => { try { await globalThis.navigator.clipboard.writeText(turn.answer); notify('Answer copied') } catch { notify('Clipboard is unavailable on this device.', 'error') } }}><Copy size={16}/></button><button className="icon-button" title={turn.note_id ? 'Saved to Notes' : 'Save to Notes'} aria-label="Save answer to Notes" disabled={acting || Boolean(turn.note_id)} onClick={() => saveNote(turn)}>{turn.note_id ? <Check size={16}/> : <NotebookPen size={16}/>}</button><button className="icon-button" title="Helpful" aria-label="Helpful answer" aria-pressed={turn.feedback === 'helpful'} disabled={acting} onClick={() => feedback(turn, 'helpful')}><ThumbsUp size={16}/></button><button className="icon-button" title="Report incorrect answer" aria-label="Report incorrect answer" aria-pressed={turn.feedback === 'incorrect'} disabled={acting} onClick={() => feedback(turn, 'incorrect')}><ThumbsDown size={16}/></button></div>
               {turn.id === lastTurn?.id && !!turn.suggestions?.length && <div className="ai-followups">{turn.suggestions.map(text => <button key={text} disabled={pending} onClick={() => { setQuestion(text); composer.current?.focus() }}>{text}</button>)}</div>}

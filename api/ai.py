@@ -69,7 +69,7 @@ def turn_json(db, turn):
             'sources': json.loads(turn.sources), 'suggestions': json.loads(turn.suggestions),
             'status': turn.status, 'error': turn.error, 'research': turn.research,
             'created_at': turn.created_at.isoformat() + 'Z', 'feedback': turn.feedback, 'note_id': turn.note_id,
-            'actions': []}
+            'actions': [], 'drafts': usage.get('drafts', [])}
 
 
 @router.get('/config')

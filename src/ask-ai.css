@@ -86,6 +86,11 @@
 .ai-proposal strong { font-size:14px; }
 .ai-proposal small { display:block; color:var(--muted); margin-top:3px; }
 .ai-proposal .button { flex-shrink:0; }
+.ai-draft { align-items:flex-start; background:var(--surface-soft); }
+.ai-draft>div { flex:1; min-width:0; }
+.ai-draft .ai-review-fields { margin-top:10px; }
+.ai-draft .ai-review-fields>div { grid-template-columns:minmax(76px,auto) minmax(0,1fr); padding:6px 0; }
+.ai-draft .form-note { margin:10px 0 0; }
 .ai-answer-tools { display:flex; gap:5px; margin-block:12px; }
 .ai-answer-tools .icon-button { width:34px; height:34px; background:transparent; color:var(--muted); }
 .ai-answer-tools .icon-button[aria-pressed=true] { color:var(--accent-text); background:var(--surface-soft); }

@@ -189,6 +189,10 @@ export default function SharedTransactions() {
     return () => window.removeEventListener('budgetly:add-shared-transaction', open)
   }, [])
 
+  useEffect(() => {
+    if (location.state?.aiDraft) openNewRef.current()
+  }, [location.key])
+
   const openEdit = tx => {
     setErrors({})
     setFormError('')

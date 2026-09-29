@@ -11,7 +11,7 @@ from sqlalchemy.pool import StaticPool
 from api.app import app
 from api.database import Base, get_db
 from api.index import current_user
-from api.models import User, Wallet, Note
+from api.models import User, Wallet, Note, Category, Transaction
 from api.ai_models import AssistantConfig
 from api import ai_service, ai_settings, ai_provider
 
@@ -75,6 +75,47 @@ def test_local_saved_conversation_and_idempotent_note(setup):
     note = client.post(f"/api/ai/turns/{first['id']}/save-note").json()['note_id']
     assert client.post(f"/api/ai/turns/{first['id']}/save-note").json()['note_id'] == note
     assert db.get(Note, note).content == first['answer']
+    provider.assert_not_called()
+
+
+def test_transaction_draft_is_scoped_review_only_and_supports_natural_language(setup):
+    client, db, user, provider = setup
+    main = db.query(Wallet).filter_by(user_id=user.id, name='Main').first()
+    savings = Wallet(user_id=user.id, name='Savings', initial_balance=0)
+    db.add_all([savings, Category(user_id=user.id, name='Food & Dining', kind='expense')]); db.commit()
+    chat = create(client, wallet_id=main.id)
+    result = client.post(f'/api/ai/chats/{chat}/messages', json={
+        'request_id': str(uuid.uuid4()),
+        'question': 'Add a transaction two point two five for breakfast for category food and dining from Main yesterday',
+    }).json()
+    draft = result['drafts'][0]
+    assert result['status'] == 'completed'
+    assert draft['type'] == 'expense' and draft['amount'] == '2.250'
+    assert draft['wallet_id'] == main.id and draft['category_name'] == 'Food & Dining'
+    assert draft['description'] == 'breakfast' and draft['missing'] == []
+    assert db.query(Transaction).count() == 0
+    provider.assert_not_called()
+
+
+def test_paid_ai_draft_is_reconciled_to_authorized_wallets(setup, monkeypatch):
+    client, db, user, provider = setup
+    main = db.query(Wallet).filter_by(user_id=user.id, name='Main').first()
+    db.add(AssistantConfig(id=1, enabled=True)); db.commit()
+    extractor = Mock(return_value={'draft': {
+        'type': 'expense', 'amount': 3.5, 'description': 'Lunch', 'wallet_name': 'Wallet belonging to someone else',
+        'category_name': None, 'date': None, 'reporting_month': None, 'notes': '', 'transfer_wallet_name': None,
+    }, 'usage': {'provider': 'openai'}})
+    monkeypatch.setattr(ai_service, 'complete_draft', extractor)
+    chat = create(client, wallet_id=main.id)
+    result = client.post(f'/api/ai/chats/{chat}/messages', json={
+        'request_id': str(uuid.uuid4()), 'question': 'record 3.5 for lunch',
+    }).json()
+    draft = result['drafts'][0]
+    assert result['provider'] == 'openai'
+    assert draft['amount'] == '3.500' and draft['wallet_id'] == main.id
+    assert draft['wallet_name'] == 'Main' and draft['missing'] == ['category']
+    assert db.query(Transaction).count() == 0
+    extractor.assert_called_once()
     provider.assert_not_called()
 
 
