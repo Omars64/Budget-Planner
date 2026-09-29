@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from .database import Base, IS_EPHEMERAL_VERCEL_SQLITE, SessionLocal, engine, get_db
-from .models import AppSetting, Budget, Category, Debt, Goal, PendingSignup, Transaction, PlannedTransaction, User, Wallet, WalletShare, Note, NoteFolder, NoteShare, Feedback
+from .models import AppSetting, Budget, Category, Debt, Goal, PendingSignup, Transaction, PlannedTransaction, User, Wallet, WalletShare, WalletBalanceCheck, Note, NoteFolder, NoteShare, Feedback
 from .schemas import (
     BudgetIn, CategoryIn, ContributionIn, DebtIn, GoalIn, LoginPayload, PinPayload,
     SettingsPayload, TransactionIn, UserCreate, UserUpdate, WalletIn,
@@ -58,6 +58,7 @@ BACKUP_COLLECTION_LIMITS = {
     "budgets": 2_000, "goals": 2_000, "debts": 2_000,
     "wallet_shares": 2_000, "note_folders": 500, "notes": 2_000,
     "planned_transactions": 20_000,
+    "balance_checks": 20_000,
 }
 
 
@@ -1108,6 +1109,7 @@ def export_backup(user: User = Depends(current_user), db: Session = Depends(get_
         "wallets": [{c.name: getattr(w, c.name) for c in Wallet.__table__.columns if c.name not in {"created_at", "user_id"}} for w in db.query(Wallet).filter(Wallet.user_id == user.id).all()],
         "categories": [{c.name: getattr(x, c.name) for c in Category.__table__.columns if c.name not in {"created_at", "user_id"}} for x in db.query(Category).filter(Category.user_id == user.id).all()],
         "transactions": [{**{c.name: getattr(t, c.name) for c in Transaction.__table__.columns if c.name not in {"created_at", "user_id"}}, "date": t.date.isoformat(), "recurring_until": t.recurring_until.isoformat() if t.recurring_until else None} for t in db.query(Transaction).filter(Transaction.user_id == user.id).all()],
+        "balance_checks": [{"wallet_id": c.wallet_id, "expected_balance": float(c.expected_balance), "observed_balance": float(c.observed_balance), "currency": c.currency, "note": c.note, "checked_by_name": c.checked_by_name, "checked_at": c.checked_at.isoformat()} for c in db.query(WalletBalanceCheck).join(Wallet, Wallet.id == WalletBalanceCheck.wallet_id).filter(Wallet.user_id == user.id).all()],
         "planned_transactions": [{"id": p.id, "wallet_id": p.wallet_id, "transfer_wallet_id": p.transfer_wallet_id, "category_id": p.category_id, "type": p.type, "amount": float(p.amount), "description": p.description, "notes": p.notes, "due_at": p.due_at.isoformat(), "reporting_month": p.reporting_month, "status": p.status, "reminder_enabled": p.reminder_enabled, "posted_transaction_id": p.posted_transaction_id} for p in db.query(PlannedTransaction).filter(PlannedTransaction.owner_id == user.id).all()],
         "budgets": [{**{c.name: getattr(b, c.name) for c in Budget.__table__.columns if c.name not in {"created_at", "user_id"}}, "start_date": b.start_date.isoformat()} for b in db.query(Budget).filter(Budget.user_id == user.id).all()],
         "goals": [{**{c.name: getattr(g, c.name) for c in Goal.__table__.columns if c.name not in {"created_at", "user_id"}}, "deadline": g.deadline.isoformat() if g.deadline else None} for g in db.query(Goal).filter(Goal.user_id == user.id).all()],
@@ -1158,6 +1160,12 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
     try:
         wallet_ids = {w["id"] for w in data.get("wallets", [])}
         category_ids = {c["id"] for c in data.get("categories", [])}
+        from .financial_ledger import BalanceCheckArchive
+        from pydantic import ValidationError
+
+        balance_checks = [BalanceCheckArchive.model_validate(check) for check in data.get('balance_checks', [])]
+        if any(check.wallet_id not in wallet_ids for check in balance_checks):
+            raise ValueError('Invalid balance check wallet')
         for tx in data.get("transactions", []):
             if tx["wallet_id"] not in wallet_ids or (tx.get("transfer_wallet_id") and tx["transfer_wallet_id"] not in wallet_ids) or (tx.get("category_id") and tx["category_id"] not in category_ids):
                 raise ValueError("Invalid transaction reference")
@@ -1168,7 +1176,7 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
             if budget.get("category_id") and budget["category_id"] not in category_ids: raise ValueError("Invalid category reference")
         for share in data.get("wallet_shares", []):
             if share["wallet_id"] not in wallet_ids or share["permission"] not in {"view", "edit"}: raise ValueError("Invalid share")
-    except (KeyError, TypeError, ValueError):
+    except (KeyError, TypeError, ValueError, ValidationError):
         raise HTTPException(400, "Backup contains invalid references")
     save_recovery(db, user, user, "Before backup restore")
     audit(db, user.id, user.id, 'Restored JSON backup', 'workspace')
@@ -1186,6 +1194,11 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
         db.add(row); db.flush()
         if old_id is not None:
             wallet_map[old_id] = row.id
+    for check in balance_checks:
+        db.add(WalletBalanceCheck(wallet_id=wallet_map[check.wallet_id], checked_by_id=None,
+                                  checked_by_name=check.checked_by_name, expected_balance=check.expected_balance,
+                                  observed_balance=check.observed_balance, currency=check.currency,
+                                  note=check.note, checked_at=check.stored_time()))
     for c in data.get("categories", []):
         old_id = c.get("id")
         row = Category(user_id=user.id, **{k: v for k, v in c.items() if k not in {"id", "user_id"}})

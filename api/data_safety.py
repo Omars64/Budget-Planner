@@ -1,6 +1,6 @@
 import json
 from fastapi.encoders import jsonable_encoder
-from .models import RecoveryPoint, WalletShare, Transaction, PlannedTransaction, Budget, Goal, Debt, Category, Wallet, NoteShare, Note, NoteFolder
+from .models import RecoveryPoint, WalletShare, Transaction, PlannedTransaction, Budget, Goal, Debt, Category, Wallet, WalletBalanceCheck, NoteShare, Note, NoteFolder
 from .models import NoteRevision
 
 
@@ -14,6 +14,8 @@ def save_recovery(db, owner, actor, reason):
 
 
 def clear_budget(db, user_id, preserve_main_wallet=False, preserve_categories=False):
+    wallet_ids = db.query(Wallet.id).filter_by(user_id=user_id)
+    db.query(WalletBalanceCheck).filter(WalletBalanceCheck.wallet_id.in_(wallet_ids)).delete(synchronize_session=False)
     db.query(PlannedTransaction).filter_by(owner_id=user_id).delete(synchronize_session=False)
     db.query(WalletShare).filter_by(owner_id=user_id).delete(synchronize_session=False)
     db.query(Transaction).filter_by(user_id=user_id).update({Transaction.recurring_parent_id: None})

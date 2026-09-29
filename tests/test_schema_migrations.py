@@ -9,7 +9,7 @@ from api.database import Base
 from api.index import ensure_note_columns
 from api.schema_migrations import apply_migrations
 
-LATEST_REVISION = 'e84b3c9a712f'
+LATEST_REVISION = 'f20c846d9a31'
 
 
 def test_new_and_existing_schemas_reach_baseline_without_losing_rows():
@@ -20,6 +20,7 @@ def test_new_and_existing_schemas_reach_baseline_without_losing_rows():
         assert 'planned_transactions' in inspect(connection).get_table_names()
         assert 'reporting_month' in {column['name'] for column in inspect(connection).get_columns('transactions')}
         assert 'card_network' in {column['name'] for column in inspect(connection).get_columns('wallets')}
+        assert 'wallet_balance_checks' in inspect(connection).get_table_names()
         assert connection.execute(text('SELECT version_num FROM alembic_version')).scalar_one() == LATEST_REVISION
         connection.execute(text("INSERT INTO users (username, email, password_hash, role, active) VALUES ('Test', 'test@migration.test', 'hash', 'user', 1)"))
     with engine.begin() as connection:
@@ -53,4 +54,5 @@ def test_reporting_month_migration_backfills_old_transaction_dates():
         assert connection.execute(text('SELECT reporting_month FROM planned_transactions WHERE id = 1')).scalar_one() == '2026-09'
         assert connection.execute(text('SELECT posted_transaction_id FROM planned_transactions WHERE id = 1')).scalar_one() == 1
         assert connection.execute(text('SELECT card_network FROM wallets WHERE id = 1')).scalar_one() is None
+        assert connection.execute(text('SELECT COUNT(*) FROM wallet_balance_checks')).scalar_one() == 0
     engine.dispose()

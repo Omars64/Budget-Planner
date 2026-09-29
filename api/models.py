@@ -32,6 +32,19 @@ class Wallet(Base):
     created_at = Column(DateTime, default=datetime.now)
 
 
+class WalletBalanceCheck(Base):
+    __tablename__ = "wallet_balance_checks"
+    id = Column(Integer, primary_key=True)
+    wallet_id = Column(Integer, ForeignKey("wallets.id", ondelete="CASCADE"), nullable=False, index=True)
+    checked_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    checked_by_name = Column(String(80), nullable=False)
+    expected_balance = Column(Numeric(16, 3), nullable=False)
+    observed_balance = Column(Numeric(16, 3), nullable=False)
+    currency = Column(String(8), nullable=False)
+    note = Column(String(240), nullable=False, default="")
+    checked_at = Column(DateTime, nullable=False, default=utc_now, index=True)
+
+
 class Category(Base):
     __tablename__ = "categories"
     id = Column(Integer, primary_key=True)

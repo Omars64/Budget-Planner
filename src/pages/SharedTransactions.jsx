@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
-import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, History, MailPlus, Trash2, Users, Wallet } from 'lucide-react'
+import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, BookOpen, History, MailPlus, Trash2, Users, Wallet } from 'lucide-react'
 import { format } from 'date-fns'
 import { dateInput, saveDate, displayDate, showTime } from '../lib/time'
 import { transactionErrors, focusInvalid } from '../lib/transactionForm'
@@ -23,6 +23,7 @@ import BalancePreview from '../components/BalancePreview'
 import { transactionSaved } from '../lib/savedFeedback'
 import AnimatedMoney from '../components/AnimatedMoney'
 import ReportingMonthField from '../components/ReportingMonthField'
+import WalletLedger from '../components/WalletLedger'
 
 const nowLocal = () => {
   return dateInput()
@@ -52,6 +53,7 @@ export default function SharedTransactions() {
   const [share, setShare] = useState({ wallet_id: '', email: '', permission: 'view' })
   const [sharing, setSharing] = useState(false)
   const [activity,setActivity] = useState(null)
+  const [ledgerWallet,setLedgerWallet] = useState(null)
   const [modal, setModal] = useState(false)
   const [schedule, setSchedule] = useState(false)
   const [editing, setEditing] = useState(null)
@@ -285,10 +287,13 @@ export default function SharedTransactions() {
             <div className="shared-wallet-title"><div><span className="wallet-label"><Wallet size={15}/>{wallet.name}</span><strong className="shared-balance"><AnimatedMoney value={wallet.balance} currency={settings.currency} compact={settings.compact_numbers}/></strong></div></div>
             <small className="shared-owner">{wallet.is_owner ? 'Owned by you' : `Owned by ${wallet.owner_name || wallet.owner_email}`}</small>
             <small>{wallet.is_owner ? 'Owner' : wallet.can_edit ? 'Can add, edit and delete' : wallet.can_add ? 'Can add' : 'Can view'}</small>
+            <button type="button" className="button ghost small shared-ledger-open" onClick={() => setLedgerWallet(wallet)}><BookOpen size={16}/>Ledger</button>
           </div>)}
         </div>}
       </div>
     </section>
+
+    <WalletLedger wallet={ledgerWallet} shared onClose={() => setLedgerWallet(null)}/>
 
 
 

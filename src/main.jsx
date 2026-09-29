@@ -22,6 +22,7 @@ import './comfort.css'
 import './navigation.css'
 import './auth-expanded.css'
 import './coherent-app.css'
+import './wallet-ledger.css'
 
 applyAppearance(readDeviceAppearance())
 

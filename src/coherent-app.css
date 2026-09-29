@@ -371,6 +371,10 @@ body.wallpaper-budgetly .app-shell::before { content: ''; }
   }
 }
 
+.budgetly-v2.native-android .app-footer { position: static; width: 100%; }
+.budgetly-v2.native-android .page-wrap { padding-bottom: 0; }
+.budgetly-v2.native-android.has-ai .main-area { padding-bottom: 0; }
+
 .wallpaper-choice { display: grid; gap: 8px; margin: 0; padding: 0; border: 0; }
 .wallpaper-choice legend { margin-bottom: 8px; color: var(--muted); font-size: 13px; font-weight: 700; }
 .wallpaper-choice .check-row { display: flex; align-items: center; gap: 10px; }
