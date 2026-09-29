@@ -46,10 +46,11 @@ def test_reporting_month_migration_backfills_old_transaction_dates():
         connection.execute(text("INSERT INTO users (id, username, email, password_hash, role, active) VALUES (1, 'Kept', 'kept@migration.test', 'hash', 'user', 1)"))
         connection.execute(text("INSERT INTO wallets (id, user_id, name, type, initial_balance, color, archived, created_at) VALUES (1, 1, 'Main', 'cash', 0, '#3158aa', 0, '2026-08-01 09:00:00')"))
         connection.execute(text("INSERT INTO transactions (id, user_id, type, amount, description, notes, date, wallet_id, recurring_frequency, is_opening_balance) VALUES (1, 1, 'income', 100, 'Existing salary', '', '2026-08-31 18:30:00', 1, 'none', 0)"))
-        connection.execute(text("INSERT INTO planned_transactions (id, owner_id, created_by_id, wallet_id, type, amount, description, notes, due_at, status, reminder_enabled, created_at) VALUES (1, 1, 1, 1, 'expense', 10, 'Existing plan', '', '2026-09-05 12:00:00', 'planned', 1, '2026-08-01 09:00:00')"))
+        connection.execute(text("INSERT INTO planned_transactions (id, owner_id, created_by_id, wallet_id, type, amount, description, notes, due_at, status, reminder_enabled, posted_transaction_id, created_at) VALUES (1, 1, 1, 1, 'expense', 10, 'Existing plan', '', '2026-09-05 12:00:00', 'posted', 1, 1, '2026-08-01 09:00:00')"))
         command.upgrade(config, 'head')
         assert connection.execute(text('SELECT reporting_month FROM transactions WHERE id = 1')).scalar_one() == '2026-08'
         assert connection.execute(text('SELECT date FROM transactions WHERE id = 1')).scalar_one() == '2026-08-31 18:30:00'
         assert connection.execute(text('SELECT reporting_month FROM planned_transactions WHERE id = 1')).scalar_one() == '2026-09'
+        assert connection.execute(text('SELECT posted_transaction_id FROM planned_transactions WHERE id = 1')).scalar_one() == 1
         assert connection.execute(text('SELECT card_network FROM wallets WHERE id = 1')).scalar_one() is None
     engine.dispose()

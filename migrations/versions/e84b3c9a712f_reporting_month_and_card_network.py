@@ -28,7 +28,7 @@ def add_month_column(table, date_column):
         bind.execute(sa.text(
             f'UPDATE {table} SET reporting_month = :month WHERE id = :id'
         ), {'month': parsed.strftime('%Y-%m'), 'id': row_id})
-    if columns.get('reporting_month', {}).get('nullable', True):
+    if bind.dialect.name != 'sqlite' and columns.get('reporting_month', {}).get('nullable', True):
         with op.batch_alter_table(table) as batch:
             batch.alter_column('reporting_month', existing_type=sa.String(7), nullable=False)
 

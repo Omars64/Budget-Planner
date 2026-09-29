@@ -704,6 +704,7 @@ def get_settings(user: User = Depends(current_user), db: Session = Depends(get_d
         'text_color': setting(db, user.id, 'text_color', 'ink'),
         'theme': setting(db, user.id, 'theme', 'light'),
         'wallpaper_enabled': setting(db, user.id, 'wallpaper_enabled', 'true') == 'true',
+        'wallpaper_style': setting(db, user.id, 'wallpaper_style', 'custom' if setting(db, user.id, 'wallpaper_image', '') else 'none'),
         'reminder_interval_hours': int(setting(db, user.id, 'reminder_interval_hours', '4')),
         'accent_color': setting(db, user.id, 'accent_color', '#0a4173'),
         'reminders_enabled': setting(db, user.id, 'reminders_enabled', 'false') == 'true',

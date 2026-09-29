@@ -180,6 +180,7 @@ class SettingsPayload(BaseModel):
     text_color: Literal['ink', 'charcoal', 'forest'] = 'ink'
     theme: Literal['light', 'dark', 'system'] = 'light'
     wallpaper_enabled: bool = True
+    wallpaper_style: Literal['none', 'budgetly', 'custom'] = 'none'
     reminder_interval_hours: Literal[1, 2, 3, 4, 6, 8, 12, 24] = 4
     accent_color: str = Field(default='#0a4173', pattern=r'^#[0-9a-fA-F]{6}$')
     reminders_enabled: bool = False

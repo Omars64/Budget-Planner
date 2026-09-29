@@ -13,7 +13,7 @@ test('expanded auth keeps login, signup, and password recovery reachable', async
   expect(screen.getByLabelText('Password')).toBeInTheDocument()
 
   await user.click(screen.getByRole('button', { name: 'Create an account' }))
-  expect(screen.getByRole('heading', { name: 'Start with Budgetly' })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Create your Budgetly account' })).toBeInTheDocument()
   expect(screen.getByLabelText('Username')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Continue to email verification' })).toBeInTheDocument()
 

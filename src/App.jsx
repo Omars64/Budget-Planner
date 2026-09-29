@@ -110,17 +110,22 @@ export function LoginScreen({ onLogin }) {
 
   return <div className="auth-screen expanded-auth" onInvalid={e => setError(e.target.validationMessage)}>
     <header className="auth-brand"><BrandLogo /><span><strong>Budgetly</strong><small>Personal finance</small></span></header>
-    <motion.main key={mode} className="auth-main" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{duration:.38,ease:[.22,1,.36,1]}}>
+    <div className="auth-layout">
+      <section className="auth-copy" aria-label="Budgetly">
+        <p className="eyebrow">Your money, in view</p>
+        <h1>{mode === 'login' ? 'Sign in to Budgetly' : mode === 'signup' ? 'Create your Budgetly account' : mode === 'verify' ? 'Almost there' : 'Return to Budgetly'}</h1>
+        <p>A clearer view of everyday spending, shared plans, and what comes next.</p>
+      </section>
+      <motion.main key={mode} className="auth-main" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{duration:.38,ease:[.22,1,.36,1]}}>
       {mode === 'reset' && <PasswordRecovery onBack={()=>setMode('login')}/>}
 
       {mode === 'login' && <>
-        <p className="eyebrow">Welcome back</p>
-        <h1>Sign in to Budgetly</h1>
-        <p className="auth-intro">Your finances, right where you left them.</p>
+        <h2>Welcome back</h2>
+        <p className="auth-intro">Sign in to continue to your finances.</p>
         <div className="segment-control signin-method" aria-label="Sign-in method"><button type="button" disabled={busy} className={signInMethod === 'password' ? 'active' : ''} onClick={() => setSignInMethod('password')}>Password</button><button type="button" disabled={busy || !biometricSupported()} className={signInMethod === 'passkey' ? 'active' : ''} onClick={() => setSignInMethod('passkey')}>Biometric / passkey</button></div>
         {signInMethod === 'passkey' ? <div className="auth-passkey"><p className="auth-intro">Use the passkey saved to your device to sign in securely.</p>{error && <div className="form-error" role="alert">{error}</div>}{authOptions}<button className="button primary" disabled={busy} onClick={passkeyLogin}>{busy ? 'Verifying...' : 'Sign in with passkey'}</button></div> : <form onSubmit={login} className="auth-form">
-          <label className="auth-entry"><span>Email</span><input required type="email" autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" /></label>
-          <div className="auth-entry"><label htmlFor="login-password">Password</label><PasswordInput id="login-password" required minLength="8" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter your password" /></div>
+          <label className="auth-entry"><span>Email</span><input required type="email" autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email address" /></label>
+          <div className="auth-entry"><label htmlFor="login-password">Password</label><PasswordInput id="login-password" required minLength="8" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" /></div>
           {error && <div className="form-error">{error}</div>}
           {authOptions}
           <div className="auth-action-row"><button className="button primary" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button></div>
@@ -129,8 +134,7 @@ export function LoginScreen({ onLogin }) {
       </>}
 
       {mode === 'signup' && <>
-        <p className="eyebrow">Create account</p>
-        <h1>Start with Budgetly</h1>
+        <h2>Create account</h2>
         <p className="auth-intro">One place for your personal and shared finances.</p>
         <form onSubmit={requestCode} className="auth-form">
           <label className="auth-entry"><span>Username</span><input required autoComplete="name" value={signup.username} onChange={e => setSignup({ ...signup, username: e.target.value })} placeholder="Your name" minLength="2" maxLength="80" /></label>
@@ -142,8 +146,7 @@ export function LoginScreen({ onLogin }) {
       </>}
 
       {mode === 'verify' && <>
-        <p className="eyebrow">Verify email</p>
-        <h1>Enter the 6-digit code</h1>
+        <h2>Enter the 6-digit code</h2>
         <p className="auth-intro">Sent to <strong>{verificationEmail}</strong>. The code expires in 10 minutes.</p>
         <form onSubmit={verify} className="auth-form">
           <label className="auth-entry auth-code"><span>Verification code</span><input autoFocus inputMode="numeric" autoComplete="one-time-code" value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="000000" /></label>
@@ -156,12 +159,11 @@ export function LoginScreen({ onLogin }) {
           <button type="button" disabled={busy || retryAfter > 0} onClick={() => requestCode()}><RefreshCw size={14}/>{retryAfter > 0 ? `Resend in ${retryAfter}s` : 'Resend code'}</button>
         </div>
       </>}
-    </motion.main>
-    {mode !== 'verify' && <footer className="auth-footer">
-      {mode === 'login' && <div className="auth-footer-action">New to Budgetly? <button className="auth-switch" type="button" onClick={() => { setError(''); setMode('signup') }}>Create an account</button></div>}
-      {mode === 'signup' && <div className="auth-footer-action">Already have an account? <button className="auth-switch" type="button" onClick={() => { setError(''); setMode('login') }}>Sign in</button></div>}
-      <BrandFooter/>
-    </footer>}
+        {mode === 'login' && <div className="auth-footer-action">New to Budgetly? <button className="auth-switch" type="button" onClick={() => { setError(''); setMode('signup') }}>Create an account</button></div>}
+        {mode === 'signup' && <div className="auth-footer-action">Already have an account? <button className="auth-switch" type="button" onClick={() => { setError(''); setMode('login') }}>Sign in</button></div>}
+      </motion.main>
+    </div>
+    <footer className="auth-footer"><BrandFooter/></footer>
   </div>
 }
 
@@ -210,20 +212,23 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    const wallpaper = settings.wallpaper_enabled !== false ? appearance.wallpaper_image || '' : ''
+    const wallpaperStyle = settings.wallpaper_enabled === false ? 'none' : settings.wallpaper_style || (appearance.wallpaper_image ? 'custom' : 'none')
+    const wallpaper = wallpaperStyle === 'custom' ? appearance.wallpaper_image || '' : ''
     document.body.style.backgroundImage = wallpaper ? `url(${JSON.stringify(wallpaper)})` : ''
     document.body.style.backgroundSize = wallpaper ? 'cover' : ''
     document.body.style.backgroundPosition = wallpaper ? 'center' : ''
     document.body.style.backgroundAttachment = wallpaper ? 'fixed' : ''
     document.body.classList.toggle('has-wallpaper', Boolean(wallpaper))
+    document.body.classList.toggle('wallpaper-budgetly', wallpaperStyle === 'budgetly')
     return () => {
       document.body.style.backgroundImage = ''
       document.body.style.backgroundSize = ''
       document.body.style.backgroundPosition = ''
       document.body.style.backgroundAttachment = ''
       document.body.classList.remove('has-wallpaper')
+      document.body.classList.remove('wallpaper-budgetly')
     }
-  }, [appearance.wallpaper_image, settings.wallpaper_enabled])
+  }, [appearance.wallpaper_image, settings.wallpaper_enabled, settings.wallpaper_style])
 
   useEffect(() => {
     const resume = async () => {
