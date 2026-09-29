@@ -99,9 +99,9 @@ export default function Upcoming() {
   }
 
   return <section className="upcoming-page">
-    <header className="upcoming-toolbar"><div><h3>Upcoming records</h3><p className="muted">Plan income and expenses without changing wallet balances.</p></div><button type="button" className="button primary" data-tour="new-plan" onClick={() => start(null)}><Plus size={17}/>New row</button></header>
+    <header className="upcoming-toolbar"><div><h3>Upcoming records</h3><p className="muted">Plan ahead without changing your balance.</p></div><button type="button" className="button primary" data-tour="new-plan" onClick={() => start(null)}><Plus size={17}/>Add plan</button></header>
     <div className="upcoming-controls">
-      <div className="segment-control" aria-label="Wallet context">{[['all', 'All'], ['personal', 'Personal'], ['shared', 'Shared']].map(([value, label]) => <button key={value} type="button" className={scope === value ? 'active' : ''} aria-pressed={scope === value} onClick={() => setScope(value)}>{label}</button>)}</div>
+      <div className="segment-control three" role="group" aria-label="Wallet context">{[['all', 'All'], ['personal', 'Personal'], ['shared', 'Shared']].map(([value, label]) => <button key={value} type="button" className={scope === value ? 'active' : ''} aria-pressed={scope === value} onClick={() => setScope(value)}>{label}</button>)}</div>
       <StatusFilter value={filter} onChange={setFilter}/>
       <span className="upcoming-total">Net planned: {money(total, settings.currency)}</span>
     </div>

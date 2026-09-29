@@ -50,7 +50,7 @@ export default function Transactions() {
 
     <section className="ledger-list">
       <div className="ledger-count">{rows.length}{ledger.hasMore ? '+' : ''} transaction{rows.length === 1 ? '' : 's'}</div>
-      {loading && !rows.length ? <div className="list-skeleton"><i/><i/><i/><i/></div> : !rows.length ? <EmptyState title="No matching transactions" text="Try a different filter or add a new movement."/> : <div className="date-groups">
+      {loading && !rows.length ? <div className="list-skeleton"><i/><i/><i/><i/></div> : !rows.length ? <EmptyState title="No matching transactions" text="Try another filter or add a transaction."/> : <div className="date-groups">
         {Object.entries(grouped).map(([day, txs]) => <div className="date-group" key={day}>
           <LedgerDateHeader day={day}/>
           {txs.map(tx => <LedgerRow key={tx.id} tx={tx} fmt={fmt} onOpen={() => setSelected(tx)}/> )}

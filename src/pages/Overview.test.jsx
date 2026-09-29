@@ -9,6 +9,7 @@ it('keeps Overview read-focused with separate current balances and opening funds
   render(<MemoryRouter><Overview/></MemoryRouter>)
   expect(await screen.findByText('Personal balance now')).toBeInTheDocument()
   expect(screen.getByText('KWD 70 income + KWD 30 starting funds')).toBeInTheDocument()
+  expect(screen.getByText('Money in minus out')).toBeInTheDocument()
   expect(screen.getByLabelText('Shared wallets summary')).toHaveTextContent('KWD 50')
   expect(screen.queryByRole('button',{name:/add transaction/i})).toBeNull()
   expect(screen.queryByRole('link',{name:/add transaction/i})).toBeNull()

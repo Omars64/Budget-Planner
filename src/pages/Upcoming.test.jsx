@@ -34,7 +34,7 @@ it('shows every record detail without a sideways table and filters with the in-a
 it('uses the shared calendar and clock and keeps the reminder label visible when creating', async () => {
   render(<Upcoming/>)
   await screen.findByText('October rent')
-  fireEvent.click(screen.getByRole('button', { name: 'New row' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Add plan' }))
   expect(screen.getByRole('checkbox', { name: 'Remind me' })).toBeChecked()
   expect(document.querySelector('input[type="datetime-local"]')).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: 'Date', exact: true }))

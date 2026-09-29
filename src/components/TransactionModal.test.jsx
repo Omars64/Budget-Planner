@@ -27,6 +27,17 @@ it('keeps templates collapsed and explains invalid amounts', async () => {
   fireEvent.click(screen.getByRole('button',{name:'Add transaction'}))
   expect(screen.getByRole('alert')).toHaveTextContent('amount greater than zero')
 })
+it('shows two recording choices and a clear month label', async () => {
+  await mount()
+  const timing = screen.getByRole('group', { name: 'When to record' })
+  expect(timing).toHaveClass('segment-control')
+  expect(timing.querySelectorAll('button')).toHaveLength(2)
+  expect(screen.getByRole('button', { name: 'Record now' })).toHaveAttribute('aria-pressed', 'true')
+  fireEvent.click(screen.getByRole('button', { name: 'Schedule' }))
+  expect(screen.getByRole('button', { name: 'Schedule' })).toHaveAttribute('aria-pressed', 'true')
+  expect(screen.getByText(/Your balance stays unchanged until then/)).toBeInTheDocument()
+  expect(screen.getByLabelText('Month this is for')).toBeInTheDocument()
+})
 it.each(['daily','weekly','monthly','yearly'])('requires a valid end date for %s schedules', async frequency => {
   await mount()
   fireEvent.change(screen.getByLabelText('Amount (KWD)'),{target:{value:'1'}})

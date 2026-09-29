@@ -105,13 +105,13 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
   return <Modal open={open} onClose={() => !busy && onClose()} title={editing ? 'Edit transaction' : 'Add transaction'}>
     <form onSubmit={submit} noValidate className="stack gap-18 transaction-form">
       <fieldset className="transaction-fields stack gap-18" disabled={busy || loading}>
-      <div className="segment-control three">
-        <button type="button" className={form.type === 'expense' ? 'active' : ''} onClick={() => {set('type','expense');set('category_id','')}}><ArrowUpRight size={17}/>Expense</button>
-        <button type="button" className={form.type === 'income' ? 'active' : ''} onClick={() => {set('type','income');set('category_id','')}}><ArrowDownLeft size={17}/>Income</button>
-        <button type="button" className={form.type === 'transfer' ? 'active' : ''} onClick={() => set('type','transfer')}><ArrowRightLeft size={17}/>Transfer</button>
+      <div className="segment-control three" role="group" aria-label="Transaction type">
+        <button type="button" aria-pressed={form.type === 'expense'} className={form.type === 'expense' ? 'active' : ''} onClick={() => {set('type','expense');set('category_id','')}}><ArrowUpRight size={17}/>Expense</button>
+        <button type="button" aria-pressed={form.type === 'income'} className={form.type === 'income' ? 'active' : ''} onClick={() => {set('type','income');set('category_id','')}}><ArrowDownLeft size={17}/>Income</button>
+        <button type="button" aria-pressed={form.type === 'transfer'} className={form.type === 'transfer' ? 'active' : ''} onClick={() => set('type','transfer')}><ArrowRightLeft size={17}/>Transfer</button>
       </div>
-      {!editing && <div className="segment-control" aria-label="Recording time"><button type="button" className={!schedule ? 'active' : ''} onClick={() => setSchedule(false)}>Record now</button><button type="button" className={schedule ? 'active' : ''} onClick={() => setSchedule(true)}>Schedule</button></div>}
-      {schedule && <p className="form-note">Recorded on the next app visit after this time, or by daily maintenance. It will not affect balances before then.</p>}
+      {!editing && <div className="segment-control" role="group" aria-label="When to record"><button type="button" aria-pressed={!schedule} className={!schedule ? 'active' : ''} onClick={() => setSchedule(false)}>Record now</button><button type="button" aria-pressed={schedule} className={schedule ? 'active' : ''} onClick={() => setSchedule(true)}>Schedule</button></div>}
+      {schedule && <p className="form-note">Added after the due time on your next visit or the daily check. Your balance stays unchanged until then.</p>}
 
       <VoiceInputButton disabled={busy || loading || !open} onActiveChange={setVoiceActive} onTranscript={applyVoice} onError={message => setError(message)}/>
       {!editing && <TransactionTemplates userId={user.id} scope="personal" draft={form} disabled={busy || loading} onApply={item => {

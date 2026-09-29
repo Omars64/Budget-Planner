@@ -40,7 +40,7 @@ export default function Overview() {
       <section className="overview-metrics" aria-label="Selected month summary">
         <Link to="/transactions" state={{aiFilters:{month:data.month,type:'income'}}}><span>Money in</span><strong className="tx-amount income">{fmt(data.income)}</strong>{data.opening_funds > 0 && <small>{fmt(data.earned_income)} income + {fmt(data.opening_funds)} starting funds</small>}</Link>
         <Link to="/transactions" state={{aiFilters:{month:displayedMonth,type:'expense',exclude_opening:true}}}><span>Spent</span><strong className="tx-amount expense">{fmt(data.expense)}</strong></Link>
-        <Link to="/transactions" state={filteredLink}><span>Net recorded</span><strong>{fmt(data.net)}</strong><small>Money in less expenses{data.opening_debt > 0 ? ' and starting debt' : ''}; excludes transfers</small></Link>
+        <Link to="/transactions" state={filteredLink}><span>Money in minus out</span><strong>{fmt(data.net)}</strong><small>After spending{data.opening_debt > 0 ? ' and starting debt' : ''}. Transfers are separate.</small></Link>
       </section>
       {data.shared?.wallet_count > 0 && <section className="overview-shared" aria-label="Shared wallets summary"><div><span>Shared balance</span><strong>{fmt(data.shared.balance)}</strong><small>{data.shared.wallet_count} shared wallets, separate from personal</small></div><Link to="/shared-transactions">View shared <ArrowRight size={16}/></Link></section>}
       <section className="overview-wallets" aria-label="Personal wallets">
