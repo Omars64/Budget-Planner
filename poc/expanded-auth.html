@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Budgetly | Expanded auth POC</title>
+  <style>
+    :root{font-family:Inter,"Segoe UI",Arial,sans-serif;color:#102334;background:#f7fafc;font-synthesis:none}
+    *{box-sizing:border-box}
+    body{margin:0;min-width:320px}
+    button,input{font:inherit}
+    button{cursor:pointer}
+    .auth-screen{position:relative;isolation:isolate;min-height:100dvh;overflow:hidden;display:flex;flex-direction:column;padding:clamp(24px,3.8vw,58px) clamp(24px,8vw,128px) 28px}
+    .auth-screen::before{content:"";position:absolute;z-index:-1;width:min(68vw,920px);aspect-ratio:1;right:-8vw;top:50%;transform:translateY(-50%);background:url("./budgetly-symbol-gray.png") center/contain no-repeat;opacity:.24;pointer-events:none}
+    .topline{display:flex;align-items:center;justify-content:space-between;gap:20px}
+    .brand{display:flex;align-items:center;gap:13px;color:inherit;text-decoration:none}
+    .brand img{width:47px;height:47px;object-fit:contain}
+    .brand-name{display:block;font-size:23px;font-weight:780;line-height:1.15}
+    .brand-subtitle{display:block;font-size:12px;color:#5f7180;margin-top:3px}
+    .preview-tag{font-size:12px;font-weight:650;color:#647687;letter-spacing:0}
+    .main{width:min(100%,520px);margin:auto 0;position:relative;padding:54px 0 64px}
+    .eyebrow{color:#1269b9;font-size:13px;font-weight:750;margin:0 0 14px}
+    h1{font-size:clamp(40px,4.3vw,68px);line-height:1.04;letter-spacing:0;margin:0;color:#102334;font-weight:760}
+    .intro{font-size:16px;line-height:1.5;color:#617483;margin:16px 0 42px;max-width:410px}
+    .method{display:flex;gap:0;border-bottom:1px solid #c7d4dd;margin-bottom:25px}
+    .method button{border:0;border-bottom:3px solid transparent;background:transparent;color:#617483;padding:12px 18px 13px 0;margin-right:24px;font-weight:680;font-size:14px}
+    .method button.active{border-bottom-color:#0876c7;color:#075c9d}
+    .fields{display:grid;gap:25px}
+    .field{display:block;min-width:0}
+    .field-label{display:block;margin:0 0 4px;color:#637582;font-size:11px;font-weight:760;text-transform:uppercase;letter-spacing:.07em}
+    .field-control{display:flex;align-items:center;gap:12px;border-bottom:1px solid #bccbd5;min-height:46px;transition:border-color .2s}
+    .field-control:focus-within{border-bottom:2px solid #0876c7}
+    .field-control input{min-width:0;flex:1;outline:0;border:0;background:transparent;padding:7px 0 9px;color:#102334;font-size:17px}
+    .field-control input::placeholder{color:#8d9da7}
+    .text-control{padding:8px 0;border:0;background:transparent;color:#0b69b4;font-size:12px;font-weight:750}
+    .aux-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:21px 0 28px}
+    .remember{display:flex;align-items:center;gap:10px;font-size:13px;color:#435866;line-height:1.4}
+    .remember input{width:18px;height:18px;accent-color:#0876c7;flex:none}
+    .link{border:0;background:transparent;color:#0767b2;font-size:13px;font-weight:750;padding:5px 0}
+    .primary{min-height:56px;padding:13px 26px;border:0;border-radius:8px;background:#0069b7;color:white;font-size:15px;font-weight:760;box-shadow:0 9px 20px rgba(0,87,164,.15)}
+    .primary:hover{background:#005a9c}
+    .primary:focus-visible,.link:focus-visible,.method button:focus-visible,.text-control:focus-visible{outline:3px solid #88c7ed;outline-offset:3px}
+    .action-row{display:flex;justify-content:flex-end}
+    .device-note{margin:19px 0 0;font-size:12px;color:#687986;line-height:1.5}
+    .bottomline{display:flex;justify-content:flex-start;align-items:center;gap:5px;color:#617483;font-size:13px;min-height:42px}
+    .bottomline .link{margin-left:2px}
+    .signup .intro{margin-bottom:49px}
+    .signup .action-row{margin-top:38px}
+    .signup .fields{gap:28px}
+    .signup .bottomline{margin-top:26px}
+    .view[hidden],.password-view[hidden],.passkey-view[hidden],.bottomline[hidden]{display:none}
+    .passkey-view{padding:15px 0 0}
+    .passkey-view p{color:#617483;line-height:1.55;font-size:14px;margin:0 0 28px}
+    .passkey-view .primary{width:100%}
+    .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%) translateY(20px);max-width:calc(100vw - 32px);padding:11px 17px;background:#102334;color:white;border-radius:7px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:3;text-align:center}
+    .toast.visible{opacity:1;transform:translateX(-50%) translateY(0)}
+    @media(max-width:700px){
+      .auth-screen{padding:25px 25px 20px;min-height:100dvh}
+      .auth-screen::before{width:320px;right:-128px;top:103px;transform:none;opacity:.21}
+      .brand img{width:42px;height:42px}
+      .brand-name{font-size:20px}
+      .brand-subtitle{font-size:11px}
+      .preview-tag{font-size:10px}
+      .main{margin:0;width:100%;padding:clamp(66px,11vh,112px) 0 26px}
+      .eyebrow{font-size:12px}
+      h1{font-size:42px;max-width:340px}
+      .intro{font-size:14px;margin:14px 0 37px;max-width:280px}
+      .method{margin-bottom:25px}
+      .field-control input{font-size:16px}
+      .fields{gap:23px}
+      .action-row{margin-top:4px}
+      .primary{min-height:54px;width:100%}
+      .bottomline{margin-top:auto;padding-top:20px;justify-content:center;text-align:center}
+      .signup .intro{margin-bottom:45px}
+      .signup .action-row{margin-top:39px}
+      .signup .bottomline{margin-top:auto}
+    }
+    @media(max-width:375px){.auth-screen{padding-inline:20px}.main{padding-top:52px}h1{font-size:38px}.method button{font-size:13px;margin-right:13px}}
+    @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important}}
+  </style>
+</head>
+<body>
+  <div class="auth-screen">
+    <header class="topline">
+      <a class="brand" href="#login" aria-label="Budgetly sign in"><img src="../public/flowbudget-logo.png" alt=""><span><span class="brand-name">Budgetly</span><span class="brand-subtitle">Personal finance</span></span></a>
+      <span class="preview-tag">Design preview</span>
+    </header>
+    <main class="main">
+      <section class="view login" data-view="login">
+        <p class="eyebrow">Welcome back</p>
+        <h1>Sign in to Budgetly</h1>
+        <p class="intro">Your finances, right where you left them.</p>
+        <div class="method" role="group" aria-label="Sign-in method"><button class="active" type="button" data-method="password" aria-pressed="true">Password</button><button type="button" data-method="passkey" aria-pressed="false">Passkey</button></div>
+        <div class="password-view">
+          <form id="login-form">
+            <div class="fields">
+              <label class="field"><span class="field-label">Email</span><span class="field-control"><input type="email" placeholder="you@example.com" autocomplete="username" required></span></label>
+              <label class="field"><span class="field-label">Password</span><span class="field-control"><input type="password" placeholder="Enter your password" autocomplete="current-password" required><button class="text-control show-password" type="button">Show</button></span></label>
+            </div>
+            <div class="aux-row"><label class="remember"><input type="checkbox">Keep me signed in</label><button class="link preview-action" type="button">Forgot password?</button></div>
+            <div class="action-row"><button class="primary" type="submit">Sign in</button></div>
+          </form>
+          <p class="device-note">Your session is private to this device.</p>
+        </div>
+        <div class="passkey-view" hidden><p>Use the passkey saved to your device to sign in securely.</p><button class="primary preview-action" type="button">Sign in with passkey</button></div>
+      </section>
+      <section class="view signup" data-view="signup" hidden>
+        <p class="eyebrow">Create account</p>
+        <h1>Start with Budgetly</h1>
+        <p class="intro">One place for your personal and shared finances.</p>
+        <form id="signup-form">
+          <div class="fields">
+            <label class="field"><span class="field-label">Username</span><span class="field-control"><input type="text" placeholder="Your name" autocomplete="name" required minlength="2"></span></label>
+            <label class="field"><span class="field-label">Email</span><span class="field-control"><input type="email" placeholder="you@example.com" autocomplete="email" required></span></label>
+            <label class="field"><span class="field-label">Password</span><span class="field-control"><input type="password" placeholder="At least 8 characters" autocomplete="new-password" required minlength="8"><button class="text-control show-password" type="button">Show</button></span></label>
+          </div>
+          <div class="action-row"><button class="primary" type="submit">Continue to email verification</button></div>
+        </form>
+      </section>
+    </main>
+    <footer class="bottomline" data-footer="login">New to Budgetly? <button class="link" type="button" data-switch="signup">Create an account</button></footer>
+    <footer class="bottomline" data-footer="signup" hidden>Already have an account? <button class="link" type="button" data-switch="login">Sign in</button></footer>
+  </div>
+  <div class="toast" role="status" aria-live="polite"></div>
+  <script>
+    const toast = document.querySelector('.toast')
+    let toastTimer
+    function showPreviewMessage() {
+      toast.textContent = 'Design preview only. No account data was sent.'
+      toast.classList.add('visible')
+      clearTimeout(toastTimer)
+      toastTimer = setTimeout(() => toast.classList.remove('visible'), 3200)
+    }
+    function showView(mode) {
+      document.querySelectorAll('[data-view]').forEach(view => { view.hidden = view.dataset.view !== mode })
+      document.querySelectorAll('[data-footer]').forEach(footer => { footer.hidden = footer.dataset.footer !== mode })
+      history.replaceState(null, '', '#' + mode)
+    }
+    document.querySelectorAll('[data-switch]').forEach(button => button.addEventListener('click', () => showView(button.dataset.switch)))
+    document.querySelector('.brand').addEventListener('click', event => { event.preventDefault(); showView('login') })
+    document.querySelectorAll('.show-password').forEach(button => button.addEventListener('click', () => {
+      const input = button.previousElementSibling
+      input.type = input.type === 'password' ? 'text' : 'password'
+      button.textContent = input.type === 'password' ? 'Show' : 'Hide'
+    }))
+    document.querySelectorAll('[data-method]').forEach(button => button.addEventListener('click', () => {
+      const passkey = button.dataset.method === 'passkey'
+      document.querySelector('.password-view').hidden = passkey
+      document.querySelector('.passkey-view').hidden = !passkey
+      document.querySelectorAll('[data-method]').forEach(item => { item.classList.toggle('active', item === button); item.setAttribute('aria-pressed', String(item === button)) })
+    }))
+    document.querySelectorAll('form').forEach(form => form.addEventListener('submit', event => { event.preventDefault(); showPreviewMessage() }))
+    document.querySelectorAll('.preview-action').forEach(button => button.addEventListener('click', showPreviewMessage))
+    showView(location.hash === '#signup' ? 'signup' : 'login')
+  </script>
+</body>
+</html>

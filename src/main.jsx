@@ -20,6 +20,7 @@ import './interaction.css'
 import './ledger-clarity.css'
 import './comfort.css'
 import './navigation.css'
+import './auth-expanded.css'
 
 applyAppearance(readDeviceAppearance())
 

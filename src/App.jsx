@@ -1,7 +1,7 @@
 import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowLeft, BadgeCheck, LockKeyhole, Mail, RefreshCw, Sparkles, UserRound } from 'lucide-react'
+import { ArrowLeft, RefreshCw, Sparkles } from 'lucide-react'
 import { api, auth, jsonBody } from './lib/api'
 import AppShell from './components/AppShell'
 const Overview = lazy(() => import('./pages/Overview'))
@@ -36,7 +36,7 @@ import { notificationSettingsChangedEvent } from './lib/notificationSettings'
 const AppContext = createContext(null)
 export const useApp = () => useContext(AppContext)
 
-function LoginScreen({ onLogin }) {
+export function LoginScreen({ onLogin }) {
   useEffect(() => () => cancelBiometric(), [])
   const [, refreshSignInPreference] = useState(0)
   const [rememberMe, setRememberMe] = useState(() => auth.remembered)
@@ -105,58 +105,59 @@ function LoginScreen({ onLogin }) {
     finally { setBusy(false) }
   }
 
-  return <div className="lock-screen auth-screen" onInvalid={e => setError(e.target.validationMessage)}>
-    <motion.div key={mode} className="lock-card auth-card glass" initial={{ opacity: 0, y: 20, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{duration:.38,ease:[.22,1,.36,1]}}>
-      <BrandLogo className="large" />
+  const authOptions = <div className="auth-options"><label className="check-row remember-session"><input type="checkbox" checked={rememberMe} disabled={busy} onChange={e => { try { auth.setRemembered(e.target.checked); setRememberMe(e.target.checked); setError('') } catch (err) { setError(err.message) } }}/><span>Keep me signed in on this device</span></label><button type="button" className="auth-switch" onClick={()=>setMode('reset')}>Forgot password?</button></div>
+
+  return <div className="auth-screen expanded-auth" onInvalid={e => setError(e.target.validationMessage)}>
+    <header className="auth-brand"><BrandLogo /><span><strong>Budgetly</strong><small>Personal finance</small></span></header>
+    <motion.main key={mode} className="auth-main" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{duration:.38,ease:[.22,1,.36,1]}}>
       {mode === 'reset' && <PasswordRecovery onBack={()=>setMode('login')}/>}
 
       {mode === 'login' && <>
         <p className="eyebrow">Welcome back</p>
         <h1>Sign in to Budgetly</h1>
-        <p className="muted">Your budget workspace is private to your account.</p>
+        <p className="auth-intro">Your finances, right where you left them.</p>
         <div className="segment-control signin-method" aria-label="Sign-in method"><button type="button" disabled={busy} className={signInMethod === 'password' ? 'active' : ''} onClick={() => setSignInMethod('password')}>Password</button><button type="button" disabled={busy || !biometricSupported()} className={signInMethod === 'passkey' ? 'active' : ''} onClick={() => setSignInMethod('passkey')}>Biometric / passkey</button></div>
-        {signInMethod === 'passkey' ? <div className="stack gap-12">{error && <div className="form-error">{error}</div>}<button className="button primary full" disabled={busy} onClick={passkeyLogin}>{busy ? 'Verifying...' : 'Sign in with passkey'}</button></div> : <form onSubmit={login} className="stack gap-12">
-          <div className="pin-field auth-field"><Mail size={18} /><input required autoFocus type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email address" aria-label="Email" /></div>
-          <div className="pin-field auth-field"><LockKeyhole size={18} /><PasswordInput required minLength="8" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" aria-label="Password" /></div>
+        {signInMethod === 'passkey' ? <div className="auth-passkey"><p className="auth-intro">Use the passkey saved to your device to sign in securely.</p>{error && <div className="form-error" role="alert">{error}</div>}{authOptions}<button className="button primary" disabled={busy} onClick={passkeyLogin}>{busy ? 'Verifying...' : 'Sign in with passkey'}</button></div> : <form onSubmit={login} className="auth-form">
+          <label className="auth-entry"><span>Email</span><input required type="email" autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" /></label>
+          <div className="auth-entry"><label htmlFor="login-password">Password</label><PasswordInput id="login-password" required minLength="8" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter your password" /></div>
           {error && <div className="form-error">{error}</div>}
-          <button className="button primary full" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
+          {authOptions}
+          <div className="auth-action-row"><button className="button primary" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button></div>
         </form>}
-        <label className="check-row remember-session"><input type="checkbox" checked={rememberMe} disabled={busy} onChange={e => { try { auth.setRemembered(e.target.checked); setRememberMe(e.target.checked); setError('') } catch (err) { setError(err.message) } }}/><span>Keep me signed in on this device</span></label>
         <DeviceSignInPreference disabled={busy} onChange={() => { setSignInMethod('password'); setError(''); refreshSignInPreference(v => v + 1) }}/>
-        <button type="button" className="auth-switch" onClick={()=>setMode('reset')}>Forgot password?</button>
-        <button className="auth-switch" type="button" onClick={() => { setError(''); setMode('signup') }}>New to Budgetly? <strong>Create an account</strong></button>
       </>}
 
       {mode === 'signup' && <>
         <p className="eyebrow">Create account</p>
-        <h1>Start your workspace</h1>
-        <p className="muted">We verify your email before creating the account.</p>
-        <form onSubmit={requestCode} className="stack gap-12">
-          <div className="pin-field auth-field"><UserRound size={18} /><input required autoFocus value={signup.username} onChange={e => setSignup({ ...signup, username: e.target.value })} placeholder="Username" aria-label="Username" minLength="2" maxLength="80" /></div>
-          <div className="pin-field auth-field"><Mail size={18} /><input required type="email" value={signup.email} onChange={e => setSignup({ ...signup, email: e.target.value })} placeholder="Email address" aria-label="Email" /></div>
-          <div className="pin-field auth-field"><LockKeyhole size={18} /><PasswordInput required value={signup.password} onChange={e => setSignup({ ...signup, password: e.target.value })} placeholder="Password · 8+ characters" aria-label="Password" minLength="8" maxLength="128" /></div>
+        <h1>Start with Budgetly</h1>
+        <p className="auth-intro">One place for your personal and shared finances.</p>
+        <form onSubmit={requestCode} className="auth-form">
+          <label className="auth-entry"><span>Username</span><input required autoComplete="name" value={signup.username} onChange={e => setSignup({ ...signup, username: e.target.value })} placeholder="Your name" minLength="2" maxLength="80" /></label>
+          <label className="auth-entry"><span>Email</span><input required type="email" autoComplete="email" value={signup.email} onChange={e => setSignup({ ...signup, email: e.target.value })} placeholder="you@example.com" /></label>
+          <div className="auth-entry"><label htmlFor="signup-password">Password</label><PasswordInput id="signup-password" required autoComplete="new-password" value={signup.password} onChange={e => setSignup({ ...signup, password: e.target.value })} placeholder="At least 8 characters" minLength="8" maxLength="128" /></div>
           {error && <div className="form-error">{error}</div>}
-          <button className="button primary full" disabled={busy}>{busy ? 'Sending code…' : 'Continue'}</button>
+          <div className="auth-action-row"><button className="button primary" disabled={busy}>{busy ? 'Sending code…' : 'Continue to email verification'}</button></div>
         </form>
-        <button className="auth-switch" type="button" onClick={() => { setError(''); setMode('login') }}>Already have an account? <strong>Sign in</strong></button>
       </>}
 
       {mode === 'verify' && <>
         <p className="eyebrow">Verify email</p>
         <h1>Enter the 6-digit code</h1>
-        <p className="muted">Sent to <strong>{verificationEmail}</strong>. The code expires in 10 minutes.</p>
-        <form onSubmit={verify} className="stack gap-12">
-          <div className="pin-field verify-code-field"><BadgeCheck size={19} /><input autoFocus inputMode="numeric" autoComplete="one-time-code" value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="000000" aria-label="Verification code" /></div>
+        <p className="auth-intro">Sent to <strong>{verificationEmail}</strong>. The code expires in 10 minutes.</p>
+        <form onSubmit={verify} className="auth-form">
+          <label className="auth-entry auth-code"><span>Verification code</span><input autoFocus inputMode="numeric" autoComplete="one-time-code" value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="000000" /></label>
           {message && !error && <div className="form-note">{message}</div>}
           {error && <div className="form-error">{error}</div>}
-          <button className="button primary full" disabled={busy || code.length !== 6}>{busy ? 'Verifying…' : 'Verify & sign in'}</button>
+          <div className="auth-action-row"><button className="button primary" disabled={busy || code.length !== 6}>{busy ? 'Verifying…' : 'Verify & sign in'}</button></div>
         </form>
         <div className="auth-secondary-actions">
           <button type="button" onClick={() => { setError(''); setMessage(''); setMode('signup') }}><ArrowLeft size={14}/>Start over</button>
           <button type="button" disabled={busy || retryAfter > 0} onClick={() => requestCode()}><RefreshCw size={14}/>{retryAfter > 0 ? `Resend in ${retryAfter}s` : 'Resend code'}</button>
         </div>
       </>}
-    </motion.div>
+    </motion.main>
+    {mode === 'login' && <footer className="auth-footer">New to Budgetly? <button className="auth-switch" type="button" onClick={() => { setError(''); setMode('signup') }}>Create an account</button></footer>}
+    {mode === 'signup' && <footer className="auth-footer">Already have an account? <button className="auth-switch" type="button" onClick={() => { setError(''); setMode('login') }}>Sign in</button></footer>}
   </div>
 }
 
