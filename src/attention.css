@@ -1,0 +1,28 @@
+.attention-intro { align-items: center; }
+.attention-intro .button { flex: 0 0 auto; }
+.attention-list { padding: 0; overflow: hidden; }
+.attention-list-head { display: flex; align-items: center; justify-content: space-between; padding: 22px 24px 18px; border-bottom: 1px solid var(--line); }
+.attention-list-head h3 { margin: 2px 0 0; }
+.attention-list-head > svg { color: var(--warning); }
+.attention-items { display: grid; }
+.attention-item { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 18px 24px; border-bottom: 1px solid var(--line); }
+.attention-item:last-child { border-bottom: 0; }
+.attention-icon { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 12px; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+.attention-item.danger .attention-icon { background: color-mix(in srgb, var(--danger) 15%, transparent); color: var(--danger); }
+.attention-item.warning .attention-icon { background: color-mix(in srgb, var(--warning) 15%, transparent); color: var(--warning); }
+.attention-copy { min-width: 0; }
+.attention-label { color: var(--muted); font-size: .78rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; }
+.attention-copy h4 { margin: 3px 0 4px; font-size: 1rem; }
+.attention-copy p { margin: 0; color: var(--muted); line-height: 1.45; }
+.attention-action { white-space: nowrap; }
+.attention-more { padding: 0 24px 20px; margin: 0; }
+.attention-loading { min-height: 110px; display: grid; place-items: center; }
+.spin { animation: attention-spin .8s linear infinite; }
+@keyframes attention-spin { to { transform: rotate(360deg); } }
+@media (max-width: 620px) {
+  .attention-intro { align-items: flex-start; }
+  .attention-item { grid-template-columns: 36px minmax(0, 1fr); gap: 11px; padding: 16px; }
+  .attention-icon { width: 36px; height: 36px; border-radius: 10px; }
+  .attention-action { grid-column: 2; justify-self: start; }
+  .attention-list-head { padding-inline: 16px; }
+}

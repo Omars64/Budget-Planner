@@ -1,6 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { BarChart3, CalendarClock, CalendarDays, Gauge, LayoutDashboard, LogOut, Menu, Mountain, PanelLeftOpen, Plus, ReceiptText, Search, Settings, Share2, ShieldCheck, Target, WalletCards, X } from 'lucide-react'
+import { BarChart3, BellDot, CalendarClock, CalendarDays, Gauge, LayoutDashboard, LogOut, Menu, Mountain, PanelLeftOpen, Plus, ReceiptText, Search, Settings, Share2, ShieldCheck, Target, WalletCards, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useApp } from '../App'
 import TransactionModal from './TransactionModal'
@@ -21,6 +21,7 @@ const nav = [
   ['/shared-transactions', 'Shared Transactions', Share2, 'Money'],
   ['/wallets', 'Wallets', WalletCards, 'Money'],
   ['/upcoming', 'Upcoming', CalendarClock, 'Planning'],
+  ['/attention', 'Attention', BellDot, 'Planning'],
   ['/calendar', 'Calendar', CalendarDays, 'Planning'],
   ['/budgets', 'Budgets', Gauge, 'Planning'],
   ['/goals', 'Goals & debts', Target, 'Planning'],
