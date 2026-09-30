@@ -13,6 +13,7 @@ import LedgerPagination from '../components/LedgerPagination'
 import useLedger from '../lib/useLedger'
 import { useViewState } from '../lib/viewState'
 import AnimatedMoney from '../components/AnimatedMoney'
+import OfflinePending from '../components/OfflinePending'
 import LedgerRow, { LedgerDateHeader, TransactionDetails } from '../components/LedgerRow'
 
 export default function Transactions() {
@@ -46,6 +47,7 @@ export default function Transactions() {
   } catch (err) { notify(err.message, 'error') } }
 
   return <div className="ledger-page stack">
+    <OfflinePending scope="personal"/>
     <LedgerFilters value={filters} onChange={setFilters} wallets={wallets} categories={categories}><StatementImport wallets={wallets} compact/></LedgerFilters>
     {ledger.error && <div className="form-error" role="alert">{ledger.error}<button className="button ghost small" onClick={ledger.retry}>Retry</button></div>}
     {ledger.error && ledger.updatedAt && <small className="muted">Showing records last updated at {new Date(ledger.updatedAt).toLocaleTimeString()}.</small>}
@@ -66,6 +68,6 @@ export default function Transactions() {
       <LedgerPagination ledger={ledger}/>
     </section>
     <TransactionDetails tx={selected} fmt={fmt} onClose={() => setSelected(null)} onEdit={() => {setEditing(selected);setSelected(null);setModal(true)}} onDelete={() => remove(selected)} onDuplicate={() => {sessionStorage.setItem(`flowbudget_tx_draft_${user.id}`,JSON.stringify({...selected,id:undefined,revision:undefined,date:dateInput()}));setSelected(null);setEditing(null);setModal(true)}}/>
-    <TransactionModal open={modal} editing={editing} onClose={() => setModal(false)} onSaved={() => {setModal(false);refresh();notify(editing?'Transaction updated':'Transaction added')}} />
+    <TransactionModal open={modal} editing={editing} onClose={() => setModal(false)} onSaved={saved => {setModal(false);refresh();notify(saved.queued ? 'Saved on this device. Will sync when connected.' : editing?'Transaction updated':'Transaction added')}} />
   </div>
 }

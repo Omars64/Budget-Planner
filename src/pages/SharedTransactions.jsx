@@ -22,6 +22,7 @@ import { useViewState } from '../lib/viewState'
 import BalancePreview from '../components/BalancePreview'
 import { transactionSaved } from '../lib/savedFeedback'
 import AnimatedMoney from '../components/AnimatedMoney'
+import OfflinePending from '../components/OfflinePending'
 import ReportingMonthField from '../components/ReportingMonthField'
 import WalletLedger from '../components/WalletLedger'
 
@@ -230,8 +231,8 @@ export default function SharedTransactions() {
       const path = schedule ? '/api/planned-transactions' : editing ? `/api/shared/transactions/${editing.id}` : '/api/shared/transactions'
       const saved = await api(path, { method: editing ? 'PUT' : 'POST', ...jsonBody(schedule ? {transaction: payload, status: 'scheduled', reminder_enabled: true} : payload) })
       if (!editing) clearDraft(draftKey)
-      if (!schedule) transactionSaved(saved)
-      setModal(false); setEditing(null); setSchedule(false); refresh(); notify(schedule ? 'Shared transaction scheduled' : editing ? 'Shared transaction updated' : 'Shared transaction added')
+      if (!schedule && !saved.queued) transactionSaved(saved)
+      setModal(false); setEditing(null); setSchedule(false); refresh(); notify(saved.queued ? 'Saved on this device. Will sync when connected.' : schedule ? 'Shared transaction scheduled' : editing ? 'Shared transaction updated' : 'Shared transaction added')
     } catch (err) { setFormError(err.status === 409 ? 'Someone changed this record. Your edits are still here. Close and reopen the record to review the latest version before applying them.' : err.message) }
     finally { savingRef.current = false; setSaving(false) }
   }
@@ -261,6 +262,7 @@ export default function SharedTransactions() {
   }
 
   return <div className="ledger-page stack">
+    <OfflinePending scope="shared"/>
     <LedgerFilters value={filters} onChange={setFilters} wallets={sharedWallets} categories={filterCategories} shared><button className="button ghost small" data-tour="manage-sharing" onClick={() => setManageOpen(true)}><Users size={18}/>Manage</button></LedgerFilters>
     {(syncError || ledger.error) && <div className="form-error" role="alert">{syncError || ledger.error}<button className="button ghost small" onClick={refresh}>Retry</button></div>}
     {ledger.error && ledger.updatedAt && <small className="muted">Showing records last updated at {new Date(ledger.updatedAt).toLocaleTimeString()}.</small>}

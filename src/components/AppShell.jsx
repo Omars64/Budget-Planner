@@ -125,7 +125,7 @@ export default function AppShell({ children }) {
       <button className={!primaryRoutes.has(location.pathname) ? 'active' : ''} aria-current={!primaryRoutes.has(location.pathname) ? 'page' : undefined} onClick={() => setMenu(true)}><Menu size={19}/><span>More</span></button>
     </nav>
 
-    <TransactionModal open={txModal} onClose={() => setTxModal(false)} onSaved={(_, scheduled) => { setTxModal(false); refresh(); notify(scheduled ? 'Transaction scheduled' : 'Transaction saved') }} />
+    <TransactionModal open={txModal} onClose={() => setTxModal(false)} onSaved={(saved, scheduled) => { setTxModal(false); refresh(); notify(saved.queued ? 'Saved on this device. Will sync when connected.' : scheduled ? 'Transaction scheduled' : 'Transaction saved') }} />
     <AppTutorial request={tutorialRequest}/>
     <Milestone/>
   </div>

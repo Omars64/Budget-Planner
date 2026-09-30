@@ -1,5 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import { Capacitor } from '@capacitor/core'
 import { HashRouter } from 'react-router-dom'
 import MotionPreferences from './components/MotionPreferences'
 import { applyAppearance, readDeviceAppearance } from './lib/appearance'
@@ -24,6 +25,7 @@ import './navigation.css'
 import './auth-expanded.css'
 import './coherent-app.css'
 import './wallet-ledger.css'
+import './offline.css'
 
 applyAppearance(readDeviceAppearance())
 
@@ -34,3 +36,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     </HashRouter></MotionPreferences>
   </React.StrictMode>,
 )
+
+if (import.meta.env.PROD && !Capacitor.isNativePlatform() && 'serviceWorker' in navigator) {
+  const register = () => { void navigator.serviceWorker.register('/sw.js').catch(() => {}) }
+  if (document.readyState === 'complete') register()
+  else window.addEventListener('load', register, { once: true })
+}

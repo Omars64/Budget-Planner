@@ -1,0 +1,18 @@
+.offline-pending { margin: 0 0 14px; border-block: 1px solid var(--line); background: var(--surface-soft); }
+.offline-pending-head { display: flex; align-items: center; gap: 12px; padding: 13px 18px; color: var(--text); }
+.offline-pending-head > svg { flex: 0 0 auto; color: var(--accent-text); }
+.offline-pending-head > div, .offline-pending-row > div:first-child { display: grid; gap: 3px; min-width: 0; }
+.offline-pending-head span, .offline-pending-row span { color: var(--muted); font-size: 12px; }
+.offline-pending-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 18px; border-top: 1px solid var(--line); }
+.offline-pending-row strong { overflow-wrap: anywhere; }
+.offline-pending-row small { color: var(--negative); overflow-wrap: anywhere; }
+.offline-pending-row .button-row { flex: 0 0 auto; }
+@media (max-width: 820px) {
+  .budgetly-v2.native-android .main-area { padding-top: 0; }
+  .budgetly-v2.native-android:not(.has-ai) .topbar { width: 100%; margin: 0; min-height: 94px; padding: 18px 22px; border-inline: 0; border-top: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: var(--surface); box-shadow: none; }
+  .budgetly-v2.native-android:not(.has-ai) .page-wrap { padding-top: 16px; }
+  .budgetly-v2.native-android:not(.has-ai) .topbar-left { gap: 14px; }
+  .budgetly-v2.native-android:not(.has-ai) .topbar h2 { line-height: 1.2; }
+  .budgetly-v2.native-android .mobile-nav { background: var(--surface); backdrop-filter: none; }
+  .offline-pending-row { padding-inline: 14px; }
+}

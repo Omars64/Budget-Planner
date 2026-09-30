@@ -1,4 +1,6 @@
 import { Capacitor } from '@capacitor/core'
+import { clearOfflineCache } from './offlineStore'
+import { cacheOfflineResponse, canQueueOffline, offlineUser, queueOfflineTransaction, readOfflineResponse, setOfflineUser, syncOfflineQueue } from './offlineSync'
 
 const tokenKey = 'flowbudget_token'
 const rememberKey = 'flowbudget_remember_session'
@@ -37,6 +39,10 @@ export const auth = {
   },
   clear() {
     responseCache.clear()
+    const userId = offlineUser()
+    setOfflineUser(null)
+    if (userId) void clearOfflineCache(userId).catch(() => {})
+    try { localStorage.removeItem('budgetly_offline_user') } catch { /* Optional offline session. */ }
     sessionStorage.removeItem(tokenKey)
     localStorage.removeItem(tokenKey)
     Object.keys(sessionStorage).filter(key => key.startsWith('flowbudget_note_draft_')).forEach(key => sessionStorage.removeItem(key))
@@ -64,7 +70,12 @@ export function api(path, options = {}) {
   }
   const mutation = options.method && options.method !== 'GET'
   if (mutation) window.dispatchEvent(new CustomEvent('flowbudget:pending', { detail: ++writes }))
-  const request = send(path, options).catch(async error => {
+  const request = (canQueueOffline(path, options) && navigator.onLine === false
+    ? queueOfflineTransaction(path, options)
+    : send(path, options).catch(error => {
+      if ((error.network || [502, 503, 504].includes(error.status)) && canQueueOffline(path, options)) return queueOfflineTransaction(path, options)
+      throw error
+    })).catch(async error => {
     if (error.status !== 428) throw error
     await new Promise((resolve,reject)=>window.dispatchEvent(new CustomEvent('flowbudget:confirm-password',{detail:{resolve,reject}})))
     return send(path,options)
@@ -84,16 +95,39 @@ export function api(path, options = {}) {
 }
 
 async function send(path, options = {}) {
+  if ((!options.method || options.method === 'GET') && navigator.onLine === false) {
+    try {
+      const cached = await readOfflineResponse(path)
+      if (cached !== undefined) return cached
+    } catch { /* Continue with the normal request error. */ }
+  }
   const headers = new Headers(options.headers || {})
   if (options.body && !(options.body instanceof FormData)) headers.set('Content-Type', 'application/json')
   if (auth.token) headers.set('Authorization', `Bearer ${auth.token}`)
   let response
   try { response = await fetch(`${apiBase}${path}`, { ...options, headers }) }
-  catch { throw new Error('Could not reach Budgetly. Check your connection and retry; transaction retries are protected against duplicates.') }
+  catch (cause) {
+    if (cause?.name === 'AbortError') throw cause
+    if (!options.method || options.method === 'GET') {
+      try {
+        const cached = await readOfflineResponse(path)
+        if (cached !== undefined) return cached
+      } catch { /* Report the network error below. */ }
+    }
+    const error = new Error('Could not reach Budgetly. Check your connection and retry; transaction retries are protected against duplicates.')
+    error.network = true
+    throw error
+  }
   if (response.status === 204) { responseCache.clear(); return null }
   let data = null
   try { data = await response.json() } catch { data = null }
   if (!response.ok) {
+    if ([502, 503, 504].includes(response.status) && (!options.method || options.method === 'GET')) {
+      try {
+        const cached = await readOfflineResponse(path)
+        if (cached !== undefined) return cached
+      } catch { /* Report the service error below. */ }
+    }
     const message = data?.detail || (response.status >= 500
       ? 'The service is temporarily unavailable. Please try again shortly.'
       : `Request failed (${response.status})`)
@@ -103,9 +137,13 @@ async function send(path, options = {}) {
   }
   if (!options.method || options.method === 'GET') {
     if (path.startsWith('/api/shared/') || path === '/api/wallets') responseCache.set(path, { token: auth.token, time: Date.now(), data })
+    await cacheOfflineResponse(path, data)
   } else responseCache.clear()
+  window.dispatchEvent(new Event('budgetly:service-available'))
   return data
 }
+
+export const flushOfflineTransactions = () => syncOfflineQueue(send, auth.token)
 
 export const money = (value, currency = 'KWD', compact = false) => {
   const n = Number(value || 0)

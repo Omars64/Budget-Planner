@@ -2,7 +2,8 @@ import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useM
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowLeft, RefreshCw, Sparkles } from 'lucide-react'
-import { api, auth, jsonBody } from './lib/api'
+import { api, auth, flushOfflineTransactions, jsonBody } from './lib/api'
+import { rememberOfflineSession, restoreOfflineSession, setOfflineUser } from './lib/offlineSync'
 import AppShell from './components/AppShell'
 const Overview = lazy(() => import('./pages/Overview'))
 const AskAI = lazy(() => import('./pages/AskAI'))
@@ -189,6 +190,19 @@ export default function App() {
   const refresh = useCallback(() => setRefreshKey(v => v + 1), [])
   useEffect(() => {
     if (!session.user) return undefined
+    const sync = () => { if (document.visibilityState !== 'hidden') void flushOfflineTransactions().catch(console.error) }
+    const changed = () => refresh()
+    sync()
+    const timer = window.setInterval(sync, 30000)
+    window.addEventListener('online', sync)
+    window.addEventListener('focus', sync)
+    window.addEventListener('visibilitychange', sync)
+    window.addEventListener('budgetly:offline-synced', changed)
+    return () => { window.clearInterval(timer); window.removeEventListener('online', sync); window.removeEventListener('focus', sync); window.removeEventListener('visibilitychange', sync); window.removeEventListener('budgetly:offline-synced', changed) }
+  }, [session.user?.id, refresh])
+  useEffect(() => { if (session.user && auth.token) void rememberOfflineSession(session.user, settings, auth.token) }, [session.user, settings])
+  useEffect(() => {
+    if (!session.user) return undefined
     const sync = () => { if (document.visibilityState !== 'hidden') void syncPlannedNotifications(session.user.id).catch(console.error) }
     sync()
     const timer = window.setInterval(sync, 60000)
@@ -235,10 +249,18 @@ export default function App() {
     const resume = async () => {
       if (!auth.token) { setSession({ loading: false, user: null }); return }
       api('/api/auth/me').then(async user => {
-      const settingsOk = await loadSettings()
-      setSession({ loading: false, user: settingsOk ? user : null })
-      if (settingsOk) void loadAppearance()
-      }).catch(() => { auth.clear(); localStorage.removeItem('flowbudget_biometric_session'); setSession({ loading: false, user: null }) })
+      setOfflineUser(user.id)
+      await loadSettings()
+      if (!auth.token) { setSession({ loading: false, user: null }); return }
+      setSession({ loading: false, user })
+      void loadAppearance()
+      }).catch(async error => {
+        const temporaryOutage = error.network || [502, 503, 504].includes(error.status)
+        const saved = temporaryOutage ? await restoreOfflineSession(auth.token) : null
+        if (saved) { setOfflineUser(saved.user.id); setSettings(saved.settings); setSession({ loading: false, user: saved.user }); return }
+        if (!temporaryOutage) { auth.clear(); localStorage.removeItem('flowbudget_biometric_session') }
+        setSession({ loading: false, user: null })
+      })
     }
     void resume()
   }, [loadSettings, loadAppearance])
@@ -256,6 +278,7 @@ export default function App() {
   const signOut = useCallback(() => setSignoutRequested(true), [])
 
   const completeLogin = useCallback(async user => {
+    setOfflineUser(user.id)
     await loadSettings()
     setSession({ loading: false, user })
     void loadAppearance()

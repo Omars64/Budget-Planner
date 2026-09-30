@@ -96,7 +96,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
     }
       const saved = await api(schedule ? '/api/planned-transactions' : editing ? `/api/transactions/${editing.id}` : '/api/transactions', { method: editing ? 'PUT' : 'POST', ...jsonBody(schedule ? {transaction: payload, status: 'scheduled', reminder_enabled: true} : payload) })
       if (!editing) clearDraft(draftKey)
-      if (!schedule) transactionSaved(saved)
+      if (!schedule && !saved.queued) transactionSaved(saved)
       onSaved?.(saved, schedule)
     } catch (err) { setError(err.status === 409 ? 'This transaction changed elsewhere. Your edits are still here. Close and reopen the record to review the latest version before applying them.' : err.message) }
     finally { submitting.current = false; setBusy(false) }
