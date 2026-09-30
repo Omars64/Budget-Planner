@@ -14,6 +14,8 @@ import Milestone from './Milestone'
 import ConnectionStatus from './ConnectionStatus'
 import { useContainedScroll, useScrollLock } from '../lib/scrollLock'
 import BrandFooter from './BrandFooter'
+import { useWorkspacePreferences } from '../lib/workspacePreferences'
+import useKeyboardViewport from '../lib/useKeyboardViewport'
 
 const nav = [
   ['/', 'Overview', LayoutDashboard, 'Money'],
@@ -70,9 +72,12 @@ export default function AppShell({ children }) {
   useScrollLock(menu)
   useContainedScroll(sidebar)
   const { user, settings, appearance, refresh, notify, lock } = useApp()
+  const [preferences] = useWorkspacePreferences(user?.id)
+  const keyboardOpen = useKeyboardViewport()
   const location = useLocation()
   const visibleNav = user?.role === 'admin' ? [...nav, ['/admin', 'Admin', ShieldCheck, 'Account']] : nav
-  const matchingNav = visibleNav.filter(([, label]) => label.toLowerCase().includes(navSearch.trim().toLowerCase()))
+  const orderedNav = [...visibleNav].sort((a,b) => { const ia=preferences.navOrder.indexOf(a[0]), ib=preferences.navOrder.indexOf(b[0]); return ia < 0 || ib < 0 ? 0 : ia-ib })
+  const matchingNav = orderedNav.filter(([, label]) => label.toLowerCase().includes(navSearch.trim().toLowerCase()))
   const title = visibleNav.find(([path]) => path === location.pathname)?.[1] || 'Budgetly'
   const isLedger = ['/transactions', '/shared-transactions'].includes(location.pathname)
   const nativeAndroid = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android'
@@ -80,7 +85,7 @@ export default function AppShell({ children }) {
     ? window.dispatchEvent(new window.Event('budgetly:add-shared-transaction'))
     : setTxModal(true)
 
-  return <div className={`app-shell budgetly-v2 ${nativeAndroid ? 'native-android' : 'browser-app'} ${isLedger ? 'has-ledger' : ''} ${location.pathname === '/ask-ai' ? 'has-ai' : ''}`}>
+  return <div className={`app-shell budgetly-v2 ${nativeAndroid ? 'native-android' : 'browser-app'} ${isLedger ? 'has-ledger' : ''} ${keyboardOpen ? 'keyboard-open' : ''} ${location.pathname === '/ask-ai' ? 'has-ai' : ''}`}>
     <ScrollMemory userId={user?.id}/>
     <aside ref={sidebar} className={`sidebar glass ${menu ? 'open' : ''}`}>
       <div className="sidebar-head">

@@ -1,17 +1,23 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { X } from 'lucide-react'
-import { useEffect, useId, useRef } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useScrollLock } from '../lib/scrollLock'
 
 const activeDialogs = []
 
-export default function Modal({ open, onClose, title, subtitle, children, size = 'medium', layerClass = '' }) {
+export default function Modal({ open, onClose, title, subtitle, children, size = 'medium', layerClass = '', preserveDraft = false, protectChanges = false, isDirty }) {
+  const dirty = useRef(false)
+  const [discard, setDiscard] = useState(false)
+  useEffect(() => { dirty.current = false; setDiscard(false) }, [open])
+  const changed = isDirty ?? dirty.current
+  const requestClose = () => { if ((isDirty ?? dirty.current) && protectChanges && !preserveDraft) setDiscard(true); else onClose() }
   const titleId = useId()
   const dialog = useRef(null)
+  useEffect(() => { if (discard) dialog.current?.querySelector('[role="alert"] button')?.focus() }, [discard])
   const backdrop = useRef(null)
   const close = useRef(onClose)
-  close.current = onClose
+  close.current = requestClose
   useScrollLock(open)
   useEffect(() => {
     const viewport = window.visualViewport
@@ -55,10 +61,17 @@ export default function Modal({ open, onClose, title, subtitle, children, size =
     return () => { activeDialogs.splice(activeDialogs.indexOf(dialog), 1); window.cancelAnimationFrame(frame); document.removeEventListener('keydown', keydown); window.removeEventListener('budgetly:back', back); if (previous?.isConnected) previous.focus({ preventScroll: true }) }
   }, [open])
   return createPortal(<div className={`budgetly-v2 modal-layer ${layerClass}`}><AnimatePresence>
-    {open && <motion.div ref={backdrop} className="modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={e => e.target === e.currentTarget && onClose()}>
+    {open && <motion.div ref={backdrop} className="modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={e => e.target === e.currentTarget && requestClose()}>
       <motion.div ref={dialog} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} className={`modal glass modal-${size}`} initial={{ opacity: 0, scale: .96, y: 24 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: .98, y: 12 }} transition={{ type: 'spring', stiffness: 330, damping: 28 }}>
-        <div className="modal-head"><div><h3 id={titleId}>{title}</h3>{subtitle && <p className="muted">{subtitle}</p>}</div><button className="icon-button" aria-label="Close dialog" onClick={onClose}><X size={18}/></button></div>
-        <div className="modal-body">{children}</div>
+        <div className="modal-head"><div><h3 id={titleId}>{title}</h3>{subtitle && <p className="muted">{subtitle}</p>}</div><button className="icon-button" aria-label="Close dialog" onClick={requestClose}><X size={18}/></button></div>
+        <div className="modal-body" onChangeCapture={() => { dirty.current = true }} onClickCapture={event => {
+          const button = event.target.closest('button')
+          if (protectChanges && isDirty === undefined && button?.hasAttribute('aria-pressed')) dirty.current = true
+          if (!discard && button?.textContent.trim() === 'Cancel' && (changed || dirty.current) && protectChanges && !preserveDraft) { event.preventDefault(); event.stopPropagation(); requestClose() }
+        }}>
+          <div hidden={discard}>{children}</div>
+          {discard && <div role="alert"><p>Discard your unsaved changes?</p><div className="modal-actions"><button type="button" className="button ghost" onClick={() => setDiscard(false)}>Keep editing</button><button type="button" className="button danger" onClick={onClose}>Discard changes</button></div></div>}
+        </div>
       </motion.div>
     </motion.div>}
   </AnimatePresence></div>, document.body)

@@ -1,0 +1,35 @@
+.workspace-preferences { padding-block: 16px; border-bottom: 1px solid var(--line); }
+.preference-order-row { display: grid; grid-template-columns: minmax(0, 1fr) 44px 44px; align-items: center; gap: 8px; padding-block: 5px; }
+.preference-order-row > span { overflow-wrap: anywhere; }
+.overview-disclosure { border-block: 1px solid var(--line); }
+.overview-disclosure > summary { padding: 18px 0; cursor: pointer; font-weight: 600; }
+.overview-attention-link { display: flex; gap: 12px; align-items: center; padding-block: 18px; border-bottom: 1px solid var(--line); }
+.overview-attention-link > svg { flex-shrink: 0; margin-left: auto; }
+.shared-access { display: grid; gap: 6px; border-block: 1px solid var(--line); padding-block: 12px; color: var(--muted); }
+.shared-access strong { color: var(--text); }
+.wallet-favorite[aria-pressed=true] { color: var(--accent-text); background: var(--accent-soft); }
+.wallet-favorite[aria-pressed=true] svg { fill: currentColor; }
+.connection-status a { display: inline-block; margin-inline-start: 12px; text-decoration: underline; font-weight: 600; }
+.budgetly-v2 :is(button, a, input, select, textarea, summary):focus-visible { outline: 2px solid var(--accent-text); outline-offset: 3px; }
+.budgetly-v2 :is(.overview-pair, .overview-metrics, .wallet-tile-actions) { min-width: 0; }
+.budgetly-v2 :is(.overview-pair strong, .overview-metrics strong, .shared-access, .check-row span) { overflow-wrap: anywhere; }
+.budgetly-v2 .overview-metrics strong { overflow-wrap: normal; }
+.modal-body > [hidden] { display: none !important; }
+@media (max-width: 820px) {
+  .budgetly-v2.keyboard-open > :is(.mobile-nav, .transaction-fab) { display: none; }
+  .budgetly-v2.keyboard-open .app-footer { display: none; }
+  .budgetly-v2 .overview-pair { flex-wrap: wrap; gap: 8px; }
+  .budgetly-v2 .overview-metrics strong { font-size: 22px; }
+  .workspace-preferences .check-row { align-items: flex-start; }
+  .workspace-preferences .check-row input { flex-shrink: 0; }
+  .wallet-tile-actions { flex-wrap: wrap; }
+  .budgetly-v2 .icon-button { min-width: 44px; min-height: 44px; }
+}
+@media (max-width: 400px) {
+  .budgetly-v2 .overview-metrics { grid-template-columns: minmax(0, 1fr); }
+  .budgetly-v2 .overview-metrics > a { grid-column: auto; padding-block: 14px; }
+  .budgetly-v2 .overview-metrics > a:last-child { display: grid; grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .budgetly-v2 *, .budgetly-v2 *::before, .budgetly-v2 *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}

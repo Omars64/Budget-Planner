@@ -27,13 +27,14 @@ export default function LedgerRow({ tx, fmt, shared = false, showDate = false, o
   </button>
 }
 
-export function TransactionDetails({ tx, fmt, onClose, onEdit, onDelete, onDuplicate }) {
+export function TransactionDetails({ tx, fmt, onClose, onEdit, onDelete, onDuplicate, shared = false, permission = 'view' }) {
   const navigate = useNavigate()
   return <Modal open={!!tx} onClose={onClose} title={tx?.description || 'Transaction'}>
     {tx && <div className="stack gap-18">
       <strong className={`detail-amount tx-amount ${tx.type}`}>{tx.type === 'income' ? '+' : tx.type === 'expense' ? '-' : ''}{fmt(tx.amount)}</strong>
       <p className="detail-kind">{tx.is_opening_balance ? 'Opening balance' : tx.type === 'income' ? 'Income' : tx.type === 'transfer' ? 'Transfer' : 'Expense'}</p>
       {tx.recorded_by_name && <p className="muted">Added by {tx.recorded_by_name}</p>}
+      {shared && <div className="shared-access" role="status"><strong>{permission === 'edit' ? 'Can edit' : permission === 'add' ? 'Can add new records' : 'View only'}</strong>{permission !== 'edit' && <span>Only the owner or an editor can change this record.</span>}</div>}
       <dl className="transaction-details"><div><dt>Wallet</dt><dd>{tx.wallet_name || tx.shared_wallet_names?.join(' / ')}</dd></div>{tx.transfer_wallet_name && <div><dt>To wallet</dt><dd>{tx.transfer_wallet_name}</dd></div>}<div><dt>Category</dt><dd>{tx.category_name || (tx.type === 'transfer' ? 'Transfer' : 'Uncategorized')}</dd></div><div><dt>Recorded</dt><dd>{format(displayDate(tx.date), 'dd MMM yyyy, HH:mm')}</dd></div>{tx.reporting_month && <div><dt>Reporting month</dt><dd>{format(new Date(`${tx.reporting_month}-01T12:00:00`), 'MMMM yyyy')}</dd></div>}{tx.owner_name && <div><dt>Wallet owner</dt><dd>{tx.owner_name}</dd></div>}{tx.recurring_frequency !== 'none' && tx.recurring_frequency && <div><dt>Repeat</dt><dd>{tx.recurring_frequency}{tx.recurring_until ? ` until ${tx.recurring_until}` : ' (set an end date when editing)'}</dd></div>}</dl>
       {tx.notes && <p className="transaction-note">{tx.notes}</p>}
       <button className="button ghost" onClick={() => { onClose(); navigate('/ask-ai', { state: { question: `Explain transaction #${tx.id}: ${tx.description}.`, scope: tx.shared_wallet_names ? 'shared' : 'personal', walletId: tx.shared_wallet_names ? tx.shared_wallet_ids?.[0] || tx.wallet_id : tx.wallet_id, month: tx.date.slice(0, 7) } }) }}><Sparkles size={17}/>Ask Budgetly about this</button>

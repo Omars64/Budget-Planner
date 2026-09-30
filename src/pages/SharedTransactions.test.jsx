@@ -85,3 +85,13 @@ it('uses the same picker in a shared transaction and saves the selected time onc
   expect(calls).toHaveLength(1)
   expect(JSON.parse(calls[0][1].body)).toMatchObject({date:'2026-09-14T03:29:00.000Z',wallet_id:11,amount:2})
 })
+it('explains viewer access and does not offer Edit or Duplicate without permission', async () => {
+  ledger.rows=[{id:71,wallet_id:11,type:'expense',amount:2,description:'Viewer record',date:'2026-09-21T08:00:00+03:00',wallet_name:'Household',can_edit:false}]
+  api.mockImplementation(path=>Promise.resolve(path==='/api/shared/wallets'?[{...wallet,can_add:false,can_edit:false}]:[]))
+  render(<MemoryRouter><SharedTransactions/></MemoryRouter>)
+  await screen.findByText('Household')
+  fireEvent.click(screen.getByRole('button',{name:'View Viewer record'}))
+  expect(screen.getByText('View only',{exact:true})).toBeInTheDocument()
+  expect(screen.queryByRole('button',{name:'Edit',exact:true})).toBeNull()
+  expect(screen.queryByRole('button',{name:'Duplicate',exact:true})).toBeNull()
+})

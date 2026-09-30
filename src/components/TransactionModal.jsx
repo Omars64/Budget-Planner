@@ -14,6 +14,8 @@ import { applyVoiceTransaction } from '../lib/voiceInput'
 import BalancePreview from './BalancePreview'
 import { transactionSaved } from '../lib/savedFeedback'
 import ReportingMonthField from './ReportingMonthField'
+import RecentDescriptions from './RecentDescriptions'
+import { recentEntries, rememberEntry } from '../lib/workspacePreferences'
 
 const blank = () => ({ type: 'expense', amount: '', description: '', notes: '', date: dateInput(), reporting_month: '', wallet_id: '', transfer_wallet_id: '', category_id: '', recurring_frequency: 'none', recurring_until: '' })
 
@@ -31,6 +33,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
   const [advanced, setAdvanced] = useState(false)
   const [schedule, setSchedule] = useState(false)
   const submitting = useRef(false)
+  const baseline = useRef('')
 
   useEffect(() => {
     if (!open) return
@@ -49,8 +52,12 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
         date: dateInput(editing.date),
         reporting_month: editing.reporting_month || String(editing.date || '').slice(0, 7),
         transfer_wallet_id: editing.transfer_wallet_id || '', category_id: editing.category_id || '', recurring_until: editing.recurring_until || ''
-      } : (readDraft(draftKey) || blank())
-      if (!base.wallet_id || !w.some(wallet => String(wallet.id) === String(base.wallet_id))) base.wallet_id = w.find(wallet => !wallet.archived)?.id || ''
+      } : (readDraft(draftKey) || (() => {
+        const base = blank(), recent = recentEntries(user.id,'personal').find(item => item.type === base.type && w.some(wallet => !wallet.archived && String(wallet.id) === String(item.wallet_id)))
+        return recent ? {...base,wallet_id:recent.wallet_id,category_id:c.some(category => category.id === Number(recent.category_id) && category.kind === base.type) ? recent.category_id : ''} : base
+      })())
+      if (!base.wallet_id || !w.some(wallet => String(wallet.id) === String(base.wallet_id) && (!wallet.archived || editing))) base.wallet_id = w.find(wallet => !wallet.archived)?.id || ''
+      baseline.current = JSON.stringify(base)
       setForm(base)
     }).catch(e=>{if (!controller.signal.aborted) setError(e.message)}).finally(() => {if (!controller.signal.aborted) setLoading(false)})
     return () => controller.abort()
@@ -95,14 +102,14 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
       date: saveDate(form.date), recurring_until: form.recurring_frequency === 'none' ? null : form.recurring_until,
     }
       const saved = await api(schedule ? '/api/planned-transactions' : editing ? `/api/transactions/${editing.id}` : '/api/transactions', { method: editing ? 'PUT' : 'POST', ...jsonBody(schedule ? {transaction: payload, status: 'scheduled', reminder_enabled: true} : payload) })
-      if (!editing) clearDraft(draftKey)
+      if (!editing) { rememberEntry(user.id,'personal',payload); clearDraft(draftKey) }
       if (!schedule && !saved.queued) transactionSaved(saved)
       onSaved?.(saved, schedule)
     } catch (err) { setError(err.status === 409 ? 'This transaction changed elsewhere. Your edits are still here. Close and reopen the record to review the latest version before applying them.' : err.message) }
     finally { submitting.current = false; setBusy(false) }
   }
 
-  return <Modal open={open} onClose={() => !busy && onClose()} title={editing ? 'Edit transaction' : 'Add transaction'}>
+  return <Modal preserveDraft={!editing} protectChanges={Boolean(editing)} isDirty={Boolean(editing && baseline.current && JSON.stringify(form) !== baseline.current)} open={open} onClose={() => !busy && onClose()} title={editing ? 'Edit transaction' : 'Add transaction'}>
     <form onSubmit={submit} noValidate className="stack gap-18 transaction-form">
       <fieldset className="transaction-fields stack gap-18" disabled={busy || loading}>
       <div className="segment-control three" role="group" aria-label="Transaction type">
@@ -124,7 +131,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
 
       <label className="amount-input"><span>Amount ({settings.currency})</span><input required type="number" step="0.001" min="0.001" aria-invalid={Boolean(errors.amount)} aria-describedby={errors.amount ? 'personal-amount-error' : undefined} value={form.amount} onChange={e => {set('amount',e.target.value);setErrors(v=>({...v,amount:''}))}} placeholder="0.000" /></label>
       {errors.amount && <small id="personal-amount-error" className="field-error">{errors.amount}</small>}
-      <label className="field"><span>Description</span><input maxLength="160" value={form.description} onChange={e => set('description',e.target.value)} placeholder="What was this for?"/></label>
+      <RecentDescriptions userId={user.id} scope="personal" type={form.type}>{list => <label className="field"><span>Description</span><input list={list} autoComplete="off" maxLength="160" value={form.description} onChange={e => set('description',e.target.value)} placeholder="What was this for?"/></label>}</RecentDescriptions>
 
       <DateTimeField value={form.date} onChange={value => set('date',value)} disabled={busy || loading}/>
       {errors.date && <small className="field-error">{errors.date}</small>}

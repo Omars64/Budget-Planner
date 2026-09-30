@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import TransactionModal from './TransactionModal'
 import { api } from '../lib/api'
+import { rememberEntry } from '../lib/workspacePreferences'
 
 vi.mock('../App', () => ({useApp:() => ({user:{id:9},settings:{currency:'KWD'}})}))
 vi.mock('../lib/api', () => ({api:vi.fn(),jsonBody:data=>({body:JSON.stringify(data)}),money:n=>'KWD '+Number(n||0).toFixed(3)}))
@@ -82,4 +83,15 @@ it('submits only once while saving, even after repeated clicks', async () => {
   fireEvent.click(save);fireEvent.click(save);fireEvent.click(save)
   expect(api.mock.calls.filter(([path])=>path==='/api/transactions')).toHaveLength(1)
   expect(screen.getByRole('button',{name:'Saving…'})).toBeDisabled()
+})
+it('remembers valid entry defaults without reusing money or a reporting month', async () => {
+  sessionStorage.clear()
+  rememberEntry(9,'personal',{type:'expense',wallet_id:1,category_id:2,description:'Coffee',amount:4,date:'2026-09-01',reporting_month:'2026-09'})
+  await mount()
+  expect(screen.getByLabelText('Category')).toHaveValue('2')
+  expect(screen.getByLabelText('Amount (KWD)')).toHaveValue(null)
+  expect(screen.getByLabelText('Description')).toHaveValue('')
+  expect(screen.getByLabelText('Month this is for')).toHaveValue('')
+  const list=screen.getByLabelText('Description').getAttribute('list')
+  expect(document.getElementById(list).querySelector('option')).toHaveAttribute('value','Coffee')
 })

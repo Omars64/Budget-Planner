@@ -9,10 +9,13 @@ import EmptyState from '../components/EmptyState'
 import LedgerRow, { TransactionDetails } from '../components/LedgerRow'
 import { useViewState } from '../lib/viewState'
 import AnimatedMoney from '../components/AnimatedMoney'
+import { useWorkspacePreferences } from '../lib/workspacePreferences'
 
 export default function Overview() {
   const { user, settings, refreshKey } = useApp()
   const [data, setData] = useState(null)
+  const [preferences] = useWorkspacePreferences(user?.id)
+  const [attention, setAttention] = useState(null)
   const [month, setMonth] = useViewState(`overview:${user?.id}:month`, dateInput().slice(0, 7))
   const [error, setError] = useState('')
   const [selected, setSelected] = useState(null)
@@ -20,6 +23,7 @@ export default function Overview() {
   useEffect(() => {
     const controller = new window.AbortController()
     setError('')
+    api('/api/attention', {signal:controller.signal}).then(value => { if (!controller.signal.aborted) setAttention(Number.isInteger(value.count) ? value.count : null) }).catch(() => { if (!controller.signal.aborted) setAttention(null) })
     api(`/api/dashboard?month=${month}`, { signal: controller.signal })
       .then(value => { if (!controller.signal.aborted) setData(value) })
       .catch(e => { if (!controller.signal.aborted) setError(e.message) })
@@ -42,15 +46,16 @@ export default function Overview() {
         <Link to="/transactions" state={{aiFilters:{month:displayedMonth,type:'expense',exclude_opening:true}}}><span>Spent</span><strong className="tx-amount expense">{fmt(data.expense)}</strong></Link>
         <Link to="/transactions" state={filteredLink}><span>Money in minus out</span><strong>{fmt(data.net)}</strong><small>After spending{data.opening_debt > 0 ? ' and starting debt' : ''}. Transfers are separate.</small></Link>
       </section>
+      <Link className="overview-attention-link" to="/attention">{attention === null ? 'Review reminders' : attention === 0 ? 'All caught up' : `${attention} ${attention === 1 ? 'item needs' : 'items need'} attention`} <ArrowRight size={16}/></Link>
       {data.shared?.wallet_count > 0 && <section className="overview-shared" aria-label="Shared wallets summary"><div><span>Shared balance</span><strong>{fmt(data.shared.balance)}</strong><small>{data.shared.wallet_count} shared wallets, separate from personal</small></div><Link to="/shared-transactions">View shared <ArrowRight size={16}/></Link></section>}
       <section className="overview-wallets" aria-label="Personal wallets">
-        {data.wallets?.map(w => <Link key={w.id} to="/transactions" state={{ aiFilters: { wallet: String(w.id), month: '' } }}><span><Wallet size={16}/>{w.name}</span><strong>{fmt(w.balance)}</strong></Link>)}
+        {[...(data.wallets || [])].sort((a,b) => Number(preferences.favoriteWallets.includes(b.id))-Number(preferences.favoriteWallets.includes(a.id))).map(w => <Link key={w.id} to="/transactions" state={{ aiFilters: { wallet: String(w.id), month: '' } }}><span><Wallet size={16}/>{w.name}</span><strong>{fmt(w.balance)}</strong></Link>)}
         {!data.wallets?.length && <Link to="/wallets">Add a personal wallet <ArrowRight size={16}/></Link>}
       </section>
-      <div className="overview-columns">
+      <details className="overview-disclosure"><summary>Spending details</summary><div className="overview-columns">
         <section className="overview-section">
           <div className="panel-head"><h3>Budget progress</h3><Link to="/budgets" className="overview-link">View all <ArrowRight size={15}/></Link></div>
-          {data.budgets.length ? <div className="overview-budgets">{[...data.budgets].sort((a, b) => b.progress - a.progress).slice(0, 3).map(b => <Link className="record-link" key={b.id} to="/transactions" state={{aiFilters:{type:'expense',category:b.category_id ? String(b.category_id) : '',date_from:b.records_from,date_to:b.records_to,exclude_opening:true}}}>
+          {data.budgets.length ? <div className="overview-budgets">{[...data.budgets].sort((a, b) => b.progress - a.progress).slice(0, 3).map(b => <Link className="record-link" key={b.id} to="/transactions" state={{aiFilters:{type:'expense',category:b.category_id ? String(b.category_id) : '',month:b.records_month || '',date_from:b.records_month ? '' : b.records_from,date_to:b.records_month ? '' : b.records_to,exclude_opening:true}}}>
             <div className="overview-pair"><strong>{b.name}</strong><span>{Math.round(b.progress)}% used</span></div>
             <ProgressBar value={b.progress} warning={b.progress >= 90}/>
             <div className="overview-pair muted"><span>{fmt(b.spent)} of {fmt(b.limit_amount)} ({b.period})</span><strong className={b.spent > b.limit_amount ? 'tx-amount expense' : ''}>{fmt(Math.abs(b.limit_amount - b.spent))} {b.spent > b.limit_amount ? 'over' : 'left'}</strong></div>
@@ -60,7 +65,7 @@ export default function Overview() {
           <div className="panel-head"><h3>Top spending</h3><Link to="/transactions" state={{aiFilters:{month:displayedMonth,type:'expense',exclude_opening:true}}} className="overview-link">View all <ArrowRight size={15}/></Link></div>
           {data.category_spending.length ? <div className="overview-categories">{data.category_spending.slice(0, 3).map(c => <Link className="record-link" key={c.id} to="/transactions" state={{aiFilters:{month:displayedMonth,type:'expense',category:String(c.id),exclude_opening:true}}}><div className="overview-pair"><span>{c.name}</span><strong>{fmt(c.value)}</strong></div><div className="mini-track"><i style={{ width: `${Math.min(100, c.value / (data.expense || 1) * 100)}%`, background: c.color }}/></div></Link>)}</div> : <EmptyState title="No spending this month" text="Your expenses will appear here."/>}
         </section>
-      </div>
+      </div></details>
       <section className="overview-section overview-recent">
         <div className="panel-head"><h3>Recent activity</h3><Link to="/transactions" state={filteredLink} className="overview-link">View all transactions <ArrowRight size={15}/></Link></div>
         {data.recent_transactions.length ? data.recent_transactions.map(tx => <LedgerRow key={tx.id} tx={tx} fmt={fmt} showDate onOpen={() => setSelected(tx)}/>) : <EmptyState title="No transactions this month" text="Add a transaction to start recording your activity."/>}

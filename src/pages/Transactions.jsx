@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom'
 import { Wallet } from 'lucide-react'
 import { format } from 'date-fns'
 import { dateInput, displayDate } from '../lib/time'
+import { duplicateDraft, writeDraft } from '../lib/transactionDraft'
 import { api, money } from '../lib/api'
 import { useApp } from '../App'
 import TransactionModal from '../components/TransactionModal'
@@ -59,7 +60,7 @@ export default function Transactions() {
 
     <section className="ledger-list">
       <div className="ledger-count">{rows.length}{ledger.hasMore ? '+' : ''} transaction{rows.length === 1 ? '' : 's'}</div>
-      {loading && !rows.length ? <div className="list-skeleton"><i/><i/><i/><i/></div> : !rows.length ? <EmptyState title="No matching transactions" text="Try another filter or add a transaction."/> : <div className="date-groups">
+      {loading && !rows.length ? <div className="list-skeleton"><i/><i/><i/><i/></div> : !rows.length ? <EmptyState title="No matching transactions" text="Try another filter or add a transaction." action={<div className="button-row"><button className="button ghost" onClick={() => setFilters({...defaultLedgerFilters})}>Clear filters</button><button className="button primary" onClick={() => {setEditing(null);setModal(true)}}>Add transaction</button></div>}/> : <div className="date-groups">
         {Object.entries(grouped).map(([day, txs]) => <div className="date-group" key={day}>
           <LedgerDateHeader day={day}/>
           {txs.map(tx => <LedgerRow key={tx.id} tx={tx} fmt={fmt} onOpen={() => setSelected(tx)}/> )}
@@ -67,7 +68,7 @@ export default function Transactions() {
       </div>}
       <LedgerPagination ledger={ledger}/>
     </section>
-    <TransactionDetails tx={selected} fmt={fmt} onClose={() => setSelected(null)} onEdit={() => {setEditing(selected);setSelected(null);setModal(true)}} onDelete={() => remove(selected)} onDuplicate={() => {sessionStorage.setItem(`flowbudget_tx_draft_${user.id}`,JSON.stringify({...selected,id:undefined,revision:undefined,date:dateInput()}));setSelected(null);setEditing(null);setModal(true)}}/>
+    <TransactionDetails tx={selected} fmt={fmt} onClose={() => setSelected(null)} onEdit={() => {setEditing(selected);setSelected(null);setModal(true)}} onDelete={() => remove(selected)} onDuplicate={() => {writeDraft(`flowbudget_tx_draft_${user.id}`,duplicateDraft(selected,dateInput()));setSelected(null);setEditing(null);setModal(true)}}/>
     <TransactionModal open={modal} editing={editing} onClose={() => setModal(false)} onSaved={saved => {setModal(false);refresh();notify(saved.queued ? 'Saved on this device. Will sync when connected.' : editing?'Transaction updated':'Transaction added')}} />
   </div>
 }

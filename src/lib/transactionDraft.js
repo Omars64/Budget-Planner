@@ -1,4 +1,9 @@
 const week = 7 * 24 * 60 * 60 * 1000
+export function duplicateDraft(tx, date) {
+  return { type:tx.type, amount:tx.amount, description:tx.description || '', notes:tx.notes || '', date,
+    wallet_id:tx.wallet_id, transfer_wallet_id:tx.transfer_wallet_id || '', category_id:tx.category_id || '',
+    reporting_month:'', recurring_frequency:'none', recurring_until:'' }
+}
 export function readDraft(key) {
   try {
     const session = JSON.parse(sessionStorage.getItem(key))

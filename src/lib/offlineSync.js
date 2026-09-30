@@ -88,6 +88,7 @@ export async function retryOfflineTransaction(id, userId = activeUserId) {
 export function syncOfflineQueue(send, token, userId = activeUserId) {
   if (!userId || !token || navigator.onLine === false) return Promise.resolve()
   if (currentSync) return currentSync
+  window.dispatchEvent(new CustomEvent('budgetly:sync-state', { detail: { userId: String(userId), syncing: true } }))
   currentSync = (async () => {
     const rows = await listOfflineQueue(userId)
     for (const row of rows) {
@@ -104,6 +105,6 @@ export function syncOfflineQueue(send, token, userId = activeUserId) {
         notify()
       }
     }
-  })().finally(() => { currentSync = null })
+  })().finally(() => { currentSync = null; window.dispatchEvent(new CustomEvent('budgetly:sync-state', { detail: { userId: String(userId), syncing: false } })) })
   return currentSync
 }
