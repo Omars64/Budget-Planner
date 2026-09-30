@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, Repeat2 } from 'lucide-react'
 import { dateInput, saveDate } from '../lib/time'
 import { transactionErrors, focusInvalid } from '../lib/transactionForm'
@@ -15,12 +15,14 @@ import BalancePreview from './BalancePreview'
 import { transactionSaved } from '../lib/savedFeedback'
 import ReportingMonthField from './ReportingMonthField'
 import RecentDescriptions from './RecentDescriptions'
-import { recentEntries, rememberEntry } from '../lib/workspacePreferences'
+import { recentEntries, rememberEntry, useWorkspacePreferences } from '../lib/workspacePreferences'
 
 const blank = () => ({ type: 'expense', amount: '', description: '', notes: '', date: dateInput(), reporting_month: '', wallet_id: '', transfer_wallet_id: '', category_id: '', recurring_frequency: 'none', recurring_until: '' })
 
 export default function TransactionModal({ open, onClose, onSaved, editing = null }) {
   const {user, settings, notify} = useApp()
+  const [helpers] = useWorkspacePreferences(user.id)
+  const formId = useId()
   const draftKey = `flowbudget_tx_draft_${user.id}`
   const [form, setForm] = useState(blank())
   const [wallets, setWallets] = useState([])
@@ -109,8 +111,8 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
     finally { submitting.current = false; setBusy(false) }
   }
 
-  return <Modal preserveDraft={!editing} protectChanges={Boolean(editing)} isDirty={Boolean(editing && baseline.current && JSON.stringify(form) !== baseline.current)} open={open} onClose={() => !busy && onClose()} title={editing ? 'Edit transaction' : 'Add transaction'}>
-    <form onSubmit={submit} noValidate className="stack gap-18 transaction-form">
+  return <Modal preserveDraft={!editing} protectChanges={Boolean(editing)} isDirty={Boolean(editing && baseline.current && JSON.stringify(form) !== baseline.current)} open={open} onClose={() => !busy && onClose()} title={editing ? 'Edit transaction' : 'Add transaction'} footer={close => <div className="modal-actions"><button type="button" className="button ghost" disabled={busy} onClick={close}>Cancel</button><button type="submit" form={formId} className="button primary" disabled={busy || loading || voiceActive}>{loading ? 'Loading wallets...' : busy ? 'Saving…' : editing ? 'Save changes' : schedule ? 'Schedule entry' : 'Add transaction'}</button></div>}>
+    <form id={formId} onSubmit={submit} noValidate className="stack gap-18 transaction-form">
       <fieldset className="transaction-fields stack gap-18" disabled={busy || loading}>
       <div className="segment-control three" role="group" aria-label="Transaction type">
         <button type="button" aria-pressed={form.type === 'expense'} className={form.type === 'expense' ? 'active' : ''} onClick={() => {set('type','expense');set('category_id','')}}><ArrowUpRight size={17}/>Expense</button>
@@ -121,7 +123,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
       {schedule && <p className="form-note">Added after the due time on your next visit or the daily check. Your balance stays unchanged until then.</p>}
 
       <VoiceInputButton disabled={busy || loading || !open} onActiveChange={setVoiceActive} onTranscript={applyVoice} onError={message => setError(message)}/>
-      {!editing && <TransactionTemplates userId={user.id} scope="personal" draft={form} disabled={busy || loading} onApply={item => {
+      {!editing && helpers.entryTemplates && <TransactionTemplates userId={user.id} scope="personal" draft={form} disabled={busy || loading} onApply={item => {
         const wallet = wallets.find(w => String(w.id) === String(item.wallet_id))
         if (!wallet) { setError('This template wallet is no longer available. Choose another template or enter the fields.'); return }
         const next = {...form, type:item.type, amount:item.amount, description:item.description, wallet_id:wallet.id, transfer_wallet_id:wallets.some(w => String(w.id) === String(item.transfer_wallet_id)) ? item.transfer_wallet_id : '', category_id:categories.some(c => String(c.id) === String(item.category_id) && c.kind === item.type) ? item.category_id : '', reporting_month:item.type === 'income' ? '' : form.reporting_month}
@@ -131,16 +133,16 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
 
       <label className="amount-input"><span>Amount ({settings.currency})</span><input required type="number" step="0.001" min="0.001" aria-invalid={Boolean(errors.amount)} aria-describedby={errors.amount ? 'personal-amount-error' : undefined} value={form.amount} onChange={e => {set('amount',e.target.value);setErrors(v=>({...v,amount:''}))}} placeholder="0.000" /></label>
       {errors.amount && <small id="personal-amount-error" className="field-error">{errors.amount}</small>}
-      <RecentDescriptions userId={user.id} scope="personal" type={form.type}>{list => <label className="field"><span>Description</span><input list={list} autoComplete="off" maxLength="160" value={form.description} onChange={e => set('description',e.target.value)} placeholder="What was this for?"/></label>}</RecentDescriptions>
+      <RecentDescriptions userId={user.id} scope="personal" type={form.type} value={form.description} onChange={value => set('description',value)} disabled={busy || loading}/>
 
       <DateTimeField value={form.date} onChange={value => set('date',value)} disabled={busy || loading}/>
       {errors.date && <small className="field-error">{errors.date}</small>}
       {form.type !== 'transfer' && <ReportingMonthField value={form.reporting_month} type={form.type} error={errors.reporting_month} disabled={busy || loading} onChange={value => set('reporting_month',value)}/>}
       <div className="form-grid two transaction-wallet-fields">
-        <SearchableSelect label={form.type === 'transfer' ? 'From wallet' : 'Wallet'} value={form.wallet_id} onChange={v => set('wallet_id',v)} disabled={busy || loading} error={errors.wallet_id} recentKey={`budgetly:recent:${user.id}:wallets`} options={wallets.map(w => ({value:w.id,label:`${w.name} · ${money(w.balance,settings.currency)}`}))}/>
-        {form.type === 'transfer' ? <SearchableSelect label="To wallet" value={form.transfer_wallet_id} onChange={v => set('transfer_wallet_id',v)} disabled={busy || loading} error={errors.transfer_wallet_id} options={wallets.filter(w => String(w.id) !== String(form.wallet_id)).map(w => ({value:w.id,label:w.name}))}/> : <SearchableSelect label="Category" placeholder="Uncategorized" value={form.category_id} onChange={v => set('category_id',v)} disabled={busy || loading} recentKey={`budgetly:recent:${user.id}:categories`} options={visibleCategories.map(c => ({value:c.id,label:c.name}))}/>}
+        <SearchableSelect rememberRecent={helpers.recentChoiceOrder && helpers.rememberEntry} label={form.type === 'transfer' ? 'From wallet' : 'Wallet'} value={form.wallet_id} onChange={v => set('wallet_id',v)} disabled={busy || loading} error={errors.wallet_id} recentKey={`budgetly:recent:${user.id}:wallets`} options={wallets.map(w => ({value:w.id,label:`${w.name} · ${money(w.balance,settings.currency)}`}))}/>
+        {form.type === 'transfer' ? <SearchableSelect rememberRecent={helpers.recentChoiceOrder && helpers.rememberEntry} label="To wallet" value={form.transfer_wallet_id} onChange={v => set('transfer_wallet_id',v)} disabled={busy || loading} error={errors.transfer_wallet_id} options={wallets.filter(w => String(w.id) !== String(form.wallet_id)).map(w => ({value:w.id,label:w.name}))}/> : <SearchableSelect rememberRecent={helpers.recentChoiceOrder && helpers.rememberEntry} label="Category" placeholder="Uncategorized" value={form.category_id} onChange={v => set('category_id',v)} disabled={busy || loading} recentKey={`budgetly:recent:${user.id}:categories`} options={visibleCategories.map(c => ({value:c.id,label:c.name}))}/>}
       </div>
-      {!schedule && <BalancePreview wallet={wallets.find(w=>String(w.id)===String(form.wallet_id))} draft={form} editing={editing} currency={settings.currency}/>}
+      {!schedule && helpers.balancePreview && <BalancePreview wallet={wallets.find(w=>String(w.id)===String(form.wallet_id))} draft={form} editing={editing} currency={settings.currency}/>}
       <details className="form-options" open={advanced} onToggle={e => setAdvanced(e.currentTarget.open)}><summary>More options</summary><div className="stack gap-16">
         {!editing && <button className="button ghost small" type="button" disabled={busy || voiceActive} onClick={() => {clearDraft(draftKey);setForm({...blank(),wallet_id:wallets[0]?.id || ''});setErrors({});setError('')}}>Discard draft</button>}
         <label className="field"><span><Repeat2 size={15}/> Repeat</span><select value={form.recurring_frequency} onChange={e => set('recurring_frequency',e.target.value)}><option value="none">Does not repeat</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select></label>
@@ -149,7 +151,6 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
         <label className="field"><span>Notes (optional)</span><textarea rows="3" value={form.notes} onChange={e => set('notes', e.target.value)}/></label>
       </div></details>
       {error && <div className="form-error" role="alert">{error}</div>}
-      <div className="modal-actions"><button type="button" className="button ghost" disabled={busy} onClick={onClose}>Cancel</button><button className="button primary" disabled={busy || loading || voiceActive}>{loading ? 'Loading wallets...' : busy ? 'Saving…' : editing ? 'Save changes' : schedule ? 'Schedule entry' : 'Add transaction'}</button></div>
       </fieldset>
     </form>
   </Modal>

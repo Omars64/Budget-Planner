@@ -15,8 +15,14 @@ export default function WorkspacePreferences() {
     persist({navOrder:all})
   }
   return <div className="workspace-preferences stack gap-16">
-    <label className="check-row"><input type="checkbox" checked={prefs.rememberEntry} onChange={event => { persist({rememberEntry:event.target.checked}); if (!event.target.checked) clearEntryMemory(user.id) }}/><span>Remember wallet, category and recent descriptions on this device</span></label>
-    <button type="button" className="button ghost small" onClick={() => { clearEntryMemory(user.id); notify('Recent entry choices cleared') }}><Trash2 size={16}/>Clear recent choices</button>
+    <details className="ledger-disclosure transaction-helper-settings"><summary>Transaction helpers</summary><div className="stack gap-16">
+      <label className="check-row"><input type="checkbox" checked={prefs.descriptionSuggestions} onChange={event => persist({descriptionSuggestions:event.target.checked})}/><span>Description suggestions</span></label>
+      <label className="check-row"><input type="checkbox" checked={prefs.rememberEntry} onChange={event => { persist({rememberEntry:event.target.checked}); if (!event.target.checked) clearEntryMemory(user.id) }}/><span>Remember wallet, category and recent descriptions on this device</span></label>
+      <label className="check-row"><input type="checkbox" checked={prefs.recentChoiceOrder} onChange={event => persist({recentChoiceOrder:event.target.checked})}/><span>Recently used wallet and category choices first</span></label>
+      <label className="check-row"><input type="checkbox" checked={prefs.entryTemplates} onChange={event => persist({entryTemplates:event.target.checked})}/><span>Transaction templates</span></label>
+      <label className="check-row"><input type="checkbox" checked={prefs.balancePreview} onChange={event => persist({balancePreview:event.target.checked})}/><span>Balance preview before saving</span></label>
+      <button type="button" className="button ghost small" onClick={() => { clearEntryMemory(user.id); notify('Recent entry choices cleared') }}><Trash2 size={16}/>Clear recent choices</button>
+    </div></details>
     <label className="field"><span>Notes view</span><select aria-label="Notes view" value={prefs.notesView} onChange={event => persist({notesView:event.target.value})}><option value="grid">Grid</option><option value="list">List</option></select></label>
     <details className="ledger-disclosure"><summary>Page order</summary>{['Planning','Workspace'].map(group => {
       const pages = prefs.navOrder.map(path => secondaryPages.find(([id]) => id === path)).filter(page => page?.[2] === group)

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, BookOpen, History, MailPlus, Trash2, Users, Wallet } from 'lucide-react'
 import { format } from 'date-fns'
@@ -26,7 +26,7 @@ import OfflinePending from '../components/OfflinePending'
 import ReportingMonthField from '../components/ReportingMonthField'
 import WalletLedger from '../components/WalletLedger'
 import RecentDescriptions from '../components/RecentDescriptions'
-import { recentEntries, rememberEntry } from '../lib/workspacePreferences'
+import { recentEntries, rememberEntry, useWorkspacePreferences } from '../lib/workspacePreferences'
 
 const nowLocal = () => {
   return dateInput()
@@ -42,6 +42,8 @@ const blankTx = walletId => ({
 export default function SharedTransactions() {
   const location = useLocation()
   const { user, settings, refreshKey, refresh, notify ,confirm} = useApp()
+  const [helpers] = useWorkspacePreferences(user?.id)
+  const formId = useId()
   const draftKey = `flowbudget_shared_tx_draft_${user?.id}`
   const [sharedWallets, setSharedWallets] = useState(() => readCached('/api/shared/wallets') || [])
   const [personalWallets, setPersonalWallets] = useState(() => (readCached('/api/wallets') || []).filter(w => !w.archived))
@@ -323,14 +325,14 @@ export default function SharedTransactions() {
 
     <TransactionDetails tx={selected} fmt={fmt} onClose={() => setSelected(null)} onEdit={selected?.can_edit ? () => {openEdit(selected);setSelected(null)} : undefined} onDuplicate={sharedWallets.find(w => w.wallet_id === selected?.wallet_id)?.can_add ? () => {writeDraft(draftKey,duplicateDraft(selected,dateInput()));setSelected(null);openNew()} : undefined} shared permission={selected?.can_edit ? 'edit' : sharedWallets.find(w=>w.wallet_id===selected?.wallet_id)?.can_add ? 'add' : 'view'} onDelete={selected?.can_edit ? () => removeTx(selected) : undefined}/>
     <Modal open={activity!==null} onClose={()=>setActivity(null)} title="Wallet activity"><div className="security-items">{activity?.length?activity.map(a=><div className="security-item" key={a.id}><div><strong>{a.action}</strong><small>{a.actor} · {showTime(a.created_at)} Kuwait</small></div></div>):<p className="muted">No activity recorded yet.</p>}</div></Modal>
-    <Modal preserveDraft={!editing} protectChanges={Boolean(editing)} isDirty={Boolean(editing && baseline.current && JSON.stringify(draft) !== baseline.current)} open={modal} onClose={() => !saving && setModal(false)} title={editing ? 'Edit shared transaction' : 'Add shared transaction'}>
-      <form className="stack gap-18 transaction-form" noValidate onSubmit={saveTx}>
+    <Modal preserveDraft={!editing} protectChanges={Boolean(editing)} isDirty={Boolean(editing && baseline.current && JSON.stringify(draft) !== baseline.current)} open={modal} onClose={() => !saving && setModal(false)} title={editing ? 'Edit shared transaction' : 'Add shared transaction'} footer={close => <div className="modal-actions"><button type="button" className="button ghost" disabled={saving} onClick={close}>Cancel</button><button type="submit" form={formId} className="button primary" disabled={saving || voiceActive}>{saving ? 'Saving…' : schedule ? 'Schedule entry' : 'Save'}</button></div>}>
+      <form id={formId} className="stack gap-18 transaction-form" noValidate onSubmit={saveTx}>
         <fieldset className="transaction-fields stack gap-18" disabled={saving}>
         <div className="segment-control three" role="group" aria-label="Transaction type"><button type="button" aria-pressed={draft.type==='expense'} className={draft.type==='expense'?'active':''} onClick={() => setDraft({ ...draft, type:'expense', transfer_wallet_id:'', category_id:'' })}><ArrowUpRight size={17}/>Expense</button><button type="button" aria-pressed={draft.type==='income'} className={draft.type==='income'?'active':''} onClick={() => setDraft({ ...draft, type:'income', transfer_wallet_id:'', category_id:'' })}><ArrowDownLeft size={17}/>Income</button><button type="button" aria-pressed={draft.type==='transfer'} className={draft.type==='transfer'?'active':''} onClick={() => setDraft({ ...draft, type:'transfer', category_id:'' })}><ArrowRightLeft size={17}/>Transfer</button></div>
         {!editing && <div className="segment-control" role="group" aria-label="When to record"><button type="button" aria-pressed={!schedule} className={!schedule ? 'active' : ''} onClick={() => setSchedule(false)}>Record now</button><button type="button" aria-pressed={schedule} className={schedule ? 'active' : ''} onClick={() => setSchedule(true)}>Schedule</button></div>}
         {schedule && <p className="form-note">Added after the due time on your next visit or the daily check. Your balance stays unchanged until then.</p>}
         <VoiceInputButton disabled={saving || !modal} onActiveChange={setVoiceActive} onTranscript={applyVoice} onError={message => setFormError(message)}/>
-        {!editing && <TransactionTemplates userId={user?.id} scope="shared" draft={draft} disabled={saving} onApply={item => {
+        {!editing && helpers.entryTemplates && <TransactionTemplates userId={user?.id} scope="shared" draft={draft} disabled={saving} onApply={item => {
           const wallet = editableWallets.find(w => String(w.wallet_id) === String(item.wallet_id))
           if (!wallet) { setFormError('This template wallet is no longer available with add access.'); return }
           const category = filterCategories.find(c=>String(c.wallet_id)===String(wallet.wallet_id) && String(c.id)===String(item.category_id) && c.kind===item.type)
@@ -339,20 +341,19 @@ export default function SharedTransactions() {
         }}/>}
         <label className="amount-input"><span>Amount ({settings.currency})</span><input aria-label="Amount" aria-invalid={Boolean(errors.amount)} aria-describedby={errors.amount ? 'shared-amount-error' : undefined} required min="0.001" step="0.001" type="number" placeholder="0.000" value={draft.amount} onChange={e => {setDraft({ ...draft, amount: e.target.value });setErrors(v=>({...v,amount:''}))}}/></label>
         {errors.amount && <small id="shared-amount-error" className="field-error">{errors.amount}</small>}
-        <RecentDescriptions userId={user?.id} scope="shared" type={draft.type}>{list => <label className="field"><span>Description</span><input list={list} autoComplete="off" maxLength="160" placeholder="What was this for?" value={draft.description} onChange={e => setDraft({ ...draft, description: e.target.value })}/></label>}</RecentDescriptions>
+        <RecentDescriptions userId={user?.id} scope="shared" type={draft.type} value={draft.description} onChange={description => setDraft(current => ({...current,description}))} disabled={saving}/>
         <DateTimeField value={draft.date} onChange={date => setDraft(current => ({ ...current, date }))} disabled={saving}/>
         {errors.date && <small className="field-error">{errors.date}</small>}
         {draft.type !== 'transfer' && <ReportingMonthField value={draft.reporting_month} type={draft.type} error={errors.reporting_month} disabled={saving} onChange={value => {setDraft(current => ({...current, reporting_month:value}));setErrors(current => ({...current, reporting_month:''}))}}/>}
         <div className="form-grid two transaction-wallet-fields">
-          <SearchableSelect label="Shared wallet" value={draft.wallet_id} onChange={changeWallet} disabled={saving} error={errors.wallet_id} recentKey={`budgetly:recent:${user?.id}:shared-wallets`} options={editableWallets.map(w=>({value:w.wallet_id,label:`${w.name} · ${w.owner_name || w.owner_email}`}))}/>
-          {draft.type === 'transfer' ? <SearchableSelect label="Destination shared wallet" value={draft.transfer_wallet_id} onChange={v=>setDraft({...draft,transfer_wallet_id:v})} disabled={saving} error={errors.transfer_wallet_id} options={transferWallets.map(w=>({value:w.wallet_id,label:w.name}))}/> : <SearchableSelect label="Category" value={draft.category_id} onChange={v=>setDraft({...draft,category_id:v})} placeholder="Uncategorized" disabled={saving} recentKey={`budgetly:recent:${user?.id}:shared-categories`} options={filteredCategories.map(c=>({value:c.id,label:c.name}))}/>}
+          <SearchableSelect rememberRecent={helpers.recentChoiceOrder && helpers.rememberEntry} label="Shared wallet" value={draft.wallet_id} onChange={changeWallet} disabled={saving} error={errors.wallet_id} recentKey={`budgetly:recent:${user?.id}:shared-wallets`} options={editableWallets.map(w=>({value:w.wallet_id,label:`${w.name} · ${w.owner_name || w.owner_email}`}))}/>
+          {draft.type === 'transfer' ? <SearchableSelect rememberRecent={helpers.recentChoiceOrder && helpers.rememberEntry} label="Destination shared wallet" value={draft.transfer_wallet_id} onChange={v=>setDraft({...draft,transfer_wallet_id:v})} disabled={saving} error={errors.transfer_wallet_id} options={transferWallets.map(w=>({value:w.wallet_id,label:w.name}))}/> : <SearchableSelect rememberRecent={helpers.recentChoiceOrder && helpers.rememberEntry} label="Category" value={draft.category_id} onChange={v=>setDraft({...draft,category_id:v})} placeholder="Uncategorized" disabled={saving} recentKey={`budgetly:recent:${user?.id}:shared-categories`} options={filteredCategories.map(c=>({value:c.id,label:c.name}))}/>}
         </div>
         {editing && String(editing.wallet_id) !== String(draft.wallet_id) && <p className="form-note">Saving moves this record and updates both wallet balances.{editing.owner_email !== sourceWallet?.owner_email ? ' Choose a category belonging to this wallet.' : ''}</p>}
-        {!schedule && <BalancePreview wallet={sourceWallet} draft={draft} editing={editing} currency={settings.currency}/>}
+        {!schedule && helpers.balancePreview && <BalancePreview wallet={sourceWallet} draft={draft} editing={editing} currency={settings.currency}/>}
         <details className="form-options"><summary>More options</summary>{!editing && <button className="button ghost small" type="button" disabled={saving || voiceActive} onClick={()=>{clearDraft(draftKey);setDraft(blankTx(editableWallets[0]?.wallet_id));setErrors({});setFormError('')}}>Discard draft</button>}<label className="field"><span>Notes</span><textarea rows="3" value={draft.notes} onChange={e => setDraft({ ...draft, notes: e.target.value })}/></label></details>
         {formError && <div className="form-error" role="alert">{formError}</div>}
         {draft.type === 'transfer' && !transferWallets.length && <div className="form-note">A shared transfer needs another editable wallet owned by the same person.</div>}
-        <div className="modal-actions"><button type="button" className="button ghost" disabled={saving} onClick={() => setModal(false)}>Cancel</button><button className="button primary" disabled={saving || voiceActive}>{saving ? 'Saving…' : schedule ? 'Schedule entry' : 'Save'}</button></div>
         </fieldset>
       </form>
     </Modal>

@@ -5,13 +5,13 @@ export const secondaryPages = [
   ['/upcoming','Upcoming','Planning'], ['/attention','Attention','Planning'], ['/calendar','Calendar','Planning'], ['/budgets','Budgets','Planning'], ['/goals','Goals & debts','Planning'], ['/analytics','Analytics','Planning'],
   ['/ask-ai','Ask Budgetly','Workspace'], ['/notes','Notes','Workspace'], ['/bank-messages','Bank messages','Workspace'], ['/feedback','Feedback','Workspace'],
 ]
-const defaults = () => ({ rememberEntry: true, favoriteWallets: [], navOrder: secondaryPages.map(([path]) => path), notesView: 'grid' })
+const defaults = () => ({ rememberEntry: true, descriptionSuggestions: true, entryTemplates: true, balancePreview: true, recentChoiceOrder: true, favoriteWallets: [], navOrder: secondaryPages.map(([path]) => path), notesView: 'grid' })
 const key = userId => `budgetly:workspace:v1:${userId}`
 export function readWorkspacePreferences(userId) {
   try {
     const stored = JSON.parse(localStorage.getItem(key(userId))) || {}
     const valid = defaults()
-    return { ...valid, rememberEntry: stored.rememberEntry !== false, notesView: stored.notesView === 'list' ? 'list' : 'grid',
+    return { ...valid, rememberEntry: stored.rememberEntry !== false, descriptionSuggestions: stored.descriptionSuggestions !== false, entryTemplates: stored.entryTemplates !== false, balancePreview: stored.balancePreview !== false, recentChoiceOrder: stored.recentChoiceOrder !== false, notesView: stored.notesView === 'list' ? 'list' : 'grid',
       favoriteWallets: Array.isArray(stored.favoriteWallets) ? [...new Set(stored.favoriteWallets.filter(id => Number.isInteger(id) && id > 0))].slice(0,100) : [],
       navOrder: [...new Set([...(Array.isArray(stored.navOrder) ? stored.navOrder : []), ...valid.navOrder])].filter(path => valid.navOrder.includes(path)) }
   } catch { return defaults() }
