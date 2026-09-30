@@ -72,6 +72,7 @@ def ensure_note_columns(connection):
         },
         "wallets": {"card_network": "VARCHAR(12)"},
         "planned_transactions": {"reporting_month": "VARCHAR(7)"},
+        "budgets": {"reporting_month": "VARCHAR(7)"},
         "note_folders": {
             "color": "VARCHAR(20) NOT NULL DEFAULT '#0a4173'",
         },
@@ -447,7 +448,7 @@ def budget_spent(db: Session, budget: Budget, as_of=None, personal_only=False) -
         Transaction.is_opening_balance.is_(False),
     )
     if budget.period == "monthly":
-        q = q.filter(Transaction.reporting_month == as_of.strftime("%Y-%m"))
+        q = q.filter(Transaction.reporting_month == (budget.reporting_month or as_of.strftime("%Y-%m")))
     elif budget.period == "yearly":
         q = q.filter(Transaction.reporting_month >= start.strftime("%Y-%m"),
                      Transaction.reporting_month <= as_of.strftime("%Y-%m"))
@@ -455,7 +456,8 @@ def budget_spent(db: Session, budget: Budget, as_of=None, personal_only=False) -
         q = q.filter(Transaction.date >= datetime.combine(start, datetime.min.time()))
     if personal_only:
         q = q.filter(Transaction.wallet_id.in_(personal_wallet_ids(db, budget.user_id)))
-        q = q.filter(Transaction.date < datetime.combine(as_of + timedelta(days=1), datetime.min.time()))
+        if budget.period != "monthly":
+            q = q.filter(Transaction.date < datetime.combine(as_of + timedelta(days=1), datetime.min.time()))
     if budget.category_id:
         q = q.filter(Transaction.category_id == budget.category_id)
     return round(float(q.scalar() or 0), 3)
@@ -899,7 +901,7 @@ def budgets(user: User = Depends(current_user), db: Session = Depends(get_db)):
     result = []
     for b in db.query(Budget).filter(Budget.user_id == user.id).order_by(Budget.created_at).all():
         spent = budget_spent(db, b); remaining = max(0.0, float(b.limit_amount) - spent)
-        result.append({"id": b.id, "name": b.name, "category_id": b.category_id, "category_name": b.category.name if b.category else None, "limit_amount": float(b.limit_amount), "period": b.period, "start_date": b.start_date.isoformat(), "notify_threshold": b.notify_threshold, "spent": spent, "remaining": round(remaining, 3), "progress": round(min(spent / float(b.limit_amount) * 100, 999), 1), "records_from": budget_period_start(db, b, ledger_today()).isoformat() + 'T00:00:00'})
+        result.append({"id": b.id, "name": b.name, "category_id": b.category_id, "category_name": b.category.name if b.category else None, "limit_amount": float(b.limit_amount), "period": b.period, "reporting_month": b.reporting_month, "records_month": (b.reporting_month or ledger_today().strftime("%Y-%m")) if b.period == "monthly" else None, "start_date": b.start_date.isoformat(), "notify_threshold": b.notify_threshold, "spent": spent, "remaining": round(remaining, 3), "progress": round(min(spent / float(b.limit_amount) * 100, 999), 1), "records_from": budget_period_start(db, b, ledger_today()).isoformat() + 'T00:00:00'})
     return result
 
 
@@ -1049,9 +1051,13 @@ def dashboard(month: Optional[str] = None, user: User = Depends(current_user), d
     recent = personal.filter(Transaction.reporting_month == report_month).order_by(Transaction.date.desc(), Transaction.id.desc()).limit(5).all()
     bdata = []
     as_of = today if (current.year, current.month) == (today.year, today.month) else (next_month - timedelta(days=1)).date()
-    for b in db.query(Budget).filter(Budget.user_id == user.id, Budget.start_date <= as_of).all():
+    for b in db.query(Budget).filter(Budget.user_id == user.id).all():
+        if not b.reporting_month and b.start_date > as_of:
+            continue
+        if b.period == "monthly" and b.reporting_month and b.reporting_month != report_month:
+            continue
         spent = budget_spent(db, b, as_of=as_of, personal_only=True)
-        bdata.append({"id": b.id, "name": b.name, "period": b.period, "spent": spent, "limit_amount": float(b.limit_amount), "progress": round(spent / float(b.limit_amount) * 100, 1), "category_id": b.category_id, "records_from": budget_period_start(db, b, as_of).isoformat() + 'T00:00:00', "records_to": as_of.isoformat() + 'T23:59:59.999999'})
+        bdata.append({"id": b.id, "name": b.name, "period": b.period, "reporting_month": b.reporting_month, "records_month": report_month if b.period == "monthly" else None, "records_scope": "personal", "spent": spent, "limit_amount": float(b.limit_amount), "progress": round(spent / float(b.limit_amount) * 100, 1), "category_id": b.category_id, "records_from": budget_period_start(db, b, as_of).isoformat() + 'T00:00:00', "records_to": as_of.isoformat() + 'T23:59:59.999999'})
     return {
         "month": current.strftime("%Y-%m"), "total_balance": round(total_balance, 3), "income": round(income, 3), "expense": round(expense, 3), "net": round(income - expense - opening_debt, 3),
         "opening_funds": round(opening, 3), "opening_debt": round(opening_debt, 3), "earned_income": round(income - opening, 3),
@@ -1173,6 +1179,7 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
             if plan['wallet_id'] not in wallet_ids or (plan.get('transfer_wallet_id') and plan['transfer_wallet_id'] not in wallet_ids) or (plan.get('category_id') and plan['category_id'] not in category_ids):
                 raise ValueError('Invalid planned transaction reference')
         for budget in data.get("budgets", []):
+            BudgetIn.model_validate(budget)
             if budget.get("category_id") and budget["category_id"] not in category_ids: raise ValueError("Invalid category reference")
         for share in data.get("wallet_shares", []):
             if share["wallet_id"] not in wallet_ids or share["permission"] not in {"view", "edit"}: raise ValueError("Invalid share")

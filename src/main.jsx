@@ -26,6 +26,7 @@ import './auth-expanded.css'
 import './coherent-app.css'
 import './wallet-ledger.css'
 import './offline.css'
+import './wallet-notes-polish.css'
 
 applyAppearance(readDeviceAppearance())
 

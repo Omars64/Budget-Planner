@@ -1,0 +1,59 @@
+/* Keep colored wallet surfaces independent of the global glass theme. */
+.budgetly-v2 .wallet-grid { grid-template-columns:repeat(auto-fit,minmax(290px,1fr)); gap:24px; }
+.budgetly-v2 .wallet-card { min-width:0; padding:22px; min-height:200px; aspect-ratio:1.586; border-radius:8px; display:flex; flex-direction:column; justify-content:space-between; gap:14px; position:relative; border:1px solid var(--line); background:var(--surface); }
+.wallet-tile { min-width:0; }
+.wallet-tile-actions { display:flex; align-items:center; gap:8px; padding-top:10px; }
+.wallet-tile-actions .icon-button { width:44px; height:44px; }
+.budgetly-v2 .wallet-card .card-network-mark { position:absolute; right:20px; bottom:20px; color:var(--wallet-card-ink,#fff); }
+.wallet-card-balance strong { display:block; max-width:calc(100% - 64px); overflow-wrap:anywhere; }
+.budgetly-v2 .wallet-card.payment-card, .budgetly-v2 .wallet-card-preview { background:linear-gradient(125deg,color-mix(in srgb,var(--wallet-card-color) 98%,var(--wallet-card-tint,#000)),color-mix(in srgb,var(--wallet-card-color) 85%,var(--wallet-card-tint,#000))) !important; color:var(--wallet-card-ink,#fff); }
+.budgetly-v2 .wallet-card.payment-card h2 { font-size:28px; overflow-wrap:anywhere; }
+.budgetly-v2 .wallet-card .wallet-actions { flex-wrap:nowrap; gap:8px; }
+.budgetly-v2 .wallet-card.payment-card .wallet-actions { padding-right:0; }
+.budgetly-v2 .wallet-card .wallet-actions button { min-width:44px; min-height:44px; flex-shrink:0; }
+.budgetly-v2 .wallet-card .wallet-actions .card-network-mark { position:static; margin-left:auto; flex-shrink:0; color:var(--wallet-card-ink,#fff); }
+.wallet-color-options { flex-wrap:wrap; }
+.wallet-custom-color { display:flex; align-items:center; gap:8px; font-size:12px; }
+.wallet-custom-color input { width:44px; height:36px; padding:2px; }
+.budgetly-v2 .wallet-card.payment-card :is(h2,strong,.wallet-type,.muted,.round-icon,.wallet-actions button),
+.budgetly-v2 .wallet-card-preview { color:var(--wallet-card-ink,#fff) !important; }
+.budgetly-v2 .wallet-card.payment-card .wallet-actions button { background:color-mix(in srgb,var(--wallet-card-ink,#fff) 12%,transparent); }
+.notes-workspace:not(.has-selection) { grid-template-columns:180px minmax(0,1fr); }
+.notes-workspace:not(.has-selection) .workspace-reader { display:none; }
+.notes-workspace .workspace-heading { gap:8px; }
+.notes-workspace .workspace-heading h3 { flex:1; }
+.notes-workspace .note-collection { display:grid; gap:12px; padding:16px; }
+.notes-workspace.notes-grid-view:not(.has-selection) .note-collection { grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); }
+.notes-workspace.notes-grid-view .note-row { border:1px solid var(--line); border-radius:8px; min-height:150px; padding:16px; gap:12px; }
+.notes-workspace .note-row>div { flex-wrap:wrap; }
+.notes-workspace .note-row strong { overflow-wrap:anywhere; white-space:normal; }
+.notes-workspace .note-editor-controls { flex-wrap:nowrap; justify-content:flex-start; gap:12px; padding-block:10px; border-bottom:1px solid var(--line); }
+.notes-workspace .note-editor-controls .icon-button { width:44px; min-width:44px; height:44px; }
+.notes-folders-toggle { display:none; }
+.notes-workspace .note-type-switch { background:transparent; padding:0; width:auto; border-radius:0; gap:8px; }
+.notes-workspace .note-type-switch button { width:44px; height:44px; padding:0; justify-content:center; flex:none; border-radius:8px; }
+.notes-workspace .note-type-switch svg { width:20px; height:20px; }
+.notes-workspace .note-folder-picker { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px; padding-block:12px; }
+.notes-workspace .note-folder-picker label { display:flex; flex-direction:column; align-items:stretch; gap:6px; min-width:0; font-size:12px; }
+.notes-workspace .note-folder-picker select { width:100%; min-width:0; max-width:100%; font-size:14px; padding:10px; }
+.notes-workspace .reader-toolbar .button-row { gap:4px; }
+.notes-workspace .reader-toolbar .icon-button { width:40px; min-width:40px; height:40px; }
+.notes-workspace .note-title { font-size:24px; }
+.notes-workspace .mobile-back { display:inline-flex; }
+.notes-workspace .note-tools-popover { max-width:calc(100vw - 32px); border-radius:8px; }
+@media(max-width:620px) {
+ .budgetly-v2 .wallet-grid { grid-template-columns:minmax(0,1fr); gap:20px; }
+ .budgetly-v2 .wallet-card { width:100%; min-height:200px; padding:20px; }
+ .budgetly-v2 .wallet-card.payment-card h2 { font-size:28px; }
+ .notes-workspace:not(.has-selection) { grid-template-columns:minmax(0,1fr); }
+ .notes-workspace:not(.has-selection) .workspace-folders { max-height:180px; overflow:auto; }
+ .notes-workspace:not(.has-selection):not(.folders-open) .workspace-folders { display:none; }
+ .notes-workspace .notes-folders-toggle { display:inline-flex; }
+ .notes-workspace .note-editor-controls { gap:4px; padding-inline:8px; }
+ .notes-workspace .note-type-switch { gap:4px; }
+ .notes-workspace.notes-grid-view:not(.has-selection) .note-collection { grid-template-columns:repeat(2,minmax(0,1fr)); padding:12px; gap:10px; }
+ .notes-workspace .note-row { min-width:0; }
+ .notes-workspace .note-row small { white-space:normal; }
+ .notes-workspace .save-state { min-width:0; font-size:11px; }
+ .notes-workspace .reader-toolbar { gap:4px; padding-inline:8px; }
+}

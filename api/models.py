@@ -121,6 +121,7 @@ class Budget(Base):
     limit_amount = Column(Numeric(16, 3), nullable=False)
     period = Column(String(20), default="monthly")
     start_date = Column(Date, nullable=False)
+    reporting_month = Column(String(7), nullable=True)
     notify_threshold = Column(Integer, default=80)
     created_at = Column(DateTime, default=datetime.now)
     category = relationship("Category")

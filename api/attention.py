@@ -57,6 +57,8 @@ def plan_items(db: Session, user: User, current) -> list[dict]:
 def budget_items(db: Session, user: User, current, currency: str) -> list[dict]:
     result = []
     for budget in db.query(Budget).filter(Budget.user_id == user.id, Budget.limit_amount > 0).all():
+        if budget.period == "monthly" and budget.reporting_month and budget.reporting_month != current.strftime("%Y-%m"):
+            continue
         spent = amount(budget_spent(db, budget, as_of=current.date(), personal_only=True))
         limit = amount(budget.limit_amount)
         progress = spent / limit * 100

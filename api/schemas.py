@@ -121,7 +121,16 @@ class BudgetIn(BaseModel):
     limit_amount: Decimal = Field(gt=0)
     period: Literal["weekly", "monthly", "yearly"] = "monthly"
     start_date: date
+    reporting_month: Optional[str] = Field(default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
     notify_threshold: int = Field(default=80, ge=1, le=100)
+
+    @model_validator(mode="after")
+    def valid_budget_month(self):
+        if self.reporting_month:
+            if self.period != "monthly":
+                raise ValueError("For month is only available for monthly budgets")
+            date.fromisoformat(self.reporting_month + "-01")
+        return self
 
 
 class BudgetOut(BudgetIn, ORMModel):

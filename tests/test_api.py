@@ -29,6 +29,30 @@ def test_passwords_are_stored_as_one_way_hashes():
     assert not verify_password('wrong-password', stored)
 
 
+def test_budget_can_target_a_month_and_keeps_existing_repeat_mode():
+    with TestClient(app) as client:
+        headers = auth_headers(client)
+        wallet = client.post('/api/wallets', headers=headers, json={'name': 'Budget month test', 'type': 'cash', 'initial_balance': 0}).json()
+        category = client.post('/api/categories', headers=headers, json={'name': 'Budget month regression', 'kind': 'expense'}).json()
+        for month, amount in [('2026-10', 7), ('2026-11', 13)]:
+            response = client.post('/api/transactions', headers=headers, json={'wallet_id': wallet['id'], 'category_id': category['id'], 'type': 'expense', 'amount': amount, 'description': 'Month check', 'date': '2026-09-29T12:00:00', 'reporting_month': month})
+            assert response.status_code == 201, response.text
+        payload = {'name': 'October target', 'category_id': category['id'], 'limit_amount': 100, 'period': 'monthly', 'start_date': '2026-09-30', 'reporting_month': '2026-10'}
+        created = client.post('/api/budgets', headers=headers, json=payload)
+        assert created.status_code == 201, created.text
+        budget_id = created.json()['id']
+        budget = next(row for row in client.get('/api/budgets', headers=headers).json() if row['id'] == budget_id)
+        assert budget['reporting_month'] == budget['records_month'] == '2026-10'
+        assert budget['spent'] == 7
+        assert any(row['id'] == budget_id for row in client.get('/api/dashboard?month=2026-10', headers=headers).json()['budgets'])
+        assert not any(row['id'] == budget_id for row in client.get('/api/dashboard?month=2026-11', headers=headers).json()['budgets'])
+        for invalid in ['2026-13', '0000-01', 'October']:
+            assert client.put(f'/api/budgets/{budget_id}', headers=headers, json={**payload, 'reporting_month': invalid}).status_code == 422
+        assert client.put(f'/api/budgets/{budget_id}', headers=headers, json={**payload, 'period': 'weekly'}).status_code == 422
+        assert client.put(f'/api/budgets/{budget_id}', headers=headers, json={**payload, 'reporting_month': None}).status_code == 200
+        assert next(row for row in client.get('/api/budgets', headers=headers).json() if row['id'] == budget_id)['reporting_month'] is None
+
+
 def test_auth_admin_user_management_and_isolation():
     with TestClient(app) as client:
         assert client.get('/api/wallets').status_code == 401
