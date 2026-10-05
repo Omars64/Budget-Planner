@@ -7,10 +7,16 @@ $null = New-Item -ItemType Directory -Path $directory -Force
 $apk = Join-Path $directory 'Budgetly-1.2.3.apk'
 'test fixture only' | Set-Content $apk
 $manifest = @{version='1.2.3';versionCode=10;packageId='com.flowbudget.app';size=(Get-Item $apk).Length;
-    sha256=(Get-FileHash $apk -Algorithm SHA256).Hash.ToLowerInvariant();
+    sha256=(Get-BudgetlyFileSha256 $apk);
     url='https://github.com/Omars64/Budget-Planner/releases/download/v1.2.3/Budgetly-1.2.3.apk'}
 $manifest | ConvertTo-Json | Set-Content (Join-Path $directory 'update.json')
 $passed = 0
+$hashFixture = Join-Path $root 'sha256-fixture.txt'
+[System.IO.File]::WriteAllText($hashFixture, 'abc')
+if ((Get-BudgetlyFileSha256 $hashFixture) -ne 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad') {
+    throw 'Portable SHA-256 check failed'
+}
+$passed++
 $testSource = ((Get-Content -LiteralPath $PSCommandPath | ForEach-Object { '+' + $_ }) -join "`n")
 foreach ($case in @('success','unchanged','check','secret-file','secret-content','release-test-source','push-failure','build-failure','upload-failure','existing-published','draft-retry','bad-hash')) {
     $state = @{Case=$case;Calls=[System.Collections.Generic.List[string]]::new()}
@@ -38,7 +44,7 @@ foreach ($case in @('success','unchanged','check','secret-file','secret-content'
         }
         [pscustomobject]@{ExitCode=$exitCode;Output=@($output)}
     }.GetNewClosure()
-    $manifest.sha256=if($case -eq 'bad-hash'){'bad'}else{(Get-FileHash $apk -Algorithm SHA256).Hash.ToLowerInvariant()}
+    $manifest.sha256=if($case -eq 'bad-hash'){'bad'}else{Get-BudgetlyFileSha256 $apk}
     $manifest | ConvertTo-Json | Set-Content (Join-Path $directory 'update.json')
     $failed=$false
     try { Invoke-BudgetlyRelease -Root $root -BuildArguments @('build') -Runner $runner -CheckOnly:($case -eq 'check') }

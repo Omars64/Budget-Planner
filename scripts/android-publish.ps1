@@ -1,3 +1,14 @@
+function Get-BudgetlyFileSha256([string]$Path) {
+    $stream = [System.IO.File]::OpenRead($Path)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        return [System.BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '').ToLowerInvariant()
+    } finally {
+        $stream.Dispose()
+        $sha.Dispose()
+    }
+}
+
 function Invoke-BudgetlyRelease {
     param(
         [string]$Root,
@@ -75,7 +86,7 @@ function Invoke-BudgetlyRelease {
         $file = Get-Item -LiteralPath $apk
         if ($manifest.version -ne $version -or $manifest.versionCode -ne $pkg.androidVersionCode -or
             $manifest.packageId -ne 'com.flowbudget.app' -or $manifest.size -ne $file.Length -or
-            $manifest.sha256 -ne (Get-FileHash -LiteralPath $apk -Algorithm SHA256).Hash.ToLowerInvariant() -or
+            $manifest.sha256 -ne (Get-BudgetlyFileSha256 $apk) -or
             $manifest.url -ne "https://github.com/$repo/releases/download/$tag/Budgetly-$version.apk") {
             throw 'APK and update manifest do not match. Nothing will be published.'
         }
