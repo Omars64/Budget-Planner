@@ -130,8 +130,8 @@ public class BudgetlyUpdaterPlugin extends Plugin {
         if (!downloading.compareAndSet(false, true)) { call.reject("An update is already downloading."); return; }
         String url = call.getString("url", "");
         String expectedHash = call.getString("sha256", "");
-        Long expectedSize = call.getLong("size");
-        Long expectedVersion = call.getLong("versionCode");
+        Long expectedSize = UpdateNumbers.positiveInteger(call.getData().opt("size"), MAX_BYTES);
+        Long expectedVersion = UpdateNumbers.positiveInteger(call.getData().opt("versionCode"), 2100000000L);
         if (!expectedHash.matches("[a-f0-9]{64}") || expectedSize == null || expectedSize <= 0 || expectedSize > MAX_BYTES ||
                 expectedVersion == null || expectedVersion <= 0 || !getContext().getPackageName().equals(call.getString("packageId"))) {
             downloading.set(false); call.reject("Invalid update information."); return;

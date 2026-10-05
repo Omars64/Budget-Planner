@@ -15,6 +15,8 @@ GitHub hosts the release APK. Your account and transaction database remain on th
 
 ## Android consent and compatibility
 
+Versions 5.8.0 through 5.8.2 have a native JSON-number parsing defect: a valid update may show "Invalid update information" before downloading. Install the signed 5.8.3 (or newer) APK once manually over the existing installation, without uninstalling. Server metadata cannot repair the already-installed native plugin. Version 5.8.3 accepts both Android Integer and Long JSON values while rejecting fractional, string, negative, missing, and oversized values. These native metadata checks run in future batch builds.
+
 Budgetly requests `REQUEST_INSTALL_PACKAGES` solely for its verified update installation. Android may ask users to allow installing from Budgetly; the user chooses this permission and then taps Install again. They must also approve the installer. This permission is not enabled automatically. No SMS, accessibility, overlay, or notification-listener permission is added. Because banking apps can have their own security checks, validate coexistence on supported phones before distribution.
 
 ## Physical-device acceptance
