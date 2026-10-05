@@ -5,6 +5,7 @@ import { HashRouter } from 'react-router-dom'
 import MotionPreferences from './components/MotionPreferences'
 import { applyAppearance, readDeviceAppearance } from './lib/appearance'
 import App from './App'
+import DownloadApp from './pages/DownloadApp'
 import './styles.css'
 import './attention.css'
 import './enhancements.css'
@@ -29,13 +30,14 @@ import './offline.css'
 import './wallet-notes-polish.css'
 import './workspace-polish.css'
 import './google.css'
+import './app-updates.css'
 
 applyAppearance(readDeviceAppearance())
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <MotionPreferences><HashRouter>
-      <App />
+      {window.location.pathname === '/download' || window.location.pathname === '/download/' ? <DownloadApp/> : <App />}
     </HashRouter></MotionPreferences>
   </React.StrictMode>,
 )

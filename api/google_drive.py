@@ -6,8 +6,9 @@ GOOGLE_DRIVE_CLIENT_ID, GOOGLE_DRIVE_CLIENT_SECRET, GOOGLE_DRIVE_REDIRECT_URI
 (a Fernet key). Keep the key stable; rotating it requires re-encryption.
 Browser and Android callers open authorization_url externally and POST /poll
 with flow_id, poll_secret and their app bearer token. No app token goes into
-the browser. Use a separate OAuth client from Google sign-in: disconnect revokes
-the Drive grant at Google. Existing remote backups are never deleted.
+the browser. Use a separate OAuth client from Google sign-in. Google revocation
+is project-wide; fully independent grants require separate Google projects.
+Existing remote backups are never deleted.
 """
 import base64
 import hashlib

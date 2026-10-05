@@ -8,17 +8,96 @@ import pytest
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from fastapi import FastAPI
+from fastapi import HTTPException
+from starlette.requests import Request
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from api import google_auth as google
+from api import google_drive  # noqa: F401: register optional tables before fixture schema creation
 from api.account_security import ResetIn, complete_reset
 from api.database import Base, get_db
 from api.index import current_user, hash_password, verify_password
 from api.models import User, utc_now
 from api.reliability_models import AccountSession, ResetToken
+
+
+def create_google_user(client):
+    flow, query = begin(client)
+    callback(client, query)
+    response = client.post('/api/auth/google/complete-name', json={
+        'poll_secret': flow['poll_secret'], 'preferred_name': 'Preferred Name'})
+    assert response.status_code == 200, response.text
+    return response.json()['user']['id']
+
+
+@pytest.mark.parametrize('admin_delete', [False, True])
+def test_account_deletion_revokes_google_before_removing_credentials(env, monkeypatch, admin_delete):
+    from api.index import admin_delete_user, delete_account
+    from api import account_security
+    client, factory, settings = env
+    uid = create_google_user(client)
+    monkeypatch.setattr(account_security, 'confirmed', lambda *args: None)
+    with factory() as db:
+        grant = db.query(google.GoogleRevocationCredential).filter_by(user_id=uid).one()
+        assert 'provider-refresh-secret' not in grant.token
+        assert google.revocation_cipher().decrypt(grant.token.encode()) == b'provider-refresh-secret'
+        if admin_delete:
+            admin_delete_user(uid, User(id=999, role='admin'), db)
+        else:
+            delete_account(Request({'type': 'http'}), db.get(User, uid), db)
+        assert settings['revocations'] == ['provider-refresh-secret']
+        assert db.get(User, uid) is None
+        assert db.query(google.GoogleRevocationCredential).count() == 0
+        assert db.query(google.GoogleIdentity).count() == 0
+
+
+@pytest.mark.parametrize('admin_delete', [False, True])
+def test_revocation_failure_preserves_account(env, monkeypatch, admin_delete):
+    from api.index import admin_delete_user, delete_account
+    from api import account_security
+    client, factory, settings = env
+    uid = create_google_user(client)
+    settings['revoke_status'] = 503
+    monkeypatch.setattr(account_security, 'confirmed', lambda *args: None)
+    with factory() as db:
+        with pytest.raises(HTTPException) as error:
+            if admin_delete:
+                admin_delete_user(uid, User(id=999, role='admin'), db)
+            else:
+                delete_account(Request({'type': 'http'}), db.get(User, uid), db)
+        assert error.value.status_code == 502
+        db.rollback()
+        assert db.get(User, uid) is not None
+        assert db.query(google.GoogleRevocationCredential).filter_by(user_id=uid).count() == 1
+
+
+def test_legacy_google_account_needs_fresh_authorization_for_revocation(env):
+    _, factory, _ = env
+    uid, _ = account(factory)
+    with factory() as db:
+        db.add(google.GoogleIdentity(subject='legacy', user_id=uid, email='person@example.com'))
+        db.commit()
+        with pytest.raises(HTTPException) as error:
+            google.revoke_google_access(db, uid)
+        assert error.value.status_code == 409
+        assert db.get(User, uid) is not None
+
+
+def test_account_revocation_includes_optional_drive_permission(env, monkeypatch):
+    from cryptography.fernet import Fernet
+    client, factory, settings = env
+    uid = create_google_user(client)
+    cipher = Fernet(Fernet.generate_key())
+    monkeypatch.setattr(google_drive, 'configuration', lambda: (['client', 'secret', 'redirect'], cipher))
+    with factory() as db:
+        db.add(google_drive.GoogleDriveConnection(user_id=uid,
+            refresh_token=cipher.encrypt(b'drive-refresh-secret').decode()))
+        db.commit()
+        google.revoke_google_access(db, uid)
+        assert settings['revocations'] == ['provider-refresh-secret', 'drive-refresh-secret']
 
 
 @pytest.fixture
@@ -38,8 +117,11 @@ def env(monkeypatch):
     app.dependency_overrides[get_db] = database
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     public = key.public_key().public_numbers()
-    settings = {'claims': {}, 'bad_signature': False, 'token_error': False, 'calls': [], 'during_exchange': None}
+    settings = {'claims': {}, 'bad_signature': False, 'token_error': False, 'calls': [], 'during_exchange': None, 'revocations': [], 'revoke_status': 200}
     def provider(request):
+        if str(request.url) == 'https://oauth2.googleapis.com/revoke':
+            settings['revocations'].append(parse_qs(request.content.decode())['token'][0])
+            return httpx.Response(settings['revoke_status'], json={})
         if str(request.url) == google.JWKS_URL:
             return httpx.Response(200, json={'keys': [{'kid': 'key', 'kty': 'RSA',
                 'n': google.enc(public.n.to_bytes(256, 'big')), 'e': google.enc(public.e.to_bytes(3, 'big'))}]})
@@ -58,7 +140,7 @@ def env(monkeypatch):
         signature = key.sign(body.encode(), padding.PKCS1v15(), hashes.SHA256())
         if settings['bad_signature']:
             signature = bytes(256)
-        return httpx.Response(400 if settings['token_error'] else 200, json={'id_token': body + '.' + google.enc(signature)})
+        return httpx.Response(400 if settings['token_error'] else 200, json={'id_token': body + '.' + google.enc(signature), 'refresh_token': 'provider-refresh-secret'})
     original_client = httpx.Client
     monkeypatch.setattr(google.httpx, 'Client', lambda **kwargs: original_client(
         transport=httpx.MockTransport(provider), **kwargs))

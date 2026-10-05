@@ -518,6 +518,8 @@ def delete_account(request: Request, user: User = Depends(current_user), db: Ses
     confirmed(request, db, user)
     if user.role == 'admin' and db.query(User).filter_by(role='admin', active=True).count() <= 1:
         raise HTTPException(409, 'Add another active administrator before deleting your account.')
+    from .google_auth import revoke_google_access
+    revoke_google_access(db, user.id)
     db.query(Transaction).filter_by(user_id=user.id).update({Transaction.recurring_parent_id: None})
     db.query(PlannedTransaction).filter(or_(PlannedTransaction.owner_id == user.id, PlannedTransaction.created_by_id == user.id)).delete(synchronize_session=False)
     email = normalize_email(user.email)
@@ -527,9 +529,9 @@ def delete_account(request: Request, user: User = Depends(current_user), db: Ses
     db.query(NoteShare).filter(or_(NoteShare.member_id == user.id, NoteShare.note_id.in_(note_ids))).delete(synchronize_session=False)
     for model in [Transaction, Budget, Goal, Debt, Category, Wallet, Note, NoteFolder, Feedback, RecoveryPoint, RequestReceipt, BankMessage, MessageKey, AppSetting, PendingSignup]:
         db.query(model).filter(model.user_id == user.id).delete(synchronize_session=False) if hasattr(model, 'user_id') else None
-    from .google_auth import GoogleIdentity, GoogleAuthState
+    from .google_auth import GoogleIdentity, GoogleAuthState, GoogleRevocationCredential
     from .google_drive import GoogleDriveConnection, GoogleDriveOAuthAttempt
-    for model in (GoogleIdentity, GoogleAuthState, GoogleDriveConnection, GoogleDriveOAuthAttempt):
+    for model in (GoogleIdentity, GoogleAuthState, GoogleRevocationCredential, GoogleDriveConnection, GoogleDriveOAuthAttempt):
         db.query(model).filter_by(user_id=user.id).delete(synchronize_session=False)
     db.delete(user); db.commit()
 
@@ -602,6 +604,10 @@ def admin_delete_user(user_id: int, admin: User = Depends(admin_user), db: Sessi
     row = db.get(User, user_id)
     if not row:
         raise HTTPException(404, "User not found")
+    from .google_auth import revoke_google_access
+    revoke_google_access(db, user_id)
+    db.query(Transaction).filter_by(user_id=user_id).update({Transaction.recurring_parent_id: None})
+    db.query(PlannedTransaction).filter(or_(PlannedTransaction.owner_id == user_id, PlannedTransaction.created_by_id == user_id)).delete(synchronize_session=False)
     db.query(WalletShare).filter(WalletShare.owner_id == user_id).delete(synchronize_session=False)
     db.query(WalletShare).filter(WalletShare.member_user_id == user_id).delete(synchronize_session=False)
     db.query(WalletShare).filter(WalletShare.invitee_email == normalize_email(row.email)).delete(synchronize_session=False)
@@ -619,9 +625,9 @@ def admin_delete_user(user_id: int, admin: User = Depends(admin_user), db: Sessi
     for model in [Transaction, Budget, Goal, Debt, Category, Wallet]:
         db.query(model).filter(model.user_id == user_id).delete()
     db.query(AppSetting).filter(AppSetting.user_id == user_id).delete()
-    from .google_auth import GoogleIdentity, GoogleAuthState
+    from .google_auth import GoogleIdentity, GoogleAuthState, GoogleRevocationCredential
     from .google_drive import GoogleDriveConnection, GoogleDriveOAuthAttempt
-    for model in (GoogleIdentity, GoogleAuthState, GoogleDriveConnection, GoogleDriveOAuthAttempt):
+    for model in (GoogleIdentity, GoogleAuthState, GoogleRevocationCredential, GoogleDriveConnection, GoogleDriveOAuthAttempt):
         db.query(model).filter_by(user_id=user_id).delete(synchronize_session=False)
     db.delete(row); db.commit()
 

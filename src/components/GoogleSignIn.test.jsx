@@ -21,6 +21,7 @@ it('asks for a preferred name before completing Google signup',async()=>{
   render(<GoogleSignIn onLogin={login}/>)
   fireEvent.click(await screen.findByRole('button',{name:'Continue with Google'}))
   const input=await screen.findByLabelText('Your name in Budgetly')
+  expect(screen.getByRole('status')).toHaveTextContent('tap Create Google account to finish')
   expect(login).not.toHaveBeenCalled()
   fireEvent.change(input,{target:{value:'Omar'}})
   api.mockImplementation(path=>Promise.resolve(path.endsWith('/complete-name')?{token:'token',user:{username:'Omar'}}:{}))

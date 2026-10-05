@@ -21,6 +21,7 @@ from urllib.parse import urlencode, urlsplit
 
 import httpx
 from cryptography.hazmat.primitives import hashes
+from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
@@ -33,7 +34,7 @@ from sqlalchemy.exc import IntegrityError
 from .database import Base, get_db
 from .models import User, utc_now
 from .reliability_models import AccountSession
-from .index import auth_serializer, current_user, user_payload, seed_user_workspace
+from .index import APP_SECRET, auth_serializer, current_user, user_payload, seed_user_workspace
 from .account_security import audit, confirmed, limit
 
 router = APIRouter(prefix='/api/auth/google', tags=['Google authentication'])
@@ -41,6 +42,49 @@ AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 TOKEN_URL = 'https://oauth2.googleapis.com/token'
 JWKS_URL = 'https://www.googleapis.com/oauth2/v3/certs'
 TTL = 600
+
+
+class GoogleRevocationCredential(Base):
+    __tablename__ = 'google_revocation_credentials'
+    subject = Column(String(255), primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=True, index=True)
+    token = Column(Text, nullable=False)
+    expires_at = Column(DateTime, nullable=True)
+
+
+def revocation_cipher():
+    # Domain-separated key; APP_SECRET is already required to be strong in production.
+    return Fernet(base64.urlsafe_b64encode(hashlib.sha256(
+        ('budgetly-google-revocation-v1:' + APP_SECRET).encode()).digest()))
+
+
+def revoke_google_access(db, user_id):
+    """Fail closed before deleting records: never discard a grant we could not revoke."""
+    from .google_drive import GoogleDriveConnection, configuration as drive_configuration, decrypt
+    identity = db.query(GoogleIdentity).filter_by(user_id=user_id).first()
+    credential = db.query(GoogleRevocationCredential).filter_by(user_id=user_id).first()
+    tokens = []
+    if identity and not credential:
+        raise HTTPException(409, 'Google permission needs confirmation before deletion. Sign in with Google again, or remove Budgetly at https://myaccount.google.com/connections and reconnect Google before retrying.')
+    try:
+        if credential:
+            tokens.append(revocation_cipher().decrypt(credential.token.encode()).decode())
+        connection = db.get(GoogleDriveConnection, user_id)
+        if connection and connection.refresh_token:
+            _, cipher = drive_configuration()
+            tokens.append(decrypt(cipher, connection.refresh_token))
+    except (InvalidToken, ValueError):
+        raise HTTPException(503, 'Google permission could not be read. Account was not deleted.') from None
+    try:
+        with httpx.Client(timeout=10, follow_redirects=False, trust_env=False) as http:
+            for token in tokens:
+                response = http.post('https://oauth2.googleapis.com/revoke', data={'token': token})
+                # Google reports invalid_token for grants already removed externally.
+                if response.status_code == 400 and response.json().get('error') == 'invalid_token':
+                    continue
+                response.raise_for_status()
+    except (httpx.HTTPError, ValueError):
+        raise HTTPException(502, 'Google permission could not be removed. Account was not deleted; try again shortly.') from None
 
 
 class GoogleIdentity(Base):
@@ -121,6 +165,9 @@ def start_flow(request, db, user=None, mode='signin'):
     if mode == 'reauth' and not db.query(GoogleIdentity).filter_by(user_id=user.id).first():
         raise HTTPException(409, 'Link Google before using Google confirmation')
     state, poll, nonce, verifier = [secrets.token_urlsafe(32) for _ in range(4)]
+    db.query(GoogleRevocationCredential).filter(
+        GoogleRevocationCredential.user_id.is_(None), GoogleRevocationCredential.expires_at <= utc_now()
+    ).delete(synchronize_session=False)
     db.add(GoogleAuthState(digest=digest(state), poll_digest=digest(poll), nonce=nonce,
                           verifier=verifier, client_id=client, redirect_uri=redirect,
                           expires_at=utc_now() + timedelta(seconds=TTL),
@@ -133,7 +180,7 @@ def start_flow(request, db, user=None, mode='signin'):
         'client_id': client, 'redirect_uri': redirect, 'response_type': 'code',
         'scope': 'openid email profile', 'state': state, 'nonce': nonce,
         'code_challenge': enc(hashlib.sha256(verifier.encode()).digest()),
-        'code_challenge_method': 'S256', 'prompt': 'select_account',
+        'code_challenge_method': 'S256', 'prompt': 'select_account consent', 'access_type': 'offline',
         **({'max_age': '0', 'claims': json.dumps({'id_token': {'auth_time': {'essential': True}}}, separators=(',', ':'))} if mode == 'reauth' else {})}),
         'poll_secret': poll, 'expires_in': TTL}
 
@@ -254,7 +301,8 @@ def callback(state: str, code: str = '', error: str = '', db=Depends(get_db)):
                 'client_secret': client_secret, 'redirect_uri': redirect,
                 'grant_type': 'authorization_code', 'code_verifier': verifier})
             response.raise_for_status()
-            claims = verify_id_token(response.json().get('id_token'), client_id, nonce, http)
+            tokens = response.json()
+            claims = verify_id_token(tokens.get('id_token'), client_id, nonce, http)
         # Keep this write lock through all side effects and the final commit.
         # A cancellation that commits first makes the claim fail, even if the
         # identity map still contains an older copy of the OAuth state.
@@ -295,13 +343,22 @@ def callback(state: str, code: str = '', error: str = '', db=Depends(get_db)):
             row.status = 'link_required'
         else:
             row.status = 'name_required'
+        token = tokens.get('refresh_token')
+        if row.status in ('ready', 'linked', 'reauthenticated', 'name_required') and isinstance(token, str) and token:
+            grant = db.get(GoogleRevocationCredential, row.subject)
+            if grant is None:
+                grant = GoogleRevocationCredential(subject=row.subject)
+                db.add(grant)
+            grant.user_id = row.user_id
+            grant.token = revocation_cipher().encrypt(token.encode()).decode()
+            grant.expires_at = row.expires_at if row.user_id is None else None
         row.verifier = ''
         db.commit()
     except Exception:
         db.rollback()
         db.query(GoogleAuthState).filter_by(digest=digest(state), status='exchanging').update({'status': 'failed', 'verifier': ''})
         db.commit()
-    return HTMLResponse('<!doctype html><title>Budgetly</title><p>Return to Budgetly to continue.</p>',
+    return HTMLResponse('<!doctype html><title>Budgetly</title><h1>Return to Budgetly</h1><p>Return to the app to see your sign-in result. If you are creating a new account, enter your preferred name and tap Create Google account in Budgetly to finish.</p>',
                         headers={'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer',
                                  'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'"})
 
@@ -398,6 +455,10 @@ def complete(payload: CompleteIn, request: Request, response: Response, db=Depen
         db.add(GoogleIdentity(subject=row.subject, user_id=user.id, email=row.email, signup=True))
         seed_user_workspace(db, user.id, commit=False)
         row.user_id = user.id
+        grant = db.get(GoogleRevocationCredential, row.subject)
+        if grant:
+            grant.user_id = user.id
+            grant.expires_at = None
         db.flush()
         return session_result(db, row, 'creating')
     except IntegrityError as exc:

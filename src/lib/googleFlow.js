@@ -2,6 +2,14 @@ import { Capacitor, registerPlugin } from '@capacitor/core'
 import { api, jsonBody } from './api'
 
 const browser = registerPlugin('OAuthBrowser')
+function pause(signal) {
+  return new Promise((resolve,reject)=>{
+    const abort=()=>{clearTimeout(timer);signal?.removeEventListener('abort',abort);reject(new DOMException('Google sign-in cancelled','AbortError'))}
+    const timer=setTimeout(()=>{signal?.removeEventListener('abort',abort);resolve()},1800)
+    signal?.addEventListener('abort',abort,{once:true})
+    if (signal?.aborted) abort()
+  })
+}
 export function reserveGoogleWindow() {
   if (Capacitor.isNativePlatform()) return null
   const popup = window.open('about:blank', '_blank', 'popup,width=520,height=700')
@@ -24,14 +32,20 @@ export async function openGoogleFlow(flow, {popup, signal, pollPath, pollBody}) 
     const deadline=Date.now()+10*60*1000
     while (Date.now()<deadline) {
       if (signal?.aborted) throw new DOMException('Google sign-in cancelled','AbortError')
-      const result=await api(pollPath,{method:'POST',...jsonBody(pollBody),signal})
-      if (result.status !== 'pending') return result
+      if (Capacitor.isNativePlatform() && document.visibilityState === 'hidden') {
+        await pause(signal)
+        continue
+      }
+      let result
+      try {
+        result=await api(pollPath,{method:'POST',...jsonBody(pollBody),signal})
+      } catch (error) {
+        // Android can suspend the WebView connection while the external browser is open.
+        if (!error.network && ![502,503,504].includes(error.status)) throw error
+      }
+      if (result && !['pending','processing','exchanging'].includes(result.status)) return result
       if (popup?.closed) throw new Error('Google sign-in was cancelled. You can try again.')
-      await new Promise((resolve,reject)=>{
-        const abort=()=>{clearTimeout(timer);signal?.removeEventListener('abort',abort);reject(new DOMException('Google sign-in cancelled','AbortError'))}
-        const timer=setTimeout(()=>{signal?.removeEventListener('abort',abort);resolve()},1800)
-        signal?.addEventListener('abort',abort,{once:true})
-      })
+      await pause(signal)
     }
     throw new Error('Google sign-in expired. Please try again.')
   } finally { popup?.close() }

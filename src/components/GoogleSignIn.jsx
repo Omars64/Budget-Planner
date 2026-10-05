@@ -34,7 +34,7 @@ export default function GoogleSignIn({onLogin,disabled=false,onBusyChange,mode='
       else if(result.status==='complete'&&result.token){flowSecret.current=null;await onLogin(result)}
       else if(['linked','reauthenticated'].includes(result.status)){flowSecret.current=null;await onComplete?.(result)}
       else throw new Error(result.status==='link_required'?'This email already has a Budgetly account. Sign in with your existing method, then link Google in Account security.':'Google sign-in was not completed. Please try again.')
-    }catch(err){popup?.close();if(mounted.current&&err.name!=='AbortError')setError(err.message)}
+    }catch(err){popup?.close();if(mounted.current&&err.name!=='AbortError')setError(err.network?'Could not connect for Google sign-in. Check your connection, then try again.':err.message)}
     finally{setWorking(false)}
   }
   const complete=async event=>{
@@ -49,6 +49,7 @@ export default function GoogleSignIn({onLogin,disabled=false,onBusyChange,mode='
   if(!enabled)return null
   return <div className="google-flow-status">
     {pending?<form className="auth-form" onSubmit={complete}>
+      <p role="status">Google verified your email. Enter the name you want to use, then tap Create Google account to finish signing up.</p>
       <label className="auth-entry"><span>Your name in Budgetly</span><input required autoComplete="name" minLength={1} maxLength={80} value={name} onChange={event=>setName(event.target.value)} placeholder="Preferred name" disabled={busy}/></label>
       <button className="button primary full" disabled={busy||!name.trim()}>{busy?'Creating account...':'Create Google account'}</button>
       <button type="button" className="auth-switch" disabled={busy} onClick={cancel}>Cancel</button>

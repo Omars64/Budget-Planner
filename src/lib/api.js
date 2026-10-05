@@ -6,6 +6,7 @@ const tokenKey = 'flowbudget_token'
 const rememberKey = 'flowbudget_remember_session'
 const nativeApiBase = 'https://budget-planner-ecru-seven.vercel.app'
 const apiBase = import.meta.env.VITE_API_BASE_URL || (Capacitor.isNativePlatform() ? nativeApiBase : '')
+export const publicApiUrl = path => apiBase + path
 const responseCache = new Map()
 export const readCached = path => {
   const value = responseCache.get(path)
@@ -84,7 +85,7 @@ export function api(path, options = {}) {
     return data
   }).catch(error => {
     if (transaction && error.status >= 400 && error.status < 500) transactionKeys.delete(key)
-    if (mutation) window.dispatchEvent(new CustomEvent('flowbudget:error', { detail:error.message || 'The request could not be saved. Please try again.' }))
+    if (mutation && !path.endsWith('/poll')) window.dispatchEvent(new CustomEvent('flowbudget:error', { detail:error.message || 'The request could not be saved. Please try again.' }))
     throw error
   }).finally(() => {
     if (pending.get(key) === request) pending.delete(key)
@@ -114,7 +115,9 @@ async function send(path, options = {}) {
         if (cached !== undefined) return cached
       } catch { /* Report the network error below. */ }
     }
-    const error = new Error('Could not reach Budgetly. Check your connection and retry; transaction retries are protected against duplicates.')
+    const error = new Error(path.startsWith('/api/auth/')
+      ? 'Could not connect to Budgetly for sign-in. Check your connection and try again.'
+      : 'Could not reach Budgetly. Check your connection and retry; transaction retries are protected against duplicates.')
     error.network = true
     throw error
   }

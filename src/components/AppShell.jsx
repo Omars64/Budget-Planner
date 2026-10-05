@@ -12,6 +12,7 @@ import AppTutorial from './AppTutorial'
 import ScrollMemory from './ScrollMemory'
 import Milestone from './Milestone'
 import ConnectionStatus from './ConnectionStatus'
+import AndroidUpdate from './AndroidUpdate'
 import { useContainedScroll, useScrollLock } from '../lib/scrollLock'
 import BrandFooter from './BrandFooter'
 import { useWorkspacePreferences } from '../lib/workspacePreferences'
@@ -120,6 +121,7 @@ export default function AppShell({ children }) {
         </div>
         <div className="button-row top-actions">{location.pathname === '/' && <button className="button ghost tutorial-button" data-tour="tutorial" title="Tutorial" aria-label="Tutorial" onClick={() => { setMenu(false); setTutorialRequest(value => value + 1) }}><Compass size={18}/><span>Tutorial</span></button>}<button className="button ghost signout-button" title="Sign out" aria-label="Sign out" onClick={lock}><LogOut size={17}/><span>Sign out</span></button>{isLedger && !nativeAndroid && <button data-tour="add-transaction" className="button primary add-button" onClick={addTransaction}><Plus size={18}/><span>Add transaction</span></button>}</div>
       </header>
+      <AndroidUpdate/>
       <motion.div className="page-wrap" data-tour-page={location.pathname} key={location.pathname} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: .16 }}>{children}</motion.div>
       <BrandFooter className="app-footer"/>
     </main>
