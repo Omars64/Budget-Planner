@@ -1,5 +1,5 @@
 import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useState } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowLeft, RefreshCw, Sparkles } from 'lucide-react'
 import { api, auth, flushOfflineTransactions, jsonBody } from './lib/api'
@@ -36,11 +36,21 @@ import { readDeviceAppearance, useAppearance } from './lib/appearance'
 import FeedbackPrompt from './components/FeedbackPrompt'
 import { syncPlannedNotifications, cancelPlannedNotifications } from './lib/plannedNotifications'
 import { notificationSettingsChangedEvent } from './lib/notificationSettings'
+import { guestActive, guestRemembered, guestUser, guestHasRecords, guestRoutes, readGuest, setGuestActive, requestGuestSignIn } from './lib/guest'
+import GuestAccess, { GuestGate } from './components/GuestAccess'
+import GuestImport from './components/GuestImport'
+const GuestSettings = lazy(() => import('./pages/GuestSettings'))
 
 const AppContext = createContext(null)
 export const useApp = () => useContext(AppContext)
 
-export function LoginScreen({ onLogin }) {
+export function LoginScreen({ onLogin, onGuest, returningGuest = false }) {
+  const [enteringGuest, setEnteringGuest] = useState(false)
+  useEffect(() => {
+    if (!enteringGuest) return
+    const timer = window.setTimeout(() => { Promise.resolve(onGuest()).catch(error => { setError(error.message); setEnteringGuest(false) }) }, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 10 : 480)
+    return () => window.clearTimeout(timer)
+  }, [enteringGuest, onGuest])
   useEffect(() => () => cancelBiometric(), [])
   const [, refreshSignInPreference] = useState(0)
   const [rememberMe, setRememberMe] = useState(() => auth.remembered)
@@ -116,7 +126,7 @@ export function LoginScreen({ onLogin }) {
 
   const authOptions = <div className="auth-options"><label className="check-row remember-session"><input type="checkbox" checked={rememberMe} disabled={busy||googleBusy} onChange={e => { try { auth.setRemembered(e.target.checked); setRememberMe(e.target.checked); setError('') } catch (err) { setError(err.message) } }}/><span>Keep me signed in on this device</span></label><button type="button" className="auth-switch" onClick={()=>setMode('reset')}>Forgot password?</button></div>
 
-  return <div className="auth-screen expanded-auth" onInvalid={e => setError(e.target.validationMessage)}>
+  return <div className={`auth-screen expanded-auth${enteringGuest ? ' guest-entering' : ''}`} onInvalid={e => setError(e.target.validationMessage)}>
     <header className="auth-brand"><BrandLogo /><span><strong>Budgetly</strong><small>Personal finance</small></span></header>
     <div className="auth-layout">
       <section className="auth-copy" aria-label="Budgetly">
@@ -175,6 +185,7 @@ export function LoginScreen({ onLogin }) {
       </>}
         {!googleActive && mode === 'login' && <div className="auth-footer-action">New to Budgetly? <button className="auth-switch" type="button" onClick={() => { setError(''); setMode('signup') }}>Create an account</button></div>}
         {!googleActive && mode === 'signup' && <div className="auth-footer-action">Already have an account? <button className="auth-switch" type="button" onClick={() => { setError(''); setMode('login') }}>Sign in</button></div>}
+        {onGuest && !googleActive && ['login','signup'].includes(mode) && <div className="guest-entry"><button type="button" className="button ghost" disabled={busy || googleBusy || enteringGuest} onClick={() => setEnteringGuest(true)}>{returningGuest ? 'Back to guest workspace' : 'Continue without an account'}</button><small>Guest records stay on this device. Clearing storage or uninstalling can remove them.</small></div>}
       </motion.main>
     </div>
     <footer className="auth-footer"><BrandFooter/></footer>
@@ -182,6 +193,7 @@ export function LoginScreen({ onLogin }) {
 }
 
 export default function App() {
+  const currentLocation = useLocation()
   const { confirm, confirmation } = useConfirmation()
   const [session, setSession] = useState({ loading: true, user: null })
   const [settings, setSettings] = useState(() => ({ ...readDeviceAppearance(), currency: 'KWD', display_name: 'Budgetly', week_starts_on: 'sunday', compact_numbers: false }))
@@ -190,6 +202,22 @@ export default function App() {
   const [refreshKey, setRefreshKey] = useState(0)
   const [toast, setToast] = useState(null)
   const [signoutRequested, setSignoutRequested] = useState(false)
+  const [guestFeature, setGuestFeature] = useState('')
+  const [guestSigningIn, setGuestSigningIn] = useState(false)
+  const [importGuest, setImportGuest] = useState(false)
+  const isGuest = session.user?.role === 'guest'
+  const enterGuest = useCallback(async () => {
+    const data = readGuest()
+    setGuestActive(true); setOfflineUser(null)
+    setSettings(data.settings); setAppearance({ profile_image: '', wallpaper_image: '' })
+    setGuestSigningIn(false); setSession({ loading: false, user: guestUser })
+  }, [])
+  const requestSignIn = useCallback(feature => requestGuestSignIn(feature), [])
+  useEffect(() => {
+    const review = () => { if (session.user && !isGuest) { try { setImportGuest(guestHasRecords()) } catch (error) { console.error(error) } } }
+    window.addEventListener('budgetly:guest-import', review)
+    return () => window.removeEventListener('budgetly:guest-import', review)
+  }, [session.user, isGuest])
 
   const notify = useCallback((message, type = 'success', action = null) => {
     setToast({ id: Date.now(), message, type, action })
@@ -201,7 +229,16 @@ export default function App() {
   }, [toast])
   const refresh = useCallback(() => setRefreshKey(v => v + 1), [])
   useEffect(() => {
-    if (!session.user) return undefined
+    const prompt = event => { if (guestActive()) setGuestFeature(event.detail || 'this feature') }
+    const changed = () => { if (guestActive()) refresh() }
+    const storage = event => { if (event.key === 'budgetly_guest_workspace_v1' && guestActive()) { try { setSettings(readGuest().settings); refresh() } catch (error) { notify(error.message, 'error') } } }
+    window.addEventListener('budgetly:guest-signin', prompt)
+    window.addEventListener('budgetly:guest-changed', changed)
+    window.addEventListener('storage', storage)
+    return () => { window.removeEventListener('budgetly:guest-signin', prompt); window.removeEventListener('budgetly:guest-changed', changed); window.removeEventListener('storage', storage) }
+  }, [refresh, notify])
+  useEffect(() => {
+    if (!session.user || isGuest) return undefined
     const sync = () => { if (document.visibilityState !== 'hidden') void flushOfflineTransactions().catch(console.error) }
     const changed = () => refresh()
     sync()
@@ -214,7 +251,7 @@ export default function App() {
   }, [session.user?.id, refresh])
   useEffect(() => { if (session.user && auth.token) void rememberOfflineSession(session.user, settings, auth.token) }, [session.user, settings])
   useEffect(() => {
-    if (!session.user) return undefined
+    if (!session.user || isGuest) return undefined
     const sync = () => { if (document.visibilityState !== 'hidden') void syncPlannedNotifications(session.user.id).catch(console.error) }
     sync()
     const timer = window.setInterval(sync, 60000)
@@ -259,7 +296,8 @@ export default function App() {
 
   useEffect(() => {
     const resume = async () => {
-      if (!auth.token) { setSession({ loading: false, user: null }); return }
+      if (!auth.token) { if (guestRemembered()) { try { await enterGuest(); return } catch (error) { console.error(error) } } setSession({ loading: false, user: null }); return }
+      setGuestActive(false)
       api('/api/auth/me').then(async user => {
       setOfflineUser(user.id)
       await loadSettings()
@@ -275,7 +313,7 @@ export default function App() {
       })
     }
     void resume()
-  }, [loadSettings, loadAppearance])
+  }, [loadSettings, loadAppearance, enterGuest])
 
   const finishSignOut = useCallback(() => {
     void api('/api/account/signout',{method:'POST'}).catch(()=>{})
@@ -290,11 +328,13 @@ export default function App() {
   const signOut = useCallback(() => setSignoutRequested(true), [])
 
   const completeLogin = useCallback(async user => {
+    setGuestActive(false); setGuestSigningIn(false)
     setOfflineUser(user.id)
     await loadSettings()
     setSession({ loading: false, user })
     void loadAppearance()
-  }, [loadSettings, loadAppearance])
+    try { setImportGuest(guestHasRecords()) } catch (error) { notify(error.message, 'error') }
+  }, [loadSettings, loadAppearance, notify])
 
   const reloadUser = useCallback(async () => {
     const user = await api('/api/auth/me')
@@ -303,18 +343,18 @@ export default function App() {
 
   const value = useMemo(() => ({
     user: session.user, settings, setSettings, appearance, setAppearance,
-    refreshKey, refresh, notify, confirm, reloadSettings: loadSettings, reloadAppearance: loadAppearance, reloadUser, lock: signOut,
-  }), [session.user, settings, appearance, refreshKey, refresh, notify, confirm, loadSettings, loadAppearance, reloadUser, signOut])
+    refreshKey, refresh, notify, confirm, reloadSettings: loadSettings, reloadAppearance: loadAppearance, reloadUser, isGuest, requestSignIn, lock: isGuest ? () => setGuestSigningIn(true) : signOut,
+  }), [session.user, settings, appearance, refreshKey, refresh, notify, confirm, loadSettings, loadAppearance, reloadUser, signOut, isGuest, requestSignIn])
 
   if (session.loading) return <div className="app-loading"><BrandLogo className="pulse" /></div>
-  if (!session.user) return <LoginScreen onLogin={completeLogin} />
+  if (!session.user || guestSigningIn) return <LoginScreen onLogin={completeLogin} onGuest={enterGuest} returningGuest={isGuest}/>
 
   return <AppContext.Provider value={value}>
-    <Experience />
+    {!isGuest && <Experience />}
     <div className="ambient" aria-hidden="true"><i/><i/><i/></div>
     <AppShell>
       <Suspense fallback={<div role="status">Loading page...</div>}>
-      <Routes>
+      {isGuest && !guestRoutes.has(currentLocation.pathname) ? <GuestGate/> : <Routes>
         <Route path="/" element={<Overview />} />
         <Route path="/ask-ai" element={<AskAI />} />
         <Route path="/transactions" element={<Transactions />} />
@@ -328,14 +368,16 @@ export default function App() {
         <Route path="/wallets" element={<Wallets />} />
         <Route path="/notes" element={<Notes />} />
         <Route path="/feedback" element={<Feedback />} />
-        <Route path="/settings" element={<Settings />} />
+        <Route path="/settings" element={isGuest ? <GuestSettings /> : <Settings />} />
         <Route path="/bank-messages" element={<BankMessages />} />
         <Route path="/admin" element={session.user?.role === 'admin' ? <Admin /> : <Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      </Routes>}
       </Suspense>
     </AppShell>
-    <FeedbackPrompt signoutRequested={signoutRequested} onSignoutComplete={finishSignOut}/>
+    {!isGuest && <FeedbackPrompt signoutRequested={signoutRequested} onSignoutComplete={finishSignOut}/>}
+    <GuestAccess feature={guestFeature} onClose={() => setGuestFeature('')} onContinue={() => { setGuestFeature(''); setGuestSigningIn(true) }}/>
+    {importGuest && !isGuest && <GuestImport user={session.user} onDone={message => {setImportGuest(false);refresh();if(message)notify(message)}}/>}
     {confirmation}
     <AnimatePresence>{toast && <motion.div role={toast.type === 'error' ? 'alert' : 'status'} className={`toast ${toast.type}`} initial={{ opacity: 0, y: -18, scale: .96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -12 }}>{toast.message}{toast.action && <button className="toast-action" onClick={() => {const action=toast.action;setToast(null);void action.run().catch(err=>notify(err.message,'error'))}}>{toast.action.label}</button>}</motion.div>}</AnimatePresence>
   </AppContext.Provider>

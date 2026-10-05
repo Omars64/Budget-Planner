@@ -31,6 +31,7 @@ import './wallet-notes-polish.css'
 import './workspace-polish.css'
 import './google.css'
 import './app-updates.css'
+import './guest.css'
 
 applyAppearance(readDeviceAppearance())
 

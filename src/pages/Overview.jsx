@@ -12,7 +12,7 @@ import AnimatedMoney from '../components/AnimatedMoney'
 import { useWorkspacePreferences } from '../lib/workspacePreferences'
 
 export default function Overview() {
-  const { user, settings, refreshKey } = useApp()
+  const { user, settings, refreshKey, isGuest } = useApp()
   const [data, setData] = useState(null)
   const [preferences] = useWorkspacePreferences(user?.id)
   const [attention, setAttention] = useState(null)
@@ -23,7 +23,7 @@ export default function Overview() {
   useEffect(() => {
     const controller = new window.AbortController()
     setError('')
-    api('/api/attention', {signal:controller.signal}).then(value => { if (!controller.signal.aborted) setAttention(Number.isInteger(value.count) ? value.count : null) }).catch(() => { if (!controller.signal.aborted) setAttention(null) })
+    if (!isGuest) api('/api/attention', {signal:controller.signal}).then(value => { if (!controller.signal.aborted) setAttention(Number.isInteger(value.count) ? value.count : null) }).catch(() => { if (!controller.signal.aborted) setAttention(null) })
     api(`/api/dashboard?month=${month}`, { signal: controller.signal })
       .then(value => { if (!controller.signal.aborted) setData(value) })
       .catch(e => { if (!controller.signal.aborted) setError(e.message) })
@@ -46,7 +46,7 @@ export default function Overview() {
         <Link to="/transactions" state={{aiFilters:{month:displayedMonth,type:'expense',exclude_opening:true}}}><span>Spent</span><strong className="tx-amount expense">{fmt(data.expense)}</strong></Link>
         <Link to="/transactions" state={filteredLink}><span>Money in minus out</span><strong>{fmt(data.net)}</strong><small>After spending{data.opening_debt > 0 ? ' and starting debt' : ''}. Transfers are separate.</small></Link>
       </section>
-      <Link className="overview-attention-link" to="/attention">{attention === null ? 'Review reminders' : attention === 0 ? 'All caught up' : `${attention} ${attention === 1 ? 'item needs' : 'items need'} attention`} <ArrowRight size={16}/></Link>
+      {!isGuest && <Link className="overview-attention-link" to="/attention">{attention === null ? 'Review reminders' : attention === 0 ? 'All caught up' : `${attention} ${attention === 1 ? 'item needs' : 'items need'} attention`} <ArrowRight size={16}/></Link>}
       {data.shared?.wallet_count > 0 && <section className="overview-shared" aria-label="Shared wallets summary"><div><span>Shared balance</span><strong>{fmt(data.shared.balance)}</strong><small>{data.shared.wallet_count} shared wallets, separate from personal</small></div><Link to="/shared-transactions">View shared <ArrowRight size={16}/></Link></section>}
       <section className="overview-wallets" aria-label="Personal wallets">
         {[...(data.wallets || [])].sort((a,b) => Number(preferences.favoriteWallets.includes(b.id))-Number(preferences.favoriteWallets.includes(a.id))).map(w => <Link key={w.id} to="/transactions" state={{ aiFilters: { wallet: String(w.id), month: '' } }}><span><Wallet size={16}/>{w.name}</span><strong>{fmt(w.balance)}</strong></Link>)}

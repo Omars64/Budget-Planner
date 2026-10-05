@@ -20,7 +20,7 @@ import { recentEntries, rememberEntry, useWorkspacePreferences } from '../lib/wo
 const blank = () => ({ type: 'expense', amount: '', description: '', notes: '', date: dateInput(), reporting_month: '', wallet_id: '', transfer_wallet_id: '', category_id: '', recurring_frequency: 'none', recurring_until: '' })
 
 export default function TransactionModal({ open, onClose, onSaved, editing = null }) {
-  const {user, settings, notify} = useApp()
+  const {user, settings, notify, isGuest, requestSignIn} = useApp()
   const [helpers] = useWorkspacePreferences(user.id)
   const formId = useId()
   const draftKey = `flowbudget_tx_draft_${user.id}`
@@ -43,7 +43,8 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
     setErrors({})
     setLoading(true)
     setAdvanced(Boolean(editing?.recurring_frequency && editing.recurring_frequency !== 'none'))
-    setSchedule(false)
+    const resumeSchedule = !editing && !isGuest && sessionStorage.getItem(`budgetly_schedule_resume_${user.id}`) === 'true'
+    setSchedule(resumeSchedule)
     const controller = new window.AbortController()
     Promise.all([api('/api/wallets', {signal: controller.signal}), api('/api/categories', {signal: controller.signal})]).then(([w,c]) => {
       if (controller.signal.aborted) return
@@ -61,6 +62,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
       if (!base.wallet_id || !w.some(wallet => String(wallet.id) === String(base.wallet_id) && (!wallet.archived || editing))) base.wallet_id = w.find(wallet => !wallet.archived)?.id || ''
       baseline.current = JSON.stringify(base)
       setForm(base)
+      if (resumeSchedule) sessionStorage.removeItem(`budgetly_schedule_resume_${user.id}`)
     }).catch(e=>{if (!controller.signal.aborted) setError(e.message)}).finally(() => {if (!controller.signal.aborted) setLoading(false)})
     return () => controller.abort()
   }, [open, editing, draftKey])
@@ -119,11 +121,11 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
         <button type="button" aria-pressed={form.type === 'income'} className={form.type === 'income' ? 'active' : ''} onClick={() => {set('type','income');set('category_id','')}}><ArrowDownLeft size={17}/>Income</button>
         <button type="button" aria-pressed={form.type === 'transfer'} className={form.type === 'transfer' ? 'active' : ''} onClick={() => set('type','transfer')}><ArrowRightLeft size={17}/>Transfer</button>
       </div>
-      {!editing && <div className="segment-control" role="group" aria-label="When to record"><button type="button" aria-pressed={!schedule} className={!schedule ? 'active' : ''} onClick={() => setSchedule(false)}>Record now</button><button type="button" aria-pressed={schedule} className={schedule ? 'active' : ''} onClick={() => setSchedule(true)}>Schedule</button></div>}
+      {!editing && <div className="segment-control" role="group" aria-label="When to record"><button type="button" aria-pressed={!schedule} className={!schedule ? 'active' : ''} onClick={() => setSchedule(false)}>Record now</button><button type="button" aria-pressed={schedule} className={schedule ? 'active' : ''} onClick={() => {if(isGuest){writeDraft(draftKey,form);sessionStorage.setItem('budgetly_guest_schedule','true');notify('Sign in to schedule. Your draft is kept.','success',{label:'Sign in',run:async()=>requestSignIn('scheduled transactions')})}else setSchedule(true)}}>Schedule</button></div>}
       {schedule && <p className="form-note">Added after the due time on your next visit or the daily check. Your balance stays unchanged until then.</p>}
 
       <VoiceInputButton disabled={busy || loading || !open} onActiveChange={setVoiceActive} onTranscript={applyVoice} onError={message => setError(message)}/>
-      {!editing && helpers.entryTemplates && <TransactionTemplates userId={user.id} scope="personal" draft={form} disabled={busy || loading} onApply={item => {
+      {!editing && !isGuest && helpers.entryTemplates && <TransactionTemplates userId={user.id} scope="personal" draft={form} disabled={busy || loading} onApply={item => {
         const wallet = wallets.find(w => String(w.id) === String(item.wallet_id))
         if (!wallet) { setError('This template wallet is no longer available. Choose another template or enter the fields.'); return }
         const next = {...form, type:item.type, amount:item.amount, description:item.description, wallet_id:wallet.id, transfer_wallet_id:wallets.some(w => String(w.id) === String(item.transfer_wallet_id)) ? item.transfer_wallet_id : '', category_id:categories.some(c => String(c.id) === String(item.category_id) && c.kind === item.type) ? item.category_id : '', reporting_month:item.type === 'income' ? '' : form.reporting_month}
@@ -145,7 +147,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
       {!schedule && helpers.balancePreview && <BalancePreview wallet={wallets.find(w=>String(w.id)===String(form.wallet_id))} draft={form} editing={editing} currency={settings.currency}/>}
       <details className="form-options" open={advanced} onToggle={e => setAdvanced(e.currentTarget.open)}><summary>More options</summary><div className="stack gap-16">
         {!editing && <button className="button ghost small" type="button" disabled={busy || voiceActive} onClick={() => {clearDraft(draftKey);setForm({...blank(),wallet_id:wallets[0]?.id || ''});setErrors({});setError('')}}>Discard draft</button>}
-        <label className="field"><span><Repeat2 size={15}/> Repeat</span><select value={form.recurring_frequency} onChange={e => set('recurring_frequency',e.target.value)}><option value="none">Does not repeat</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select></label>
+        <label className="field"><span><Repeat2 size={15}/> Repeat</span><select value={form.recurring_frequency} onChange={e => {if(isGuest && e.target.value!=='none')requestSignIn('repeating transactions');else set('recurring_frequency',e.target.value)}}><option value="none">Does not repeat</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select></label>
         {form.recurring_frequency !== 'none' && <div><DateField label="Repeat until" value={form.recurring_until} min={form.date.slice(0,10)} onChange={value => set('recurring_until',value)} disabled={busy || loading}/>{errors.recurring_until && <small className="field-error">{errors.recurring_until}</small>}</div>}
 
         <label className="field"><span>Notes (optional)</span><textarea rows="3" value={form.notes} onChange={e => set('notes', e.target.value)}/></label>

@@ -2,6 +2,7 @@ import SettingsSection from '../components/SettingsSection'
 import NotificationPreferences from '../components/NotificationPreferences'
 import AccountSecurity from '../components/AccountSecurity'
 import GoogleDriveBackup from '../components/GoogleDriveBackup'
+import GuestRecords from '../components/GuestRecords'
 import TrashPanel from '../components/TrashPanel'
 import { useEffect, useRef, useState } from 'react'
 import { Camera, Download, Fingerprint, Image, Mountain, Pencil, Plus, RefreshCcw, Save, ShieldCheck, Trash2, Upload, X } from 'lucide-react'
@@ -87,6 +88,7 @@ export default function Settings(){
   const disableDeviceSignIn=async()=>{if(passkeyBusy)return;setPasskeyBusy(true);try{await disableBiometric();setBiometric(false);notify('All passkeys revoked')}catch(err){notify(err.message,'error')}finally{setPasskeyBusy(false)}}
 
   return <div className="settings-grid">
+    <GuestRecords/>
     <AccountSecurity/>
     <TrashPanel/>
     <SettingsSection title="Personal preferences" className=""><ComfortSettings/><WorkspacePreferences/><form onSubmit={save} className="stack gap-16">

@@ -13,7 +13,7 @@ import { useWorkspacePreferences } from '../lib/workspacePreferences'
 const CARD_COLORS = [['#3158aa','Blue'],['#267d75','Teal'],['#75465f','Berry'],['#454f59','Graphite'],['#183d36','Emerald'],['#20283e','Midnight'],['#622e40','Burgundy'],['#584071','Amethyst'],['#596575','Titanium'],['#32647a','Ocean'],['#763d51','Rose'],['#35393c','Onyx']]
 const fresh=()=>({name:'',type:'cash',initial_balance:0,icon:'wallet',color:'#3158aa',card_network:null,archived:false})
 export default function Wallets(){
-  const {user,settings,refreshKey,refresh,notify,confirm}=useApp(); const [rows,setRows]=useState([]); const [open,setOpen]=useState(false); const [editing,setEditing]=useState(null); const [form,setForm]=useState(fresh()); const [error,setError]=useState('')
+  const {user,settings,refreshKey,refresh,notify,confirm,isGuest,requestSignIn}=useApp(); const [rows,setRows]=useState([]); const [open,setOpen]=useState(false); const [editing,setEditing]=useState(null); const [form,setForm]=useState(fresh()); const [error,setError]=useState('')
   const [saving,setSaving]=useState(false)
   const [ledgerWallet,setLedgerWallet]=useState(null)
   const [preferences,savePreferences]=useWorkspacePreferences(user?.id)
@@ -24,16 +24,16 @@ export default function Wallets(){
     api('/api/wallets', {signal: controller.signal}).then(value => { if (!controller.signal.aborted) setRows(value) }).catch(err => { if (!controller.signal.aborted) setError(err.message) })
     return () => controller.abort()
   },[refreshKey]); const fmt=v=>money(v,settings.currency,settings.compact_numbers); const total=rows.filter(w=>!w.archived).reduce((a,w)=>a+w.balance,0)
-  const show=(w=null)=>{setEditing(w);setForm(w?{...w,card_network:w.card_network || (['bank','card'].includes(w.type)?'visa':null)}:fresh());setOpen(true);setError('')}
+  const show=(w=null)=>{if(isGuest && !w && rows.filter(w=>!w.archived).length>=2){requestSignIn('more than two wallets');return}setEditing(w);setForm(w?{...w,card_network:w.card_network || (['bank','card'].includes(w.type)?'visa':null)}:fresh());setOpen(true);setError('')}
   const setType=type=>setForm(current=>({...current,type,card_network:['bank','card'].includes(type)?current.card_network || 'visa':null}))
   const submit=async e=>{e.preventDefault();if(saving)return;setSaving(true);try{await api(editing?`/api/wallets/${editing.id}`:'/api/wallets',{method:editing?'PUT':'POST',...jsonBody({...form,initial_balance:Number(form.initial_balance)})});setOpen(false);refresh();notify(editing?'Wallet updated':'Wallet added')}catch(err){setError(err.message)}finally{setSaving(false)}}
   const remove=async w=>{
-    if(!await confirm(`Delete ${w.name}? A recovery copy will be saved first.`))return
+    if(!await confirm(isGuest ? `Delete ${w.name} from this device? Guest deletions cannot be recovered.` : `Delete ${w.name}? A recovery copy will be saved first.`))return
     try {
       await api(`/api/wallets/${w.id}`,{method:'DELETE'})
       refresh(); notify('Wallet deleted')
     } catch(err) {
-      if (err.status === 409 && await confirm(`${w.name} still has transactions. Delete the wallet and all of its linked transactions? A recovery copy will be saved first.`)) {
+      if (err.status === 409 && await confirm(`${w.name} still has transactions. Delete the wallet and all of its linked transactions? ${isGuest ? 'This cannot be undone.' : 'A recovery copy will be saved first.'}`)) {
         try { await api(`/api/wallets/${w.id}?delete_transactions=true`,{method:'DELETE'}); refresh(); notify('Wallet and linked transactions deleted') }
         catch (deleteErr) { notify(deleteErr.message,'error') }
       } else notify(err.message,'error')
@@ -52,7 +52,7 @@ export default function Wallets(){
           {card && <CardNetworkMark network={w.card_network || 'visa'}/>}
         </div>
         <div className="wallet-tile-actions"><button className="icon-button wallet-favorite" aria-label={`Favorite ${w.name}`} title="Favorite wallet" aria-pressed={preferences.favoriteWallets.includes(w.id)} onClick={() => { const ids=preferences.favoriteWallets.includes(w.id) ? preferences.favoriteWallets.filter(id=>id!==w.id) : [...preferences.favoriteWallets,w.id]; if(!savePreferences({favoriteWallets:ids})) notify('Favorites could not be saved on this device.','error') }}><Star size={18}/></button>
-          <button className="button ghost small" onClick={() => setLedgerWallet(w)}><BookOpen size={16}/>Ledger</button>
+          <button className="button ghost small" onClick={() => isGuest ? requestSignIn('financial ledger tools') : setLedgerWallet(w)}><BookOpen size={16}/>Ledger</button>
           <button className="icon-button" aria-label={`Edit ${w.name}`} title="Edit wallet" onClick={() => show(w)}><Pencil size={18}/></button>
           <button className="icon-button danger" aria-label={`Delete ${w.name}`} title="Delete wallet" onClick={() => remove(w)}><Trash2 size={18}/></button>
         </div>

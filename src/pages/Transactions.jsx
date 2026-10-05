@@ -19,7 +19,7 @@ import LedgerRow, { LedgerDateHeader, TransactionDetails } from '../components/L
 
 export default function Transactions() {
   const location = useLocation()
-  const { user, settings, refreshKey, refresh, notify ,confirm} = useApp()
+  const { user, settings, refreshKey, refresh, notify ,confirm, isGuest } = useApp()
   const [filters, setFilters] = useViewState(`personal:${user?.id}:filters`, defaultLedgerFilters, location.state?.aiFilters ? {...defaultLedgerFilters,...location.state.aiFilters} : undefined)
   useEffect(() => { if (location.state?.aiFilters) setFilters({...defaultLedgerFilters,...location.state.aiFilters}) }, [location.key])
   const ledger = useLedger('/api/transactions', { ...filters, scope: 'personal' }, refreshKey, false, `personal:${user?.id}`)
@@ -31,7 +31,7 @@ export default function Transactions() {
   const [categories, setCategories] = useState([])
 
   useEffect(() => {
-    if (location.state?.aiDraft) {
+    if (location.state?.aiDraft || location.state?.resumeSchedule) {
       setEditing(null)
       setModal(true)
     }
@@ -44,12 +44,12 @@ export default function Transactions() {
   const remove = async tx => { if (!await confirm(`Delete “${tx.description}”?`)) return; try {
     const result = await api(`/api/transactions/${tx.id}?undo=true`, {method:'DELETE'})
     setSelected(null); refresh()
-    notify('Transaction moved to Trash', 'success', result?.trash_id ? {label:'Undo',run:async()=>{await api(`/api/trash/${result.trash_id}/restore`,{method:'POST'});refresh();notify('Transaction restored')}} : null)
+    notify(isGuest ? 'Transaction deleted from this device' : 'Transaction moved to Trash', 'success', result?.trash_id ? {label:'Undo',run:async()=>{await api(`/api/trash/${result.trash_id}/restore`,{method:'POST'});refresh();notify('Transaction restored')}} : null)
   } catch (err) { notify(err.message, 'error') } }
 
   return <div className="ledger-page stack">
-    <OfflinePending scope="personal"/>
-    <LedgerFilters value={filters} onChange={setFilters} wallets={wallets} categories={categories}><StatementImport wallets={wallets} compact/></LedgerFilters>
+    {!isGuest && <OfflinePending scope="personal"/>}
+    <LedgerFilters value={filters} onChange={setFilters} wallets={wallets} categories={categories}>{!isGuest && <StatementImport wallets={wallets} compact/>}</LedgerFilters>
     {ledger.error && <div className="form-error" role="alert">{ledger.error}<button className="button ghost small" onClick={ledger.retry}>Retry</button></div>}
     {ledger.error && ledger.updatedAt && <small className="muted">Showing records last updated at {new Date(ledger.updatedAt).toLocaleTimeString()}.</small>}
 

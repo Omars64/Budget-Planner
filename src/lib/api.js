@@ -1,4 +1,5 @@
 import { Capacitor } from '@capacitor/core'
+import { guestActive, guestApi, requestGuestSignIn } from './guest'
 import { clearOfflineCache } from './offlineStore'
 import { cacheOfflineResponse, canQueueOffline, offlineUser, queueOfflineTransaction, readOfflineResponse, setOfflineUser, syncOfflineQueue } from './offlineSync'
 
@@ -48,7 +49,7 @@ export const auth = {
     localStorage.removeItem(tokenKey)
     Object.keys(sessionStorage).filter(key => key.startsWith('flowbudget_note_draft_')).forEach(key => sessionStorage.removeItem(key))
     for (const storage of [sessionStorage, localStorage]) {
-      Object.keys(storage).filter(key => /^flowbudget_(shared_)?tx_draft_/.test(key)).forEach(key => storage.removeItem(key))
+      Object.keys(storage).filter(key => key !== 'flowbudget_tx_draft_guest' && /^flowbudget_(shared_)?tx_draft_/.test(key)).forEach(key => storage.removeItem(key))
     }
   },
 }
@@ -57,6 +58,7 @@ const pending = new Map()
 const transactionKeys = new Map()
 let writes = 0
 export function api(path, options = {}) {
+  if (guestActive() && !auth.token && !path.startsWith('/api/auth/') && !path.startsWith('/api/passkeys/login/')) return guestApi(path, options)
   if (options.method === 'PUT' && options.body) {
     try { const data = JSON.parse(options.body); if (data.revision) { const headers = new Headers(options.headers); headers.set('If-Match', data.revision); options = {...options, headers} } } catch { /* Non-JSON requests do not carry revisions. */ }
   }
@@ -164,6 +166,10 @@ export const money = (value, currency = 'KWD', compact = false) => {
 export const jsonBody = value => ({ body: JSON.stringify(value) })
 
 export async function apiFile(path) {
+  if (guestActive() && !auth.token) {
+    requestGuestSignIn('account exports')
+    throw Object.assign(new Error('Sign in for account exports. Guest CSV and JSON exports are available in Settings.'), { status: 403 })
+  }
   const headers = new Headers()
   if (auth.token) headers.set('Authorization', `Bearer ${auth.token}`)
   let response

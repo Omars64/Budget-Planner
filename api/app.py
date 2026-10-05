@@ -22,6 +22,7 @@ from . import attention
 from . import google_auth
 from . import google_drive
 from . import app_updates
+from . import guest_import
 from .email_service import send_verification_code, smtp_status
 
 # Route signup verification through the hardened email transport. Keeping this
@@ -45,6 +46,7 @@ app.include_router(attention.router)
 app.include_router(google_auth.router)
 app.include_router(google_drive.router)
 app.include_router(app_updates.router)
+app.include_router(guest_import.router)
 
 
 @app.get("/api/health/email")

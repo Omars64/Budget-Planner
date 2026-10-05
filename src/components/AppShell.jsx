@@ -17,6 +17,8 @@ import { useContainedScroll, useScrollLock } from '../lib/scrollLock'
 import BrandFooter from './BrandFooter'
 import { useWorkspacePreferences } from '../lib/workspacePreferences'
 import useKeyboardViewport from '../lib/useKeyboardViewport'
+import { LockKeyhole } from 'lucide-react'
+import { guestRoutes } from '../lib/guest'
 
 const nav = [
   ['/', 'Overview', LayoutDashboard, 'Money'],
@@ -72,7 +74,7 @@ export default function AppShell({ children }) {
   }, [menu])
   useScrollLock(menu)
   useContainedScroll(sidebar)
-  const { user, settings, appearance, refresh, notify, lock } = useApp()
+  const { user, settings, appearance, refresh, notify, lock, isGuest, requestSignIn } = useApp()
   const [preferences] = useWorkspacePreferences(user?.id)
   const keyboardOpen = useKeyboardViewport()
   const location = useLocation()
@@ -100,11 +102,11 @@ export default function AppShell({ children }) {
       <nav className="nav-list">
         {groups.map(group => {
           const pages = matchingNav.filter(([, , , section]) => section === group)
-          return pages.length ? <div className="nav-group" key={group}><span className="nav-group-label">{group}</span>{pages.map(([to, label, Icon]) => <NavLink key={to} to={to} end={to === '/'} onClick={() => {setMenu(false);setNavSearch('')}} className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}><Icon size={19}/><span>{label}</span>{label === 'Budgets' && <i className="nav-pulse"/>}</NavLink>)}</div> : null
+          return pages.length ? <div className="nav-group" key={group}><span className="nav-group-label">{group}</span>{pages.map(([to, label, Icon]) => <NavLink key={to} to={to} end={to === '/'} onClick={event => {setMenu(false);setNavSearch('');if(isGuest && !guestRoutes.has(to)){event.preventDefault();requestSignIn(label)}}} className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}><Icon size={19}/><span>{label}</span>{isGuest && !guestRoutes.has(to) ? <LockKeyhole className="guest-lock" size={14}/> : label === 'Budgets' && <i className="nav-pulse"/>}</NavLink>)}</div> : null
         })}
         {!matchingNav.length && <p className="nav-no-results">No matching page</p>}
       </nav>
-      <button className="button ghost sidebar-signout" onClick={lock}><LogOut size={17}/><span>Sign out</span></button>
+      <button className="button ghost sidebar-signout" onClick={lock}><LogOut size={17}/><span>{isGuest ? 'Sign in' : 'Sign out'}</span></button>
       <div className="sidebar-foot glass-subtle">
         {appearance.profile_image ? <img className="sidebar-avatar" src={appearance.profile_image} alt="Profile"/> : <span className="default-avatar"><Mountain size={24}/></span>}<div><strong>{user?.username || 'Budgetly'}</strong><small>{user?.role === 'admin' ? 'Admin account' : 'Personal workspace'}</small></div>
       </div>
@@ -112,28 +114,28 @@ export default function AppShell({ children }) {
     {menu && <div className="sidebar-scrim" onClick={() => setMenu(false)} />}
 
     <main className="main-area">
-      <ConnectionStatus/>
+      {!isGuest && <ConnectionStatus/>}
       <header className="topbar" role="banner">
         <div className="topbar-left">
           <button className="icon-button mobile-only" onClick={() => setMenu(true)} aria-label="Open menu"><Menu size={20}/></button>
           {location.pathname === '/ask-ai' && <button className="icon-button mobile-only" title="Open conversations" aria-label="Open conversations" onClick={() => window.dispatchEvent(new window.Event('budgetly:toggle-ai-history'))}><PanelLeftOpen size={20}/></button>}
           <div><p className="eyebrow">{settings.display_name}</p><h2>{title}</h2></div>
         </div>
-        <div className="button-row top-actions">{location.pathname === '/' && <button className="button ghost tutorial-button" data-tour="tutorial" title="Tutorial" aria-label="Tutorial" onClick={() => { setMenu(false); setTutorialRequest(value => value + 1) }}><Compass size={18}/><span>Tutorial</span></button>}<button className="button ghost signout-button" title="Sign out" aria-label="Sign out" onClick={lock}><LogOut size={17}/><span>Sign out</span></button>{isLedger && !nativeAndroid && <button data-tour="add-transaction" className="button primary add-button" onClick={addTransaction}><Plus size={18}/><span>Add transaction</span></button>}</div>
+        <div className="button-row top-actions">{location.pathname === '/' && !isGuest && <button className="button ghost tutorial-button" data-tour="tutorial" title="Tutorial" aria-label="Tutorial" onClick={() => { setMenu(false); setTutorialRequest(value => value + 1) }}><Compass size={18}/><span>Tutorial</span></button>}<button className="button ghost signout-button" title={isGuest ? 'Sign in' : 'Sign out'} aria-label={isGuest ? 'Sign in' : 'Sign out'} onClick={lock}><LogOut size={17}/><span>{isGuest ? 'Sign in' : 'Sign out'}</span></button>{isLedger && !nativeAndroid && <button data-tour="add-transaction" className="button primary add-button" onClick={addTransaction}><Plus size={18}/><span>Add transaction</span></button>}</div>
       </header>
       <AndroidUpdate/>
+      {isGuest && <div className="guest-banner"><span>Guest mode · On this device</span><button className="button ghost small" onClick={() => requestSignIn('cloud storage and more features')}>Sign in</button></div>}
       <motion.div className="page-wrap" data-tour-page={location.pathname} key={location.pathname} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: .16 }}>{children}</motion.div>
       <BrandFooter className="app-footer"/>
     </main>
     {isLedger && nativeAndroid && <button data-tour="add-transaction" className="transaction-fab" aria-label="Add transaction" title="Add transaction" onClick={addTransaction}><Plus size={28}/></button>}
 
     <nav className="mobile-nav glass">
-      {visibleNav.filter(([to]) => primaryRoutes.has(to)).map(([to, label, Icon]) => <NavLink key={to} to={to} end={to === '/'} className={({isActive}) => isActive ? 'active' : ''}><Icon size={19}/><span>{label === 'Shared Transactions' ? 'Shared' : label}</span></NavLink>)}
+      {visibleNav.filter(([to]) => primaryRoutes.has(to)).map(([to, label, Icon]) => <NavLink key={to} to={to} end={to === '/'} onClick={event => {if(isGuest && !guestRoutes.has(to)){event.preventDefault();requestSignIn(label)}}} className={({isActive}) => isActive ? 'active' : ''}><Icon size={19}/><span>{label === 'Shared Transactions' ? 'Shared' : label}</span></NavLink>)}
       <button className={!primaryRoutes.has(location.pathname) ? 'active' : ''} aria-current={!primaryRoutes.has(location.pathname) ? 'page' : undefined} onClick={() => setMenu(true)}><Menu size={19}/><span>More</span></button>
     </nav>
 
     <TransactionModal open={txModal} onClose={() => setTxModal(false)} onSaved={(saved, scheduled) => { setTxModal(false); refresh(); notify(saved.queued ? 'Saved on this device. Will sync when connected.' : scheduled ? 'Transaction scheduled' : 'Transaction saved') }} />
-    <AppTutorial request={tutorialRequest}/>
-    <Milestone/>
+    {!isGuest && <><AppTutorial request={tutorialRequest}/><Milestone/></>}
   </div>
 }

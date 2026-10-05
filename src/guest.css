@@ -1,0 +1,10 @@
+.guest-entry { display: grid; gap: 8px; margin-top: 20px; }
+.guest-entry small { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.guest-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
+.guest-banner span { color: var(--muted); font-size: 13px; }
+.guest-gate { display: grid; justify-items: center; gap: 18px; padding: 40px 16px; text-align: center; }
+.nav-item .guest-lock { flex: 0 0 auto; margin-left: auto; opacity: .65; }
+.guest-entering { animation: guest-depart .48s cubic-bezier(.22,1,.36,1) forwards; pointer-events: none; }
+@keyframes guest-depart { to { transform: translateY(-70px); filter: blur(8px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .guest-entering { animation: guest-depart .01s forwards; } }
+@media (max-width: 480px) { .guest-banner { align-items: flex-start; } .guest-banner .button { flex-shrink: 0; } }
