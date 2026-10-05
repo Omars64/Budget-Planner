@@ -7,6 +7,22 @@ from .ai_settings import MODEL
 ENDPOINT = 'https://api.openai.com/v1/chat/completions'
 
 
+def check_connection():
+    """Check the same endpoint and model without sending any workspace data."""
+    with httpx.Client(timeout=httpx.Timeout(35, connect=8), follow_redirects=False) as client:
+        response = client.post(ENDPOINT, headers={
+            'Authorization': 'Bearer ' + os.environ['OPENAI_API_KEY'].strip(),
+            'Content-Type': 'application/json',
+        }, json={'model': MODEL, 'messages': [{'role': 'user', 'content': 'Reply with OK.'}],
+                 'max_completion_tokens': 8, 'store': False})
+        response.raise_for_status()
+        data = response.json()
+    content = data['choices'][0]['message']['content']
+    if not isinstance(content, str) or not content.strip():
+        raise ValueError('Empty provider response')
+    return {'ok': True, 'reason': 'ready', 'message': 'OpenAI connected successfully. AI requests are working.'}
+
+
 def complete(facts, question, history, guide):
     def bounded(value):
         if isinstance(value, dict):

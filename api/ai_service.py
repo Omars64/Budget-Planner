@@ -8,6 +8,7 @@ from .ai_context import build_context, transaction_fact, scope_wallets, ledger_q
 from .ai_actions import target
 from .ai_settings import assistant_status
 from .ai_provider import complete, complete_draft
+from .ai_diagnostics import provider_failure, user_notice
 from .account_security import limit
 from .timekeeping import now
 
@@ -16,7 +17,7 @@ LIMITED_MESSAGE = "I'm Ask Budgetly. My built-in guide covers Budgetly features,
 
 def _provider_notice(error):
     """Keep provider diagnostics out of the user-facing conversation."""
-    return 'AI currently unavailable. Using built-in guidance.'
+    return user_notice(provider_failure(error))
 
 FAQS = [
     (('add transaction', 'new transaction', 'record expense', 'record income'), "Open **Transactions** and select **Add transaction**. On Android, use the round **+** button. Choose Expense, Income, or Transfer, then enter the amount, date, wallet, category, and description before saving."),

@@ -1,11 +1,12 @@
 """Server-owned, installation-wide assistant policy. Never expose credentials."""
 import os
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, StrictBool
 from .database import get_db
 from .index import admin_user
 from .ai_models import AssistantConfig
-from .account_security import audit, confirmed
+from .account_security import audit, confirmed, limit
 from .models import utc_now
 
 MODEL = 'gpt-4o-mini'
@@ -29,6 +30,22 @@ class AssistantSettingsIn(BaseModel):
 @router.get('')
 def get_settings(user=Depends(admin_user), db=Depends(get_db)):
     return assistant_status(db)
+
+
+@router.post('/check')
+def check_provider(user=Depends(admin_user), db=Depends(get_db)):
+    from .ai_provider import check_connection
+    from .ai_diagnostics import provider_failure
+    status = assistant_status(db)
+    if not status['available']:
+        return {'ok': False, 'reason': 'configuration', 'message': 'Enable AI with a Production API key and the supported model before testing.'}
+    limit(db, 'openai-health-minute', 2, 60)
+    limit(db, 'openai-minute', 15, 60)
+    limit(db, 'openai-day', 50, 86400)
+    try:
+        return check_connection()
+    except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError) as error:
+        return provider_failure(error)
 
 
 @router.put('')

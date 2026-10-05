@@ -14,6 +14,7 @@ from api.index import current_user
 from api.models import User, Wallet, Note, Category, Transaction
 from api.ai_models import AssistantConfig
 from api import ai_service, ai_settings, ai_provider
+from api.ai_diagnostics import provider_failure
 
 
 @pytest.fixture
@@ -184,6 +185,85 @@ def test_missing_key_never_calls_provider(setup, monkeypatch):
     result = client.post(f'/api/ai/chats/{chat}/messages', json={'request_id': str(uuid.uuid4()), 'question': 'Explain budgeting.'}).json()
     assert result['provider'] == 'built-in'
     provider.assert_not_called()
+
+
+@pytest.mark.parametrize('status,code,reason', [
+    (401, 'invalid_api_key', 'authentication'),
+    (429, 'insufficient_quota', 'quota'),
+    (429, 'credit_balance_exhausted', 'quota'),
+    (429, 'project_spend_limit_exceeded', 'quota'),
+    (429, 'rate_limit_exceeded', 'rate_limit'),
+    (403, None, 'access'), (404, 'model_not_found', 'access'),
+    (400, 'sensitive-unrecognized-code', 'request'), (503, None, 'upstream'),
+])
+def test_provider_diagnostics_are_allowlisted(status, code, reason, caplog):
+    request = httpx.Request('POST', ai_provider.ENDPOINT, headers={'Authorization': 'Bearer private-key'})
+    response = httpx.Response(status, request=request, json={'error': {
+        'code': code, 'message': 'private provider body with financial records',
+    }})
+    failure = provider_failure(httpx.HTTPStatusError('private exception', request=request, response=response))
+    assert failure['reason'] == reason and failure['http_status'] == status
+    assert failure['provider_code'] != 'sensitive-unrecognized-code'
+    for secret in ('private-key', 'private exception', 'financial records', 'sensitive-unrecognized-code'):
+        assert secret not in caplog.text + json.dumps(failure)
+
+
+@pytest.mark.parametrize('error,reason', [
+    (httpx.ReadTimeout('private details'), 'timeout'),
+    (httpx.ConnectError('private details'), 'connection'),
+    (ValueError('private details'), 'response'),
+])
+def test_network_and_response_diagnostics(error, reason, caplog):
+    assert provider_failure(error)['reason'] == reason
+    assert 'private details' not in caplog.text
+
+
+def test_health_probe_is_admin_only_limited_and_keeps_workspace_private(setup, monkeypatch):
+    client, db, user, _ = setup
+    probe = Mock(return_value={'ok': True, 'reason': 'ready', 'message': 'Connected'})
+    monkeypatch.setattr(ai_provider, 'check_connection', probe)
+    assert client.post('/api/admin/assistant/check').json()['reason'] == 'configuration'
+    probe.assert_not_called()
+    db.add(AssistantConfig(id=1, enabled=True)); db.commit()
+    assert client.post('/api/admin/assistant/check').json()['ok'] is True
+    probe.assert_called_once_with()
+    request = httpx.Request('POST', ai_provider.ENDPOINT)
+    response = httpx.Response(429, request=request, json={'error': {'type': 'insufficient_quota', 'message': 'private body'}})
+    probe.side_effect = httpx.HTTPStatusError('private error', request=request, response=response)
+    result = client.post('/api/admin/assistant/check')
+    assert result.json()['reason'] == 'quota' and 'private' not in result.text
+    assert client.post('/api/admin/assistant/check').status_code == 429
+    user.role = 'user'; db.commit()
+    assert client.post('/api/admin/assistant/check').status_code == 403
+
+
+def test_health_probe_uses_minimal_nonpersonal_request(monkeypatch):
+    monkeypatch.setenv('OPENAI_API_KEY', 'test-key')
+    real_client = httpx.Client
+    def handle(request):
+        payload = json.loads(request.content)
+        assert payload == {'model': 'gpt-4o-mini', 'messages': [{'role': 'user', 'content': 'Reply with OK.'}],
+                           'max_completion_tokens': 8, 'store': False}
+        assert str(request.url) == ai_provider.ENDPOINT
+        return httpx.Response(200, json={'choices': [{'message': {'content': 'OK'}}]})
+    monkeypatch.setattr(ai_provider.httpx, 'Client', lambda **kwargs: real_client(transport=httpx.MockTransport(handle), **kwargs))
+    assert ai_provider.check_connection()['ok'] is True
+
+
+def test_quota_fallback_preserves_a_useful_answer(setup, caplog):
+    client, db, user, provider = setup
+    db.add(AssistantConfig(id=1, enabled=True)); db.commit()
+    request = httpx.Request('POST', ai_provider.ENDPOINT)
+    response = httpx.Response(429, request=request, json={'error': {'code': 'insufficient_quota', 'message': 'private key'}})
+    provider.side_effect = httpx.HTTPStatusError('private error', request=request, response=response)
+    chat = create(client)
+    result = client.post(f'/api/ai/chats/{chat}/messages', json={
+        'request_id': str(uuid.uuid4()), 'question': 'Help me plan my savings and debt repayments.',
+    }).json()
+    assert result['status'] == 'completed' and result['answer'].strip()
+    assert result['notice'] == 'AI needs administrator attention. Using built-in guidance for now.'
+    assert 'reason=quota' in caplog.text
+    assert 'private' not in json.dumps(result) + caplog.text
 
 
 def test_tutorial_completion_is_account_scoped_and_survives_settings_save(setup):
