@@ -14,7 +14,7 @@ from api.index import current_user
 from api.models import User, Wallet, Note, Category, Transaction
 from api.ai_models import AssistantConfig
 from api import ai_service, ai_settings, ai_provider
-from api.ai_diagnostics import provider_failure
+from api.ai_diagnostics import provider_failure, logger as provider_logger
 
 
 @pytest.fixture
@@ -250,8 +250,10 @@ def test_health_probe_uses_minimal_nonpersonal_request(monkeypatch):
     assert ai_provider.check_connection()['ok'] is True
 
 
-def test_quota_fallback_preserves_a_useful_answer(setup, caplog):
+def test_quota_fallback_preserves_a_useful_answer(setup, monkeypatch):
     client, db, user, provider = setup
+    warning = Mock()
+    monkeypatch.setattr(provider_logger, 'warning', warning)
     db.add(AssistantConfig(id=1, enabled=True)); db.commit()
     request = httpx.Request('POST', ai_provider.ENDPOINT)
     response = httpx.Response(429, request=request, json={'error': {'code': 'insufficient_quota', 'message': 'private key'}})
@@ -262,8 +264,8 @@ def test_quota_fallback_preserves_a_useful_answer(setup, caplog):
     }).json()
     assert result['status'] == 'completed' and result['answer'].strip()
     assert result['notice'] == 'AI needs administrator attention. Using built-in guidance for now.'
-    assert 'reason=quota' in caplog.text
-    assert 'private' not in json.dumps(result) + caplog.text
+    assert warning.call_args.args[1:] == ('quota', 429, 'insufficient_quota')
+    assert 'private' not in json.dumps(result) + str(warning.call_args)
 
 
 def test_tutorial_completion_is_account_scoped_and_survives_settings_save(setup):

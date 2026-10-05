@@ -62,3 +62,16 @@ def test_reporting_month_migration_backfills_old_transaction_dates():
         assert connection.execute(text('SELECT reporting_month FROM budgets WHERE id = 1')).scalar_one() is None
         assert connection.execute(text('SELECT limit_amount FROM budgets WHERE id = 1')).scalar_one() == 50
     engine.dispose()
+
+
+def test_startup_migrations_keep_application_diagnostics_enabled():
+    import logging
+    logger = logging.getLogger('api.ai_diagnostics')
+    logger.disabled = False
+    engine = create_engine('sqlite://')
+    try:
+        with engine.begin() as connection:
+            apply_migrations(connection, ensure_note_columns)
+        assert logger.disabled is False
+    finally:
+        engine.dispose()

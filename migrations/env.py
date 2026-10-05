@@ -12,7 +12,8 @@ from api import update_push  # noqa: F401
 
 config = context.config
 if config.config_file_name:
-    fileConfig(config.config_file_name)
+    # Startup migrations must not silence application diagnostics.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 target_metadata = Base.metadata
 
 

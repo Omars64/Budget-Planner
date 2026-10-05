@@ -45,7 +45,7 @@ export default function AssistantSettings() {
     {status && <p className="muted">{status.configured ? 'API key is present (the key is checked when a request is sent).' : 'API key not configured.'} Model: <code>{status.model}</code>. {status.available ? 'AI requests are enabled.' : 'Built-in guidance is active.'}</p>}
     {status && !status.model_valid && <p role="alert">Set OPENAI_MODEL to gpt-4o-mini and redeploy. Other models are blocked.</p>}
     <div><button className="button ghost small" disabled={busy || !status?.available} onClick={checkConnection}>{busy ? <LoaderCircle size={16}/> : <PlugZap size={16}/>}Test AI connection</button></div>
-    {diagnostic && <p role="status" className={diagnostic.ok ? 'muted' : 'form-error'}>{diagnostic.message}</p>}
+    {diagnostic && <div role="status" className={diagnostic.ok ? 'muted' : 'form-error'}><p>{diagnostic.message}</p>{diagnostic.http_status && <small>HTTP {diagnostic.http_status}{diagnostic.provider_code && <> · <code>{diagnostic.provider_code}</code></>}</small>}</div>}
     <p className="muted">OpenAI API usage is paid by the organization/project owning the server API key. A ChatGPT subscription does not cover it. Budgetly permits up to 50 AI requests per day across all users and up to 1,800 output tokens per answer.</p>
     <p className="muted">Only administrators can change this setting. Limits or outages fall back to built-in answers. Disabling stops new AI requests; an already-sent request can still finish and incur charges.</p>
     <div className="button-row"><a href="https://platform.openai.com/usage" target="_blank" rel="noreferrer">API usage</a><a href="https://platform.openai.com/settings/organization/billing/overview" target="_blank" rel="noreferrer">Billing</a></div>
