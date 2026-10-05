@@ -68,6 +68,7 @@ export function LoginScreen({ onLogin }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [googleBusy,setGoogleBusy] = useState(false)
+  const [googleActive,setGoogleActive] = useState(false)
   const [retryAfter, setRetryAfter] = useState(0)
 
   useEffect(() => {
@@ -128,6 +129,7 @@ export function LoginScreen({ onLogin }) {
 
       {mode === 'login' && <>
         <h2>Welcome back</h2>
+        {!googleActive && <>
         <p className="auth-intro">Sign in to continue to your finances.</p>
         <div className="segment-control signin-method" aria-label="Sign-in method"><button type="button" disabled={busy||googleBusy} className={signInMethod === 'password' ? 'active' : ''} onClick={() => setSignInMethod('password')}>Password</button><button type="button" disabled={busy || googleBusy || !biometricSupported()} className={signInMethod === 'passkey' ? 'active' : ''} onClick={() => setSignInMethod('passkey')}>Biometric / passkey</button></div>
         {signInMethod === 'passkey' ? <div className="auth-passkey"><p className="auth-intro">Use the passkey saved to your device to sign in securely.</p>{error && <div className="form-error" role="alert">{error}</div>}{authOptions}<button className="button primary" disabled={busy||googleBusy} onClick={passkeyLogin}>{busy ? 'Verifying...' : 'Sign in with passkey'}</button></div> : <form onSubmit={login} className="auth-form">
@@ -137,13 +139,15 @@ export function LoginScreen({ onLogin }) {
           {authOptions}
           <div className="auth-action-row"><button className="button primary" disabled={busy||googleBusy}>{busy ? 'Signing in…' : 'Sign in'}</button></div>
         </form>}
-        <GoogleSignIn onLogin={finishLogin} disabled={busy} onBusyChange={setGoogleBusy}/>
-        <DeviceSignInPreference disabled={busy||googleBusy} onChange={() => { setSignInMethod('password'); setError(''); refreshSignInPreference(v => v + 1) }}/>
+        </>}
+        <GoogleSignIn onLogin={finishLogin} disabled={busy} onBusyChange={setGoogleBusy} onActiveChange={setGoogleActive}/>
+        {!googleActive && <DeviceSignInPreference disabled={busy||googleBusy} onChange={() => { setSignInMethod('password'); setError(''); refreshSignInPreference(v => v + 1) }}/>}
       </>}
 
       {mode === 'signup' && <>
         <h2>Create account</h2>
-        <GoogleSignIn onLogin={finishLogin} disabled={busy} onBusyChange={setGoogleBusy}/>
+        <GoogleSignIn onLogin={finishLogin} disabled={busy} onBusyChange={setGoogleBusy} onActiveChange={setGoogleActive}/>
+        {!googleActive && <>
         <p className="auth-intro">One place for your personal and shared finances.</p>
         <form onSubmit={requestCode} className="auth-form">
           <label className="auth-entry"><span>Username</span><input required autoComplete="name" value={signup.username} onChange={e => setSignup({ ...signup, username: e.target.value })} placeholder="Your name" minLength="2" maxLength="80" /></label>
@@ -152,6 +156,7 @@ export function LoginScreen({ onLogin }) {
           {error && <div className="form-error">{error}</div>}
           <div className="auth-action-row"><button className="button primary" disabled={busy||googleBusy}>{busy ? 'Sending code…' : 'Continue to email verification'}</button></div>
         </form>
+        </>}
       </>}
 
       {mode === 'verify' && <>
@@ -168,8 +173,8 @@ export function LoginScreen({ onLogin }) {
           <button type="button" disabled={busy || retryAfter > 0} onClick={() => requestCode()}><RefreshCw size={14}/>{retryAfter > 0 ? `Resend in ${retryAfter}s` : 'Resend code'}</button>
         </div>
       </>}
-        {mode === 'login' && <div className="auth-footer-action">New to Budgetly? <button className="auth-switch" type="button" onClick={() => { setError(''); setMode('signup') }}>Create an account</button></div>}
-        {mode === 'signup' && <div className="auth-footer-action">Already have an account? <button className="auth-switch" type="button" onClick={() => { setError(''); setMode('login') }}>Sign in</button></div>}
+        {!googleActive && mode === 'login' && <div className="auth-footer-action">New to Budgetly? <button className="auth-switch" type="button" onClick={() => { setError(''); setMode('signup') }}>Create an account</button></div>}
+        {!googleActive && mode === 'signup' && <div className="auth-footer-action">Already have an account? <button className="auth-switch" type="button" onClick={() => { setError(''); setMode('login') }}>Sign in</button></div>}
       </motion.main>
     </div>
     <footer className="auth-footer"><BrandFooter/></footer>
