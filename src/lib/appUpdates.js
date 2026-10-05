@@ -1,5 +1,22 @@
 import { Capacitor, registerPlugin } from '@capacitor/core'
 import { publicApiUrl } from './api'
+import { version } from '../../package.json'
+
+export function newerVersion(candidate, current = version) {
+  if (!/^\d+\.\d+\.\d+$/.test(candidate) || !/^\d+\.\d+\.\d+$/.test(current)) return false
+  const left = candidate.split('.').map(Number), right = current.split('.').map(Number)
+  for (let i = 0; i < 3; i++) { if (left[i] !== right[i]) return left[i] > right[i] }
+  return false
+}
+export async function fetchWebRelease(signal) {
+  const response = await fetch(publicApiUrl('/api/app-updates/web'), { signal, cache: 'no-store', credentials: 'omit' })
+  if (!response.ok) throw new Error('Could not check for updates.')
+  const body = await response.text()
+  if (body.length > 1024) throw new Error('Invalid web update information.')
+  const data = JSON.parse(body)
+  if (!/^\d+\.\d+\.\d+$/.test(data.version)) throw new Error('Invalid web update information.')
+  return { version: data.version }
+}
 
 export const RELEASES_URL = 'https://github.com/Omars64/Budget-Planner/releases'
 export const MANIFEST_URL = publicApiUrl('/api/app-updates/latest')

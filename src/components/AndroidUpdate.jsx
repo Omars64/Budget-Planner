@@ -1,10 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import { Download, RefreshCw, X } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
-import { androidUpdatesAvailable, AppUpdater, fetchRelease } from '../lib/appUpdates'
+import { useNavigate } from 'react-router-dom'
+import { LocalNotifications } from '@capacitor/local-notifications'
+import { androidUpdatesAvailable, AppUpdater, fetchRelease, fetchWebRelease, newerVersion } from '../lib/appUpdates'
+import { notificationSettingsChangedEvent, updateNotificationsEnabled } from '../lib/notificationSettings'
+import { cancelUpdateNotification, notifyAppUpdate } from '../lib/updateNotifications'
+import { syncUpdatePush } from '../lib/updatePush'
 
 export default function AndroidUpdate() {
   const { pathname } = useLocation()
+  const navigate = useNavigate()
+  const [alerts, setAlerts] = useState(updateNotificationsEnabled)
   const [release, setRelease] = useState(null)
   const [status, setStatus] = useState('idle')
   const [message, setMessage] = useState('')
@@ -14,7 +21,8 @@ export default function AndroidUpdate() {
   const busy = useRef(false)
   const checking = useRef(null)
   const lastCheck = useRef(0)
-  const enabled = androidUpdatesAvailable()
+  const native = androidUpdatesAvailable()
+  const enabled = true
   const settings = pathname === '/settings'
 
   async function check(manual = false) {
@@ -24,13 +32,15 @@ export default function AndroidUpdate() {
     const timeout = setTimeout(() => controller.abort(), 15000)
     setStatus('checking'); setMessage('')
     try {
-      const [info, latest] = await Promise.all([AppUpdater.info(), fetchRelease(controller.signal)])
+      const [info, latest] = await Promise.all([native ? AppUpdater.info() : Promise.resolve(null), native ? fetchRelease(controller.signal) : fetchWebRelease(controller.signal)])
       if (!mounted.current || controller.signal.aborted) return
       lastCheck.current = Date.now()
-      setRelease(latest && latest.versionCode > info.versionCode ? latest : null)
+      const available = latest && (native ? latest.versionCode > info.versionCode : newerVersion(latest.version))
+      setRelease(available ? latest : null)
       setDismissed(false)
       setStatus('idle')
-      if (manual && !(latest && latest.versionCode > info.versionCode)) setMessage(latest ? 'You have the latest published version.' : 'No Android release has been published yet.')
+      void syncUpdatePush(updateNotificationsEnabled()).catch(() => {})
+      if (manual && !available) setMessage(latest ? 'You have the latest published version.' : 'No release has been published yet.')
     } catch {
       if (mounted.current) { setStatus('idle'); if (manual) setMessage('Could not check for updates. Try again when connected.') }
     } finally { clearTimeout(timeout); if (checking.current === controller) checking.current = null }
@@ -40,11 +50,13 @@ export default function AndroidUpdate() {
     mounted.current = true
     if (!enabled) return () => { mounted.current = false }
     void check()
+    const timer = setInterval(() => { if (document.visibilityState === 'visible') void check() }, 21600000)
     const resume = () => { if (document.visibilityState === 'visible') void check() }
     window.addEventListener('online', resume)
     document.addEventListener('visibilitychange', resume)
     return () => {
       mounted.current = false; checking.current?.abort(); checking.current = null
+      clearInterval(timer)
       window.removeEventListener('online', resume)
       document.removeEventListener('visibilitychange', resume)
     }
@@ -52,7 +64,28 @@ export default function AndroidUpdate() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled])
 
+  useEffect(() => {
+    const changed = () => { const next = updateNotificationsEnabled(); setAlerts(next); if (!next) void cancelUpdateNotification().catch(() => {}); void syncUpdatePush(next).catch(() => {}) }
+    window.addEventListener(notificationSettingsChangedEvent, changed)
+    window.addEventListener('storage', changed)
+    return () => { window.removeEventListener(notificationSettingsChangedEvent, changed); window.removeEventListener('storage', changed) }
+  }, [])
+  useEffect(() => {
+    if (release && alerts) void notifyAppUpdate(release, () => { setDismissed(false); navigate('/settings') }).catch(() => {})
+  }, [release, alerts, navigate])
+  useEffect(() => {
+    if (!native) return
+    let disposed = false, handle
+    void LocalNotifications.addListener('localNotificationActionPerformed', action => {
+      if (action.notification.extra?.budgetlyUpdate) { setDismissed(false); navigate('/settings'); lastCheck.current = 0; void check(true) }
+    }).then(listener => { if (disposed) void listener.remove(); else handle = listener }).catch(() => {})
+    return () => { disposed = true; void handle?.remove() }
+    // Listener owns the native update notification, not page-specific data.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [native, navigate])
+
   async function update() {
+    if (!native) { window.location.reload(); return }
     if (busy.current) return
     busy.current = true; setMessage(''); setStatus('downloading'); setProgress(0)
     let listener
@@ -72,7 +105,7 @@ export default function AndroidUpdate() {
     if (mounted.current) setMessage(result.permissionRequired ? 'Allow updates from Budgetly in Android settings, then tap Install.' : 'Finish the update in the Android installer.')
   }
 
-  if (!enabled || (!settings && (!release || dismissed))) return null
+  if (!settings && (!alerts || !release || dismissed)) return null
   const downloading = status === 'downloading'
   return <section className="android-update" aria-label="App updates">
     <div><strong>{release ? `Budgetly ${release.version} is available` : 'App updates'}</strong>

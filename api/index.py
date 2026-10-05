@@ -533,6 +533,8 @@ def delete_account(request: Request, user: User = Depends(current_user), db: Ses
     from .google_drive import GoogleDriveConnection, GoogleDriveOAuthAttempt
     for model in (GoogleIdentity, GoogleAuthState, GoogleRevocationCredential, GoogleDriveConnection, GoogleDriveOAuthAttempt):
         db.query(model).filter_by(user_id=user.id).delete(synchronize_session=False)
+    from .update_push import UpdatePushDevice
+    db.query(UpdatePushDevice).filter_by(user_id=user.id).delete()
     db.delete(user); db.commit()
 
 
@@ -625,6 +627,8 @@ def admin_delete_user(user_id: int, admin: User = Depends(admin_user), db: Sessi
     for model in [Transaction, Budget, Goal, Debt, Category, Wallet]:
         db.query(model).filter(model.user_id == user_id).delete()
     db.query(AppSetting).filter(AppSetting.user_id == user_id).delete()
+    from .update_push import UpdatePushDevice
+    db.query(UpdatePushDevice).filter_by(user_id=user_id).delete()
     from .google_auth import GoogleIdentity, GoogleAuthState, GoogleRevocationCredential
     from .google_drive import GoogleDriveConnection, GoogleDriveOAuthAttempt
     for model in (GoogleIdentity, GoogleAuthState, GoogleRevocationCredential, GoogleDriveConnection, GoogleDriveOAuthAttempt):

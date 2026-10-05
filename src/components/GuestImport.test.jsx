@@ -15,6 +15,16 @@ beforeEach(async () => {
 afterEach(cleanup)
 const mount = (onDone, account = user) => render(<MemoryRouter><GuestImport user={account} onDone={onDone}/></MemoryRouter>)
 
+test('damaged pending marker shows recovery error without clearing local records', () => {
+  localStorage.setItem(GUEST_IMPORT_KEY, 'broken')
+  const before = localStorage.getItem(GUEST_KEY)
+  mount(vi.fn())
+  expect(screen.getByRole('alert')).toHaveTextContent('have not been deleted')
+  expect(screen.getByRole('button', {name:'Keep my records'})).toBeDisabled()
+  expect(localStorage.getItem(GUEST_KEY)).toBe(before)
+  expect(api).not.toHaveBeenCalled()
+})
+
 test('no automatic import; declining keeps every local record', () => {
   const done = vi.fn(), before = localStorage.getItem(GUEST_KEY)
   mount(done)

@@ -75,8 +75,8 @@ test('rejects recurring, mismatched categories, missing income month and bad tra
 })
 test('failed storage writes and corrupt storage preserve the prior records', async () => {
   readGuest(); const before = localStorage.getItem(GUEST_KEY)
-  const original = Storage.prototype.setItem
-  vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function(key, value) { if (key === GUEST_KEY) throw new Error('Quota'); return original.call(this, key, value) })
+  const original = window.Storage.prototype.setItem
+  vi.spyOn(window.Storage.prototype, 'setItem').mockImplementation(function(key, value) { if (key === GUEST_KEY) throw new Error('Quota'); return original.call(this, key, value) })
   await expect(write('/api/transactions', expense())).rejects.toMatchObject({ status: 507 })
   expect(localStorage.getItem(GUEST_KEY)).toBe(before)
   vi.restoreAllMocks(); localStorage.setItem(GUEST_KEY, 'corrupt')

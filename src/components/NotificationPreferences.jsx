@@ -4,7 +4,10 @@ import {testNotification,isNativeApp} from '../lib/deviceNotifications'
 import {useApp} from '../App'
 import { TimeField } from './DateTimeField'
 
-export default function NotificationPreferences({form,setForm}){
+export default function NotificationPreferences({form,setForm}) {
+  return <><label className="check-row"><input type="checkbox" checked={form.update_notifications_enabled !== false} onChange={event => setForm({...form, update_notifications_enabled:event.target.checked})}/><span>New Budgetly updates</span></label><ReminderPreferences form={form} setForm={setForm}/></>
+}
+function ReminderPreferences({form,setForm}){
   const {notify}=useApp()
   const [busy,setBusy]=useState(false)
   const [permission,setPermission]=useState(()=>isNativeApp()?'Check with test notification':('Notification' in window?window.Notification.permission:'unsupported'))

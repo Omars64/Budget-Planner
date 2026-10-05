@@ -33,6 +33,7 @@ import GoogleSignIn from './components/GoogleSignIn'
 import { cancelReminder } from './lib/deviceNotifications'
 import { BankSms, smsAvailable } from './lib/bankSms'
 import { readDeviceAppearance, useAppearance } from './lib/appearance'
+import AndroidUpdate from './components/AndroidUpdate'
 import FeedbackPrompt from './components/FeedbackPrompt'
 import { syncPlannedNotifications, cancelPlannedNotifications } from './lib/plannedNotifications'
 import { notificationSettingsChangedEvent } from './lib/notificationSettings'
@@ -347,7 +348,7 @@ export default function App() {
   }), [session.user, settings, appearance, refreshKey, refresh, notify, confirm, loadSettings, loadAppearance, reloadUser, signOut, isGuest, requestSignIn])
 
   if (session.loading) return <div className="app-loading"><BrandLogo className="pulse" /></div>
-  if (!session.user || guestSigningIn) return <LoginScreen onLogin={completeLogin} onGuest={enterGuest} returningGuest={isGuest}/>
+  if (!session.user || guestSigningIn) return <><LoginScreen onLogin={completeLogin} onGuest={enterGuest} returningGuest={isGuest}/><AndroidUpdate/></>
 
   return <AppContext.Provider value={value}>
     {!isGuest && <Experience />}

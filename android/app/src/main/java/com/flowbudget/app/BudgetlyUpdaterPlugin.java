@@ -36,12 +36,21 @@ public class BudgetlyUpdaterPlugin extends Plugin {
     private volatile long verifiedVersion;
 
     @PluginMethod
+    public void setPushAlerts(PluginCall call) {
+        boolean enabled = Boolean.TRUE.equals(call.getBoolean("enabled", false));
+        getContext().getSharedPreferences("budgetly-update-push", 0).edit().putBoolean("enabled", enabled).commit();
+        if (!enabled) ((android.app.NotificationManager)getContext().getSystemService(android.content.Context.NOTIFICATION_SERVICE)).cancel(1500);
+        call.resolve();
+    }
+
+    @PluginMethod
     public void info(PluginCall call) {
         try {
             PackageInfo current = getContext().getPackageManager().getPackageInfo(getContext().getPackageName(), 0);
             JSObject result = new JSObject();
             result.put("version", current.versionName);
             result.put("versionCode", versionCode(current));
+            result.put("pushConfigured", !com.google.firebase.FirebaseApp.getApps(getContext()).isEmpty());
             call.resolve(result);
         } catch (Exception error) { call.reject("Could not read the installed app version."); }
     }

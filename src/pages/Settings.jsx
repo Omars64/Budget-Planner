@@ -1,5 +1,7 @@
 import SettingsSection from '../components/SettingsSection'
 import NotificationPreferences from '../components/NotificationPreferences'
+import { requestUpdatePermission } from '../components/UpdateNotificationPreference'
+import { syncUpdatePush } from '../lib/updatePush'
 import AccountSecurity from '../components/AccountSecurity'
 import GoogleDriveBackup from '../components/GoogleDriveBackup'
 import GuestRecords from '../components/GuestRecords'
@@ -69,7 +71,18 @@ export default function Settings(){
   useEffect(()=>{api('/api/categories').then(setCats)},[])
   useEffect(()=>{api('/api/backup/statement/wallets').then(setStatementWallets).catch(()=>{})},[])
   const save=async e=>{e.preventDefault();try{const updated=await api('/api/settings',{method:'PUT',...jsonBody(stripNotificationSettings(form))});setSettings({...settings,...updated});notify('Settings saved')}catch(err){notify(err.message,'error')}}
-  const saveNotifications=async e=>{e.preventDefault();try{const next=saveNotificationSettings(notificationForm,user?.id);if(isNativeApp()){if(next.upcoming_reminders_enabled)await LocalNotifications.requestPermissions();await configureReminder(next)}if(!isNativeApp()&&(next.reminders_enabled||next.upcoming_reminders_enabled)&&'Notification' in window&&window.Notification.permission==='default'){const permission=await window.Notification.requestPermission();notify(permission==='granted'?'Browser notification settings saved. Reminders work while Budgetly is open.':'Settings saved. Browser notification permission is blocked.')}else notify(`${isNativeApp()?'Android':'Browser'} notification settings saved`)}catch(err){notify(err.message,'error')}}
+  const saveNotifications=async e=>{
+    e.preventDefault()
+    try {
+      const enabled=notificationForm.update_notifications_enabled !== false
+      const wantsPermission=enabled||notificationForm.reminders_enabled||notificationForm.upcoming_reminders_enabled
+      const granted=wantsPermission ? await requestUpdatePermission() : false
+      const next=saveNotificationSettings(notificationForm,user?.id)
+      if(isNativeApp()){if(next.upcoming_reminders_enabled)await LocalNotifications.requestPermissions();await configureReminder(next)}
+      const push = await syncUpdatePush(enabled)
+      notify(wantsPermission&&!granted?'Preferences saved. Allow device notifications for system alerts.':push.configured===false?'Preferences saved. Closed-app updates await administrator push setup; open-app checks are active.':'Notification preferences saved')
+    }catch(err){notify(err.message,'error')}
+  }
   const deleteAccount=async()=>{if(!await confirm('Permanently delete your account and all private data? This cannot be undone.'))return;try{await api('/api/account',{method:'DELETE'});lock()}catch(err){notify(err.message,'error')}}
   const saveCat=async e=>{e.preventDefault();try{await api(editingCat?`/api/categories/${editingCat.id}`:'/api/categories',{method:editingCat?'PUT':'POST',...jsonBody(cat)});setCats(await api('/api/categories'));setCatOpen(false);setEditingCat(null);setCat({name:'',kind:'expense',icon:'circle',color:'#0a4173'});refresh();notify(editingCat?'Category updated':'Category added')}catch(err){notify(err.message,'error')}}
   const editCat=c=>{setEditingCat(c);setCat({name:c.name,kind:c.kind,icon:c.icon||'circle',color:c.color||'#0a4173'});setCatOpen(true)}

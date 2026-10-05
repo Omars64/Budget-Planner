@@ -16,7 +16,9 @@ def test_native_app_has_no_sms_capture_or_cross_app_services():
     }
     receivers = manifest.findall('.//receiver')
     assert [receiver.get(ANDROID + 'name') for receiver in receivers] == ['.BudgetlyReminderReceiver']
-    assert not manifest.findall('.//service')
+    services = [service for service in manifest.findall('.//service') if service.get('{http://schemas.android.com/tools}node') != 'remove']
+    assert [service.get(ANDROID + 'name') for service in services] == ['.BudgetlyUpdateMessagingService']
+    assert all(service.get(ANDROID + 'exported') == 'false' for service in services)
     source = ROOT / 'android/app/src/main/java/com/flowbudget/app'
     assert not (source / 'BankSmsReceiver.java').exists()
     plugin = (source / 'BankSmsPlugin.java').read_text()

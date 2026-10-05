@@ -1,8 +1,17 @@
 import { Capacitor } from '@capacitor/core'
 
 export const notificationSettingsChangedEvent = 'budgetly:notification-settings-changed'
+const updatePreferenceKey = 'budgetly-update-notifications-v1'
+export function updateNotificationsEnabled() {
+  try { return localStorage.getItem(updatePreferenceKey) !== 'false' } catch { return true }
+}
+export function saveUpdateNotifications(enabled) {
+  localStorage.setItem(updatePreferenceKey, String(Boolean(enabled)))
+  window.dispatchEvent(new Event(notificationSettingsChangedEvent))
+}
 
 export const notificationSettingKeys = [
+  'update_notifications_enabled',
   'reminders_enabled',
   'reminder_interval_hours',
   'reminder_time',
@@ -35,6 +44,7 @@ const normalize = (source = {}) => {
     ? source.reminder_time
     : '20:00'
   return {
+    update_notifications_enabled: updateNotificationsEnabled(),
     reminders_enabled: Boolean(source.reminders_enabled),
     reminder_interval_hours: allowedIntervals.includes(interval) ? interval : 4,
     reminder_time: time,
@@ -64,6 +74,7 @@ export function readNotificationSettings(source, userId) {
 }
 
 export function saveNotificationSettings(source, userId) {
+  saveUpdateNotifications(source.update_notifications_enabled !== false)
   const next = normalize(source)
   if (userId && typeof window !== 'undefined') {
     try {

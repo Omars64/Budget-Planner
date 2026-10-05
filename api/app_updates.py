@@ -7,8 +7,15 @@ from urllib.parse import urljoin, urlsplit
 
 import httpx
 from fastapi import APIRouter, HTTPException, Response
+from ._version import VERSION
 
 router = APIRouter()
+
+
+@router.get('/api/app-updates/web')
+def web_release(response: Response):
+    response.headers['Cache-Control'] = 'no-store'
+    return {'version': VERSION}
 MANIFEST_URL = 'https://github.com/Omars64/Budget-Planner/releases/latest/download/update.json'
 ALLOWED_HOSTS = {'github.com', 'release-assets.githubusercontent.com', 'objects.githubusercontent.com'}
 _cache = {'until': 0, 'release': None}

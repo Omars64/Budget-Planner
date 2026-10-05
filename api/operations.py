@@ -90,7 +90,21 @@ def maintenance(request:Request,db=Depends(get_db)):
     cron_auth(request)
     from .planned import post_due
     posted = post_due(db)
-    return {**daily_snapshots(db), 'scheduled_transactions_posted': posted}
+    result = {**daily_snapshots(db), 'scheduled_transactions_posted': posted}
+    from .update_push import dispatch_updates
+    try:
+        result['update_push'] = dispatch_updates(db)
+    except Exception:
+        db.rollback()
+        result['update_push'] = {'error': 'Update delivery failed; core maintenance completed.'}
+    return result
+
+
+@router.post('/api/maintenance/updates')
+def push_updates_now(request: Request, db=Depends(get_db)):
+    cron_auth(request)
+    from .update_push import dispatch_updates
+    return dispatch_updates(db)
 
 
 @router.post('/api/admin/operations/backup')

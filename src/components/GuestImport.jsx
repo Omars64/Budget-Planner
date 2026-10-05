@@ -7,14 +7,19 @@ import Modal from './Modal'
 
 export default function GuestImport({ user, onDone }) {
   const navigate = useNavigate()
-  const [snapshot, setSnapshot] = useState(() => {
-    const pending = JSON.parse(localStorage.getItem(GUEST_IMPORT_KEY) || 'null')
-    return pending?.snapshot || guestImportSnapshot()
+  const [initial] = useState(() => {
+    try {
+      const pending = JSON.parse(localStorage.getItem(GUEST_IMPORT_KEY) || 'null')
+      const snapshot = pending?.snapshot || guestImportSnapshot()
+      if (!['transactions', 'wallets', 'budgets'].every(key => Array.isArray(snapshot[key]))) throw new Error()
+      return { snapshot, error: '' }
+    } catch { return { snapshot: null, error: 'The saved guest import could not be read. Your local records have not been deleted. Export your local copy and contact support.' } }
   })
+  const [snapshot, setSnapshot] = useState(initial.snapshot)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState(initial.error)
   const submit = async () => {
-    if (busy) return
+    if (busy || !snapshot) return
     setBusy(true); setError('')
     try {
       const frozen = await beginGuestImport(user.id)
@@ -34,9 +39,9 @@ export default function GuestImport({ user, onDone }) {
     finally { setBusy(false) }
   }
   return <Modal open onClose={() => !busy && onDone()} title="Keep your guest records?" size="small">
-    <p>Add {snapshot.transactions.length} transactions, {snapshot.wallets.length} wallets and {snapshot.budgets.length} budgets to <strong>{user.username}</strong> ({user.email}). Existing account records will not be replaced.</p>
-    <p className="muted">Guest currency: {snapshot.currency}. No automatic currency conversion.</p>
+    {snapshot && <><p>Add {snapshot.transactions.length} transactions, {snapshot.wallets.length} wallets and {snapshot.budgets.length} budgets to <strong>{user.username}</strong> ({user.email}). Existing account records will not be replaced.</p>
+    <p className="muted">Guest currency: {snapshot.currency}. No automatic currency conversion.</p></>}
     {error && <p role="alert" className="form-error">{error}</p>}
-    <div className="modal-actions"><button className="button ghost" disabled={busy} onClick={() => onDone()}>Keep on device for now</button><button className="button primary" disabled={busy} onClick={submit}>{busy ? 'Importing...' : 'Keep my records'}</button></div>
+    <div className="modal-actions"><button className="button ghost" disabled={busy} onClick={() => onDone()}>Keep on device for now</button><button className="button primary" disabled={busy || !snapshot} onClick={submit}>{busy ? 'Importing...' : 'Keep my records'}</button></div>
   </Modal>
 }

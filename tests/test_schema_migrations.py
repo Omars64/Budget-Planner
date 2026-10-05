@@ -9,7 +9,7 @@ from api.database import Base
 from api.index import ensure_note_columns
 from api.schema_migrations import apply_migrations
 
-LATEST_REVISION = 'd81b530e97ac'
+LATEST_REVISION = 'f31b248da902'
 
 
 def test_new_and_existing_schemas_reach_baseline_without_losing_rows():
@@ -19,6 +19,7 @@ def test_new_and_existing_schemas_reach_baseline_without_losing_rows():
         assert 'transactions' in inspect(connection).get_table_names()
         assert 'planned_transactions' in inspect(connection).get_table_names()
         assert 'google_revocation_credentials' in inspect(connection).get_table_names()
+        assert 'update_push_devices' in inspect(connection).get_table_names()
         assert 'reporting_month' in {column['name'] for column in inspect(connection).get_columns('transactions')}
         assert 'card_network' in {column['name'] for column in inspect(connection).get_columns('wallets')}
         assert 'wallet_balance_checks' in inspect(connection).get_table_names()
