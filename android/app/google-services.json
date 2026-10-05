@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "547268207235",
+    "project_id": "thermal-pattern-510706-g0",
+    "storage_bucket": "thermal-pattern-510706-g0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:547268207235:android:9ba22413e9d1997a5c71b6",
+        "android_client_info": {
+          "package_name": "com.flowbudget.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "547268207235-f6rjv9e9fchrfgbr2iohtup714g7u2ap.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCwmqVZ5pAVsf4OtYgskOeiMAKbOTzfLGo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "547268207235-f6rjv9e9fchrfgbr2iohtup714g7u2ap.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

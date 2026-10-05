@@ -8,7 +8,7 @@ import { notificationSettingsChangedEvent, updateNotificationsEnabled } from '..
 import { cancelUpdateNotification, notifyAppUpdate } from '../lib/updateNotifications'
 import { syncUpdatePush } from '../lib/updatePush'
 
-export default function AndroidUpdate() {
+export default function AndroidUpdate({ authentication = false }) {
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const [alerts, setAlerts] = useState(updateNotificationsEnabled)
@@ -23,7 +23,7 @@ export default function AndroidUpdate() {
   const lastCheck = useRef(0)
   const native = androidUpdatesAvailable()
   const enabled = true
-  const settings = pathname === '/settings'
+  const settings = !authentication && pathname === '/settings'
 
   async function check(manual = false) {
     if (!enabled || busy.current || checking.current || (!manual && Date.now() - lastCheck.current < 21600000)) return

@@ -29,6 +29,25 @@ def test_passwords_are_stored_as_one_way_hashes():
     assert not verify_password('wrong-password', stored)
 
 
+def test_weekly_summary_uses_actual_dates_not_reporting_month_and_excludes_opening(monkeypatch):
+    from datetime import date
+    import api.index as backend
+    monkeypatch.setattr(backend, 'ledger_today', lambda: date(2026, 10, 5))
+    with TestClient(app) as client:
+        headers = auth_headers(client)
+        wallet = client.post('/api/wallets', headers=headers, json={'name': 'Weekly summary', 'type': 'cash', 'initial_balance': 999}).json()
+        before = client.get('/api/dashboard', headers=headers).json()['weekly']
+        for day, kind, amount in [('2026-09-29','expense',12), ('2026-09-28','expense',8), ('2026-10-05','income',50), ('2026-10-06','expense',999)]:
+            response = client.post('/api/transactions', headers=headers, json={'wallet_id':wallet['id'], 'type':kind, 'amount':amount, 'description':'Weekly test', 'date':f'{day}T12:00:00', 'reporting_month':'2026-11'})
+            assert response.status_code == 201, response.text
+        value = client.get('/api/dashboard?month=2026-11', headers=headers).json()['weekly']
+        assert value['start'] == '2026-09-29' and value['end'] == '2026-10-05'
+        assert value['income'] - before['income'] == 50
+        assert value['expense'] - before['expense'] == 12
+        assert value['previous_expense'] - before['previous_expense'] == 8
+        assert value['count'] - before['count'] == 2
+
+
 def test_budget_can_target_a_month_and_keeps_existing_repeat_mode():
     with TestClient(app) as client:
         headers = auth_headers(client)

@@ -10,6 +10,9 @@ import LedgerRow, { TransactionDetails } from '../components/LedgerRow'
 import { useViewState } from '../lib/viewState'
 import AnimatedMoney from '../components/AnimatedMoney'
 import { useWorkspacePreferences } from '../lib/workspacePreferences'
+import { frequentPages } from '../lib/pageUsage'
+import { guestRoutes } from '../lib/guest'
+import WeeklySummary from '../components/WeeklySummary'
 
 export default function Overview() {
   const { user, settings, refreshKey, isGuest } = useApp()
@@ -41,11 +44,13 @@ export default function Overview() {
     </section>
     {error && <div className="form-error" role="alert">{error}<button className="button ghost small" onClick={()=>setRetry(v=>v+1)}>Retry</button>{data && <small>Showing the last loaded summary for {data.month}.</small>}</div>}
     {data && <div aria-busy={data.month !== month} className={data.month !== month ? 'overview-loading' : ''}>
-      <section className="overview-metrics" aria-label="Selected month summary">
+      {preferences.personalizedShortcuts !== false && <details className="overview-disclosure"><summary>Your shortcuts</summary><nav className="overview-shortcuts" aria-label="Your shortcuts">{frequentPages(user?.id,isGuest ? guestRoutes : null).map(([path,label]) => <Link key={path} to={path}>{label}<ArrowRight size={16}/></Link>)}</nav></details>}
+      <section key={data.month} className="overview-metrics month-reveal" aria-label="Selected month summary">
         <Link to="/transactions" state={{aiFilters:{month:data.month,type:'income'}}}><span>Money in</span><strong className="tx-amount income">{fmt(data.income)}</strong>{data.opening_funds > 0 && <small>{fmt(data.earned_income)} income + {fmt(data.opening_funds)} starting funds</small>}</Link>
         <Link to="/transactions" state={{aiFilters:{month:displayedMonth,type:'expense',exclude_opening:true}}}><span>Spent</span><strong className="tx-amount expense">{fmt(data.expense)}</strong></Link>
         <Link to="/transactions" state={filteredLink}><span>Money in minus out</span><strong>{fmt(data.net)}</strong><small>After spending{data.opening_debt > 0 ? ' and starting debt' : ''}. Transfers are separate.</small></Link>
       </section>
+      {preferences.weeklySummary !== false && data.weekly && <WeeklySummary value={data.weekly} fmt={fmt}/>}
       {!isGuest && <Link className="overview-attention-link" to="/attention">{attention === null ? 'Review reminders' : attention === 0 ? 'All caught up' : `${attention} ${attention === 1 ? 'item needs' : 'items need'} attention`} <ArrowRight size={16}/></Link>}
       {data.shared?.wallet_count > 0 && <section className="overview-shared" aria-label="Shared wallets summary"><div><span>Shared balance</span><strong>{fmt(data.shared.balance)}</strong><small>{data.shared.wallet_count} shared wallets, separate from personal</small></div><Link to="/shared-transactions">View shared <ArrowRight size={16}/></Link></section>}
       <section className="overview-wallets" aria-label="Personal wallets">

@@ -1,4 +1,5 @@
 import { dateInput } from './time'
+import { weeklySummary } from './weeklySummary'
 
 export const GUEST_KEY = 'budgetly_guest_workspace_v1'
 export const GUEST_IMPORT_KEY = 'budgetly_guest_import_pending_v1'
@@ -121,7 +122,7 @@ async function handle(path, options) {
   else if (route === '/api/dashboard' && method === 'GET') {
     const month = params.get('month') || monthNow(), rows = transactions(data).filter(t => t.reporting_month === month)
     const income = sum(rows.filter(t => t.type === 'income')), opening = sum(rows.filter(t => t.type === 'income' && t.is_opening_balance)), debt = sum(rows.filter(t => t.type === 'expense' && t.is_opening_balance)), expense = sum(rows.filter(t => t.type === 'expense' && !t.is_opening_balance))
-    return { month, total_balance: round(wallets(data).filter(w => !w.archived).reduce((v, w) => v + w.balance, 0)), income, expense, net: round(income - expense - debt), earned_income: round(income - opening), opening_funds: opening, opening_debt: debt, wallets: wallets(data).filter(w => !w.archived), shared: { balance: 0, wallet_count: 0 }, cashflow: [], category_spending: categoryTotals(rows, data), recent_transactions: rows.slice(0, 5), budgets: budgetRows(data, month, true) }
+    return { month, weekly: weeklySummary(transactions(data)), total_balance: round(wallets(data).filter(w => !w.archived).reduce((v, w) => v + w.balance, 0)), income, expense, net: round(income - expense - debt), earned_income: round(income - opening), opening_funds: opening, opening_debt: debt, wallets: wallets(data).filter(w => !w.archived), shared: { balance: 0, wallet_count: 0 }, cashflow: [], category_spending: categoryTotals(rows, data), recent_transactions: rows.slice(0, 5), budgets: budgetRows(data, month, true) }
   } else if (route === '/api/analytics' && method === 'GET') {
     const now = new Date(dateInput()), all = transactions(data), trend = []
     for (let offset = 5; offset >= 0; offset--) {

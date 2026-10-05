@@ -32,6 +32,7 @@ import './workspace-polish.css'
 import './google.css'
 import './app-updates.css'
 import './guest.css'
+import './ux-refinements.css'
 
 applyAppearance(readDeviceAppearance())
 

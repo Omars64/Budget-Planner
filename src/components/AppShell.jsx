@@ -19,6 +19,7 @@ import { useWorkspacePreferences } from '../lib/workspacePreferences'
 import useKeyboardViewport from '../lib/useKeyboardViewport'
 import { LockKeyhole } from 'lucide-react'
 import { guestRoutes } from '../lib/guest'
+import { recordPageVisit } from '../lib/pageUsage'
 
 const nav = [
   ['/', 'Overview', LayoutDashboard, 'Money'],
@@ -78,6 +79,13 @@ export default function AppShell({ children }) {
   const [preferences] = useWorkspacePreferences(user?.id)
   const keyboardOpen = useKeyboardViewport()
   const location = useLocation()
+  const lastVisit = useRef('')
+  useEffect(() => {
+    const visit = `${user?.id}:${location.pathname}`
+    if (lastVisit.current === visit || !preferences.personalizedShortcuts) return
+    lastVisit.current = visit
+    recordPageVisit(user?.id, location.pathname)
+  }, [user?.id, location.pathname, preferences.personalizedShortcuts])
   const visibleNav = user?.role === 'admin' ? [...nav, ['/admin', 'Admin', ShieldCheck, 'Account']] : nav
   const orderedNav = [...visibleNav].sort((a,b) => { const ia=preferences.navOrder.indexOf(a[0]), ib=preferences.navOrder.indexOf(b[0]); return ia < 0 || ib < 0 ? 0 : ia-ib })
   const matchingNav = orderedNav.filter(([, label]) => label.toLowerCase().includes(navSearch.trim().toLowerCase()))
@@ -125,7 +133,7 @@ export default function AppShell({ children }) {
       </header>
       <AndroidUpdate/>
       {isGuest && <div className="guest-banner"><span>Guest mode · On this device</span><button className="button ghost small" onClick={() => requestSignIn('cloud storage and more features')}>Sign in</button></div>}
-      <motion.div className="page-wrap" data-tour-page={location.pathname} key={location.pathname} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: .16 }}>{children}</motion.div>
+      <motion.div className="page-wrap" data-tour-page={location.pathname} key={location.pathname} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .18, ease: 'easeOut' }}>{children}</motion.div>
       <BrandFooter className="app-footer"/>
     </main>
     {isLedger && nativeAndroid && <button data-tour="add-transaction" className="transaction-fab" aria-label="Add transaction" title="Add transaction" onClick={addTransaction}><Plus size={28}/></button>}

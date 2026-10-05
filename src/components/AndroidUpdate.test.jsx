@@ -58,3 +58,11 @@ test('disabled alerts hide the automatic notice but retain manual Settings updat
   cleanup(); view('/settings')
   await screen.findByRole('button',{name:'Update'})
 })
+
+test('authentication does not inherit the Settings manual update panel', async () => {
+  mock.fetch.mockResolvedValue({...release,versionCode:43})
+  render(<MemoryRouter initialEntries={['/settings']}><AndroidUpdate authentication/></MemoryRouter>)
+  await waitFor(()=>expect(mock.fetch).toHaveBeenCalled())
+  expect(screen.queryByRole('region',{name:'App updates'})).not.toBeInTheDocument()
+  expect(screen.queryByRole('button',{name:'Check updates'})).not.toBeInTheDocument()
+})

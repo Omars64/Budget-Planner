@@ -138,11 +138,21 @@ export function LoginScreen({ onLogin, onGuest, returningGuest = false }) {
       <motion.main key={mode} className="auth-main" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{duration:.38,ease:[.22,1,.36,1]}}>
       {mode === 'reset' && <PasswordRecovery onBack={()=>setMode('login')}/>}
 
-      {mode === 'login' && <>
+      {!googleActive && ['login','signup'].includes(mode) && <div className="segment-control signin-method" role="group" aria-label="Sign-in method">
+        <button type="button" aria-pressed={signInMethod === 'password'} disabled={busy || googleBusy || enteringGuest} className={signInMethod === 'password' ? 'active' : ''} onClick={() => { setSignInMethod('password'); setError('') }}>Password</button>
+        <button type="button" aria-pressed={signInMethod === 'passkey'} disabled={busy || googleBusy || enteringGuest || !biometricSupported()} className={signInMethod === 'passkey' ? 'active' : ''} onClick={() => { setSignInMethod('passkey'); setMode('login'); setError('') }}>Passkey</button>
+        {onGuest && <button type="button" aria-pressed={signInMethod === 'guest'} disabled={busy || googleBusy || enteringGuest} className={signInMethod === 'guest' ? 'active' : ''} onClick={() => { setSignInMethod('guest'); setError('') }}>Guest</button>}
+      </div>}
+      {signInMethod === 'guest' && ['login','signup'].includes(mode) && <section className="auth-guest" aria-label="Guest access">
+        <h2>{returningGuest ? 'Your guest workspace' : 'Try Budgetly'}</h2>
+        <p className="auth-intro">Guest records stay on this device. Clearing storage or uninstalling can remove them.</p>
+        {error && <div className="form-error" role="alert">{error}</div>}
+        <button type="button" className="button primary" disabled={enteringGuest} onClick={() => setEnteringGuest(true)}>{enteringGuest ? 'Opening...' : 'Continue'}</button>
+      </section>}
+      {mode === 'login' && signInMethod !== 'guest' && <>
         <h2>Welcome back</h2>
         {!googleActive && <>
         <p className="auth-intro">Sign in to continue to your finances.</p>
-        <div className="segment-control signin-method" aria-label="Sign-in method"><button type="button" disabled={busy||googleBusy} className={signInMethod === 'password' ? 'active' : ''} onClick={() => setSignInMethod('password')}>Password</button><button type="button" disabled={busy || googleBusy || !biometricSupported()} className={signInMethod === 'passkey' ? 'active' : ''} onClick={() => setSignInMethod('passkey')}>Biometric / passkey</button></div>
         {signInMethod === 'passkey' ? <div className="auth-passkey"><p className="auth-intro">Use the passkey saved to your device to sign in securely.</p>{error && <div className="form-error" role="alert">{error}</div>}{authOptions}<button className="button primary" disabled={busy||googleBusy} onClick={passkeyLogin}>{busy ? 'Verifying...' : 'Sign in with passkey'}</button></div> : <form onSubmit={login} className="auth-form">
           <label className="auth-entry"><span>Email</span><input required type="email" autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email address" /></label>
           <div className="auth-entry"><label htmlFor="login-password">Password</label><PasswordInput id="login-password" required minLength="8" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" /></div>
@@ -155,7 +165,7 @@ export function LoginScreen({ onLogin, onGuest, returningGuest = false }) {
         {!googleActive && <DeviceSignInPreference disabled={busy||googleBusy} onChange={() => { setSignInMethod('password'); setError(''); refreshSignInPreference(v => v + 1) }}/>}
       </>}
 
-      {mode === 'signup' && <>
+      {mode === 'signup' && signInMethod !== 'guest' && <>
         <h2>Create account</h2>
         <GoogleSignIn onLogin={finishLogin} disabled={busy} onBusyChange={setGoogleBusy} onActiveChange={setGoogleActive}/>
         {!googleActive && <>
@@ -184,9 +194,8 @@ export function LoginScreen({ onLogin, onGuest, returningGuest = false }) {
           <button type="button" disabled={busy || retryAfter > 0} onClick={() => requestCode()}><RefreshCw size={14}/>{retryAfter > 0 ? `Resend in ${retryAfter}s` : 'Resend code'}</button>
         </div>
       </>}
-        {!googleActive && mode === 'login' && <div className="auth-footer-action">New to Budgetly? <button className="auth-switch" type="button" onClick={() => { setError(''); setMode('signup') }}>Create an account</button></div>}
-        {!googleActive && mode === 'signup' && <div className="auth-footer-action">Already have an account? <button className="auth-switch" type="button" onClick={() => { setError(''); setMode('login') }}>Sign in</button></div>}
-        {onGuest && !googleActive && ['login','signup'].includes(mode) && <div className="guest-entry"><button type="button" className="button ghost" disabled={busy || googleBusy || enteringGuest} onClick={() => setEnteringGuest(true)}>{returningGuest ? 'Back to guest workspace' : 'Continue without an account'}</button><small>Guest records stay on this device. Clearing storage or uninstalling can remove them.</small></div>}
+        {!googleActive && signInMethod !== 'guest' && mode === 'login' && <div className="auth-footer-action">New to Budgetly? <button className="auth-switch" type="button" onClick={() => { setError(''); setMode('signup'); setSignInMethod('password') }}>Create an account</button></div>}
+        {!googleActive && signInMethod !== 'guest' && mode === 'signup' && <div className="auth-footer-action">Already have an account? <button className="auth-switch" type="button" onClick={() => { setError(''); setMode('login'); setSignInMethod('password') }}>Sign in</button></div>}
       </motion.main>
     </div>
     <footer className="auth-footer"><BrandFooter/></footer>
@@ -348,7 +357,7 @@ export default function App() {
   }), [session.user, settings, appearance, refreshKey, refresh, notify, confirm, loadSettings, loadAppearance, reloadUser, signOut, isGuest, requestSignIn])
 
   if (session.loading) return <div className="app-loading"><BrandLogo className="pulse" /></div>
-  if (!session.user || guestSigningIn) return <><LoginScreen onLogin={completeLogin} onGuest={enterGuest} returningGuest={isGuest}/><AndroidUpdate/></>
+  if (!session.user || guestSigningIn) return <><LoginScreen onLogin={completeLogin} onGuest={enterGuest} returningGuest={isGuest}/><AndroidUpdate authentication/></>
 
   return <AppContext.Provider value={value}>
     {!isGuest && <Experience />}

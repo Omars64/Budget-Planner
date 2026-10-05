@@ -1,0 +1,22 @@
+.expanded-auth .signin-method { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-bottom:20px; }
+.expanded-auth .signin-method button { width:100%; min-width:0; font-size:14px; }
+.auth-guest { display:grid; gap:8px; }
+.auth-guest .button { width:100%; }
+.auth-guest .auth-intro { margin-bottom:16px; }
+.overview-shortcuts { display:flex; flex-wrap:wrap; gap:12px 24px; padding:16px 0; }
+.overview-shortcuts a,.weekly-action { display:flex; align-items:center; gap:10px; min-height:44px; }
+.weekly-totals { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; padding:16px 0 0; }
+.weekly-totals a { display:grid; gap:6px; min-width:0; }
+.weekly-totals strong { font-size:20px; overflow-wrap:anywhere; }
+.month-reveal { animation:budgetly-month-reveal .22s ease-out both; }
+@keyframes budgetly-month-reveal { from { opacity:.45; transform:translateY(4px); } to { opacity:1; transform:none; } }
+.milestone-toast { animation:budgetly-month-reveal .22s ease-out both; }
+.sync-complete { color:var(--accent-text); }
+@media (max-width:820px) {
+  .auth-copy { display:none; }
+  .expanded-auth .auth-layout { padding:24px 0; gap:0; align-content:center; }
+  .expanded-auth .auth-main h2 { font-size:24px; }
+  .expanded-auth .auth-intro { margin-bottom:18px; }
+  .expanded-auth .auth-footer-action { margin-top:22px; }
+}
+@media (prefers-reduced-motion:reduce) { .month-reveal,.milestone-toast { animation:none; } }

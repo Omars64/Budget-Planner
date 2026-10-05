@@ -1078,7 +1078,19 @@ def dashboard(month: Optional[str] = None, user: User = Depends(current_user), d
             continue
         spent = budget_spent(db, b, as_of=as_of, personal_only=True)
         bdata.append({"id": b.id, "name": b.name, "period": b.period, "reporting_month": b.reporting_month, "records_month": report_month if b.period == "monthly" else None, "records_scope": "personal", "spent": spent, "limit_amount": float(b.limit_amount), "progress": round(spent / float(b.limit_amount) * 100, 1), "category_id": b.category_id, "records_from": budget_period_start(db, b, as_of).isoformat() + 'T00:00:00', "records_to": as_of.isoformat() + 'T23:59:59.999999'})
+    weekly_start = today - timedelta(days=6)
+    previous_start = today - timedelta(days=13)
+    weekly_rows = personal.filter(Transaction.date >= datetime.combine(previous_start, datetime.min.time()), Transaction.date < datetime.combine(today + timedelta(days=1), datetime.min.time()), Transaction.is_opening_balance.is_(False)).all()
+    current_week = [row for row in weekly_rows if row.date.date() >= weekly_start]
+    previous_week = [row for row in weekly_rows if row.date.date() < weekly_start]
+    week_categories = {}
+    for row in current_week:
+        if row.type == 'expense':
+            item = week_categories.setdefault(row.category_id or 0, {"id": row.category_id or 0, "name": row.category.name if row.category else "Uncategorized", "amount": 0})
+            item['amount'] += float(row.amount)
+    weekly = {"start": weekly_start.isoformat(), "end": today.isoformat(), "income": round(sum(float(row.amount) for row in current_week if row.type == 'income'), 3), "expense": round(sum(float(row.amount) for row in current_week if row.type == 'expense'), 3), "previous_expense": round(sum(float(row.amount) for row in previous_week if row.type == 'expense'), 3), "count": sum(row.type != 'transfer' for row in current_week), "top_category": max(week_categories.values(), key=lambda item: item['amount'], default=None)}
     return {
+        "weekly": weekly,
         "month": current.strftime("%Y-%m"), "total_balance": round(total_balance, 3), "income": round(income, 3), "expense": round(expense, 3), "net": round(income - expense - opening_debt, 3),
         "opening_funds": round(opening, 3), "opening_debt": round(opening_debt, 3), "earned_income": round(income - opening, 3),
         "wallets": [{"id": w.id, "name": w.name, "balance": wallet_balance(db, w)} for w in wallets_rows],

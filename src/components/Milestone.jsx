@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { CheckCircle2, X } from 'lucide-react'
 import { successHaptic } from '../lib/comfort'
+import { readWorkspacePreferences } from '../lib/workspacePreferences'
 
-export function celebrateMilestone(key, title, name) {
+export function celebrateMilestone(key, title, name, userId) {
+  if (userId && readWorkspacePreferences(userId).goalCelebrations === false) return
   try { if (localStorage.getItem(`budgetly:milestone:${key}`)) return; localStorage.setItem(`budgetly:milestone:${key}`, 'seen') } catch { /* Completion still deserves feedback. */ }
   window.dispatchEvent(new window.CustomEvent('budgetly:milestone', {detail:{title,name}}))
   successHaptic()

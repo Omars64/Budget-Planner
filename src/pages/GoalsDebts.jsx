@@ -22,7 +22,13 @@ export default function GoalsDebts(){
      const previous = (isGoal ? goals : debts).find(item => item.id === action.id)
      const result = await api(isGoal ? `/api/goals/${action.id}/contribute` : `/api/debts/${action.id}/pay`,{method:'POST',...jsonBody({amount:Number(amount)})})
      const completed = previous && (isGoal ? previous.current_amount < previous.target_amount && result.current_amount >= previous.target_amount : previous.remaining > 0 && result.remaining === 0)
-     if (completed) celebrateMilestone(`${user?.id}:${action.type}:${action.id}`,isGoal ? 'Goal reached' : 'Debt cleared',action.name)
+     if (completed) celebrateMilestone(`${user?.id}:${action.type}:${action.id}`,isGoal ? 'Goal reached' : 'Debt cleared',action.name,user?.id)
+     else if (isGoal && previous?.target_amount > 0) {
+       const before = previous.current_amount / previous.target_amount * 100
+       const after = result.current_amount / previous.target_amount * 100
+       const milestone = [75,50,25].find(value => before < value && after >= value)
+       if (milestone) celebrateMilestone(`${user?.id}:goal:${action.id}:${milestone}`,`${milestone}% of your goal`,action.name,user?.id)
+     }
      setAction(null);setAmount('');refresh();notify(isGoal?'Goal contribution recorded':'Debt payment recorded')
    } catch(err) { notify(err.message,'error') }
    finally { recording.current = false }

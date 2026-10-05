@@ -15,6 +15,11 @@ export default function WorkspacePreferences() {
     persist({navOrder:all})
   }
   return <div className="workspace-preferences stack gap-16">
+    <details className="ledger-disclosure"><summary>Overview and feedback</summary><div className="stack gap-16">
+      <label className="check-row"><input type="checkbox" checked={prefs.personalizedShortcuts !== false} onChange={event => persist({personalizedShortcuts:event.target.checked})}/><span>Frequently used shortcuts</span></label>
+      <label className="check-row"><input type="checkbox" checked={prefs.weeklySummary !== false} onChange={event => persist({weeklySummary:event.target.checked})}/><span>Weekly summary</span></label>
+      {!isGuest && <label className="check-row"><input type="checkbox" checked={prefs.goalCelebrations !== false} onChange={event => persist({goalCelebrations:event.target.checked})}/><span>Goal progress celebrations</span></label>}
+    </div></details>
     <details className="ledger-disclosure transaction-helper-settings"><summary>Transaction helpers</summary><div className="stack gap-16">
       <label className="check-row"><input type="checkbox" checked={prefs.descriptionSuggestions} onChange={event => persist({descriptionSuggestions:event.target.checked})}/><span>Description suggestions</span></label>
       <label className="check-row"><input type="checkbox" checked={prefs.rememberEntry} onChange={event => { persist({rememberEntry:event.target.checked}); if (!event.target.checked) clearEntryMemory(user.id) }}/><span>Remember wallet, category and recent descriptions on this device</span></label>

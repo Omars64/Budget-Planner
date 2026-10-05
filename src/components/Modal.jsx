@@ -62,7 +62,7 @@ export default function Modal({ open, onClose, title, subtitle, children, footer
   }, [open])
   return createPortal(<div className={`budgetly-v2 modal-layer ${layerClass}`}><AnimatePresence>
     {open && <motion.div ref={backdrop} className="modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={e => e.target === e.currentTarget && requestClose()}>
-      <motion.div ref={dialog} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} className={`modal glass modal-${size}${footer ? ' modal-has-footer' : ''}`} initial={{ opacity: 0, scale: .96, y: 24 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: .98, y: 12 }} transition={{ type: 'spring', stiffness: 330, damping: 28 }}>
+      <motion.div ref={dialog} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} className={`modal glass modal-${size}${footer ? ' modal-has-footer' : ''}`} initial={{ opacity: 0, scale: .99, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: .99, y: 8 }} transition={{ duration: .2, ease: 'easeOut' }}>
         <div className="modal-head"><div><h3 id={titleId}>{title}</h3>{subtitle && <p className="muted">{subtitle}</p>}</div><button className="icon-button" aria-label="Close dialog" onClick={requestClose}><X size={18}/></button></div>
         <div className="modal-body" onChangeCapture={() => { dirty.current = true }} onClickCapture={event => {
           const button = event.target.closest('button')

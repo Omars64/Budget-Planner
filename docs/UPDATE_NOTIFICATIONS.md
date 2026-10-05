@@ -1,4 +1,14 @@
-# Update Notifications (5.10.0)
+# Update Notifications (5.11.0)
+
+## Production Activation (2026-10-05)
+
+Firebase is associated with `thermal-pattern-510706-g0` on the Spark free plan. Android package `com.flowbudget.app` is registered, and its public SDK configuration is included in the repository. Analytics and paid billing were not enabled.
+
+The dedicated `budgetly-update-sender` service account has only the Firebase Cloud Messaging API Admin role. Its private JSON, stable subscription encryption key, VAPID key pair, contact subject, and maintenance secret are stored as Vercel Production secrets. No private key is included in the APK or repository.
+
+The existing published 5.10.0 deployment was redeployed with these settings. The live push-config endpoint reports Android and browser ready. A Google FCM dry-run authenticated successfully; it rejected the intentionally invalid test device token without sending a notification.
+
+The signed 5.11.0 APK includes Firebase initialization. Existing installations need this APK before Android push registration can work. Each user still needs to enable update notifications and grant permission. Closed-app delivery on a real opted-in device is not yet verified. Daily delivery runs through the existing protected maintenance cron; Android force-stop, OS restrictions, and browser support can delay or prevent delivery.
 
 Settings > Notifications > New Budgetly updates controls automatic in-app and device update alerts on this device. It does not prevent manual checks or updating. Guests can control local update alerts, but remote subscriptions require an account. No sign-in is required to install a publicly available Android update.
 
