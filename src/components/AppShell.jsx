@@ -27,6 +27,7 @@ const nav = [
   ['/shared-transactions', 'Shared Transactions', Share2, 'Money'],
   ['/wallets', 'Wallets', WalletCards, 'Money'],
   ['/upcoming', 'Upcoming', CalendarClock, 'Planning'],
+  ['/planner', 'Planner', BarChart3, 'Planning'],
   ['/attention', 'Attention', BellDot, 'Planning'],
   ['/calendar', 'Calendar', CalendarDays, 'Planning'],
   ['/budgets', 'Budgets', Gauge, 'Planning'],

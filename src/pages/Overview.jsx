@@ -13,6 +13,7 @@ import { useWorkspacePreferences } from '../lib/workspacePreferences'
 import { frequentPages } from '../lib/pageUsage'
 import { guestRoutes } from '../lib/guest'
 import WeeklySummary from '../components/WeeklySummary'
+import PlannerSummary from '../components/PlannerSummary'
 
 export default function Overview() {
   const { user, settings, refreshKey, isGuest } = useApp()
@@ -51,6 +52,7 @@ export default function Overview() {
         <Link to="/transactions" state={filteredLink}><span>Money in minus out</span><strong>{fmt(data.net)}</strong><small>After spending{data.opening_debt > 0 ? ' and starting debt' : ''}. Transfers are separate.</small></Link>
       </section>
       {preferences.weeklySummary !== false && data.weekly && <WeeklySummary value={data.weekly} fmt={fmt}/>}
+      {!isGuest && <PlannerSummary refreshKey={refreshKey} fmt={fmt}/>}
       {!isGuest && <Link className="overview-attention-link" to="/attention">{attention === null ? 'Review reminders' : attention === 0 ? 'All caught up' : `${attention} ${attention === 1 ? 'item needs' : 'items need'} attention`} <ArrowRight size={16}/></Link>}
       {data.shared?.wallet_count > 0 && <section className="overview-shared" aria-label="Shared wallets summary"><div><span>Shared balance</span><strong>{fmt(data.shared.balance)}</strong><small>{data.shared.wallet_count} shared wallets, separate from personal</small></div><Link to="/shared-transactions">View shared <ArrowRight size={16}/></Link></section>}
       <section className="overview-wallets" aria-label="Personal wallets">

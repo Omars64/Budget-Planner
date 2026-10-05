@@ -1161,6 +1161,13 @@ def export_backup(user: User = Depends(current_user), db: Session = Depends(get_
                    "attachment_name": getattr(n, "attachment_name", None), "attachment_type": getattr(n, "attachment_type", None),
                    "attachment_data": getattr(n, "attachment_data", None)} for n in db.query(Note).filter_by(user_id=user.id).all()],
     }
+    from .planner import KEY as planner_key, archive_snapshot, validate_archive
+    if planner_key in payload['settings']:
+        saved_planner = validate_archive(payload['settings'][planner_key])
+        payment_ids = [p['transaction_id'] for b in saved_planner['bills'] for p in b['payments']]
+        payment_records = {t.id: t for t in db.query(Transaction).filter(Transaction.user_id == user.id, Transaction.id.in_(payment_ids)).all()}
+        payload['settings'][planner_key] = json.dumps(archive_snapshot(saved_planner,
+            {w['id'] for w in payload['wallets']}, {t['id'] for t in payload['transactions']}, {p['id'] for p in payload['planned_transactions']}, payment_records, user.id))
     return payload
 
 
@@ -1215,8 +1222,18 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
             if budget.get("category_id") and budget["category_id"] not in category_ids: raise ValueError("Invalid category reference")
         for share in data.get("wallet_shares", []):
             if share["wallet_id"] not in wallet_ids or share["permission"] not in {"view", "edit"}: raise ValueError("Invalid share")
+        from .planner import KEY as planner_key, validate_archive
+        planner_archive = None
+        if planner_key in data.get('settings', {}):
+            planner_archive = validate_archive(data['settings'][planner_key], wallet_ids,
+                {t['id'] for t in data.get('transactions', [])}, {p['id'] for p in data.get('planned_transactions', [])})
     except (KeyError, TypeError, ValueError, ValidationError):
         raise HTTPException(400, "Backup contains invalid references")
+    old_planner = setting(db, user.id, planner_key, '{}')
+    try:
+        planner_revision = int(json.loads(old_planner).get('revision', 0))
+    except (ValueError, TypeError, AttributeError):
+        planner_revision = 0
     save_recovery(db, user, user, "Before backup restore")
     audit(db, user.id, user.id, 'Restored JSON backup', 'workspace')
     # Preserve PIN while replacing budget data.
@@ -1227,6 +1244,9 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
     wallet_map = {}
     category_map = {}
     tx_map = {}
+    tx_created = {}
+    restored_parents = []
+    plan_map = {}
     for w in data.get("wallets", []):
         old_id = w.get("id")
         row = Wallet(user_id=user.id, **{k: v for k, v in w.items() if k not in {"id", "user_id"}})
@@ -1247,6 +1267,7 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
     db.flush()
     for t in data.get("transactions", []):
         old_id = t.get("id")
+        original_parent = t.get('recurring_parent_id')
         t = {k: v for k, v in dict(t).items() if k not in {"id", "user_id"}}
         t["date"] = datetime.fromisoformat(t["date"])
         t.setdefault("reporting_month", t["date"].strftime("%Y-%m"))
@@ -1260,8 +1281,12 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
         t['recorded_by_id'] = None
         row = Transaction(user_id=user.id, **t)
         db.add(row); db.flush()
+        restored_parents.append((row, original_parent))
         if old_id is not None:
             tx_map[old_id] = row.id
+            tx_created[old_id] = row.created_at.isoformat()
+    for row, parent_id in restored_parents:
+        row.recurring_parent_id = tx_map.get(parent_id)
     for p in data.get('planned_transactions', []):
         payload = {k: v for k, v in p.items() if k not in {'id', 'owner_id', 'created_by_id', 'error', 'created_at'}}
         payload['wallet_id'] = wallet_map[payload['wallet_id']]
@@ -1272,7 +1297,9 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
         payload.setdefault('reporting_month', payload['due_at'].strftime('%Y-%m'))
         if payload['status'] == 'posted' and not payload['posted_transaction_id']:
             payload['status'] = 'planned'
-        db.add(PlannedTransaction(owner_id=user.id, created_by_id=user.id, **payload))
+        row = PlannedTransaction(owner_id=user.id, created_by_id=user.id, **payload)
+        db.add(row); db.flush()
+        plan_map[p['id']] = row.id
     for b in data.get("budgets", []):
         b = {k: v for k, v in dict(b).items() if k not in {"id", "user_id"}}
         b["start_date"] = date.fromisoformat(b["start_date"])
@@ -1286,6 +1313,15 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
         d = {k: v for k, v in dict(d).items() if k not in {"id", "user_id"}}
         d["due_date"] = date.fromisoformat(d["due_date"]) if d.get("due_date") else None; db.add(Debt(user_id=user.id, **d))
     for k, v in data.get("settings", {}).items():
+        if k == planner_key and planner_archive is not None:
+            planner_archive['revision'] = max(planner_revision, planner_archive['revision']) + 1
+            for bill in planner_archive['bills']:
+                bill['wallet_id'] = wallet_map.get(bill['wallet_id'], 0)
+                bill['planned_id'] = plan_map.get(bill['planned_id'])
+                for payment in bill['payments']:
+                    payment['transaction_created_at'] = tx_created[payment['transaction_id']]
+                    payment['transaction_id'] = tx_map[payment['transaction_id']]
+            v = json.dumps(planner_archive)
         if k not in {"pin_hash", "passkey", "workspace_initialized"}: db.add(AppSetting(user_id=user.id, key=k, value=str(v)))
     db.add(AppSetting(user_id=user.id, key="workspace_initialized", value="true"))
     for share in data.get("wallet_shares", []):

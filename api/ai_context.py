@@ -103,7 +103,7 @@ def lookup(db, user, chat, month=None, search='', category_id=None):
             'note': 'Totals cover ALL matching records; only the newest 60 individual records are attached. Transfers are not income or expenses.'}, sources
 
 
-def build_context(db, user, chat):
+def build_context(db, user, chat, planner_days=30, planner_assumptions=True):
     wallets = scope_wallets(db, user, chat)
     facts = {'as_of': ledger_iso(now()), 'currency': setting(db, user.id, 'currency', 'KWD'),
              'scope': chat.scope, 'month': chat.month}
@@ -127,6 +127,16 @@ def build_context(db, user, chat):
     facts['previous_month'] = {k: v for k, v in previous.items() if k not in {'records', 'frequent_descriptions'}}
     sources += prev_sources[:1]
     if chat.scope == 'personal':
+        if not chat.wallet_id:
+            from .planner import forecast
+            try:
+                projection = forecast(db, user.id, planner_days, planner_assumptions)
+                facts['cash_flow_planner'] = {k: v for k, v in projection.items() if k not in {'points', 'events', 'wallets', 'reminders'}}
+                facts['cash_flow_planner']['upcoming_items'] = projection['events'][:40]
+                facts['cash_flow_planner']['items_truncated'] = len(projection['events']) > 40
+                sources.insert(0, {'key': f'planner:{planner_days}', 'label': f'{planner_days}-day cash-flow estimate', 'path': '/planner'})
+            except HTTPException:
+                facts['cash_flow_planner_unavailable'] = True
         for kind, model, fields, path in [
             ('budgets', Budget, ('id', 'name', 'category_id', 'limit_amount', 'period', 'start_date'), '/budgets'),
             ('goals', Goal, ('id', 'name', 'target_amount', 'current_amount', 'deadline'), '/goals'),

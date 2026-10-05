@@ -20,3 +20,5 @@
   .expanded-auth .auth-footer-action { margin-top:22px; }
 }
 @media (prefers-reduced-motion:reduce) { .month-reveal,.milestone-toast { animation:none; } }
+.planner-summary>span { display: grid; gap: 5px; }
+.planner-summary small { color: var(--muted); font-weight: 400; }

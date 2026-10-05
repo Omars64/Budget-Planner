@@ -156,6 +156,13 @@ def _roadmap(facts, question):
 
 def _local_answer(facts, question):
     lower = question.lower()
+    if re.search(r'\b(forecast|cash.flow|planner|available to spend|shortfall)\b', lower) and facts.get('cash_flow_planner'):
+        p = facts['cash_flow_planner']
+        currency = facts.get('currency', 'KWD')
+        risk = f"The balance could fall below your reserved money on {p['shortfall_date']}. The largest estimated gap is {currency} {p['shortfall_amount']}." if p['shortfall_date'] else f"No projected shortfall within these {p['days']} days using the items currently entered."
+        return (f"Your available-to-spend estimate is **{currency} {p['available_to_spend']}**: current cash {p['opening_balance']}, minus reserved money {p['reserved']}, minus planned outgoings {p['bills_before_payday']} before your next known income (or the end of the forecast). Future income is not spendable cash today.\n\n"
+                f"The projected closing balance is {currency} {p['projected_balance']}. {risk}\n\n"
+                'Review unpaid items and missing bills in Planner. Try delaying a nonessential purchase in What if before deciding. These are estimates, not guarantees; no records were changed.')
     if re.search(r'\b(roadmap|reduce|cut back|spending plan|budget plan)\b', lower):
         return _roadmap(facts, question)
     if re.search(r'\b(how do|how can|how to|where can|where do|what is|what are|why)\b', lower):
@@ -377,7 +384,9 @@ def _draft_answer(draft):
 def generate(db, user, chat, question, history, research=False, still_active=lambda: True):
     if not still_active():
         raise HTTPException(409, 'Response stopped')
-    facts, sources = build_context(db, user, chat)
+    horizon = re.search(r'\b(30|60|90)[ -]day\b', question, re.I)
+    planner_assumptions = not re.search(r'\b(exclude|without|no) assumptions\b', question, re.I)
+    facts, sources = build_context(db, user, chat, int(horizon.group(1)) if horizon else 30, planner_assumptions)
     draft = _local_draft(facts, chat, question)
     result = {'answer': _local_answer(facts, question)[:22000], 'sources': sources[:20],
               'suggestions': [], 'drafts': [draft] if draft else [], 'usage': {'provider': 'built-in', 'input_tokens': 0, 'output_tokens': 0}}

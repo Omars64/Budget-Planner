@@ -57,7 +57,7 @@ function Invoke-BudgetlyRelease {
                 $areas = @()
                 if ($changed -match '(?im)(google|auth|src/App\.)') { $areas += 'authentication' }
                 if ($changed -match '(?im)(build-android|release-android|android-publish|android-release|ANDROID_|android/)') { $areas += 'Android releases' }
-                if ($changed -match '(?im)(transaction|wallet|budget|ledger|upcoming)') { $areas += 'finance' }
+                if ($changed -match '(?im)(transaction|wallet|budget|ledger|upcoming|planner)') { $areas += 'finance' }
                 if (!$areas.Count) { $areas = @('app improvements') }
                 $Message = "Budgetly ${version}: update $($areas -join ', ')"
             }

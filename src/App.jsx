@@ -19,6 +19,7 @@ const Admin = lazy(() => import('./pages/Admin'))
 const Notes = lazy(() => import('./pages/Notes'))
 const Feedback = lazy(() => import('./pages/Feedback'))
 const Upcoming = lazy(() => import('./pages/Upcoming'))
+const Planner = lazy(() => import('./pages/Planner'))
 const Attention = lazy(() => import('./pages/Attention'))
 const BankMessages = lazy(() => import('./pages/BankMessages'))
 import BrandLogo from './components/BrandLogo'
@@ -369,6 +370,7 @@ export default function App() {
         <Route path="/ask-ai" element={<AskAI />} />
         <Route path="/transactions" element={<Transactions />} />
         <Route path="/upcoming" element={<Upcoming />} />
+        <Route path="/planner" element={<Planner />} />
         <Route path="/attention" element={<Attention />} />
         <Route path="/shared-transactions" element={<SharedTransactions />} />
         <Route path="/calendar" element={<CalendarPage />} />

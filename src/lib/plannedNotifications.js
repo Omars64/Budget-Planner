@@ -41,8 +41,9 @@ export async function syncPlannedNotifications(userId) {
   const runGeneration = generation
   const settings = readNotificationSettings({},userId)
   const rows = await api('/api/planned-transactions')
+  const planner = await api('/api/planner/reminders').catch(() => ({items:[]}))
   if (runGeneration !== generation) return
-  const current = rows.filter(row => ['planned','scheduled'].includes(row.status) && row.type==='expense' && row.reminder_enabled)
+  const current = [...rows,...(Array.isArray(planner?.items) ? planner.items : [])].filter(row => ['planned','scheduled'].includes(row.status) && row.type==='expense' && row.reminder_enabled)
   const now = Date.now()
   if (isNativeApp()) {
     const signature = JSON.stringify([userId,settings.upcoming_reminders_enabled,settings.upcoming_reminder_days,settings.upcoming_reminder_time,current.map(row=>[row.id,row.date,row.description])])
@@ -55,7 +56,7 @@ export async function syncPlannedNotifications(userId) {
       if (settings.upcoming_reminders_enabled) {
         const permission = await LocalNotifications.checkPermissions()
         if (permission.display==='granted') {
-          const notifications = current.map(row=>({row,at:reminderAt(row,settings)})).filter(item=>item.at.getTime()>now).slice(0,60).map(({row,at})=>({id:200000+row.id,title:'Upcoming expense',body:`${row.description} · ${row.wallet_name}`,smallIcon:'flowbudget_notification',largeIcon:'flowbudget_logo',iconColor:'#0a4173',schedule:{at,allowWhileIdle:true},isExactNotification:false}))
+          const notifications = current.map(row=>({row,at:reminderAt(row,settings)})).filter(item=>item.at.getTime()>now).sort((a,b)=>a.at-b.at).slice(0,60).map(({row,at})=>({id:row.notification_id || 200000+row.id,title:'Upcoming expense',body:`${row.description} · ${row.wallet_name}`,smallIcon:'flowbudget_notification',largeIcon:'flowbudget_logo',iconColor:'#0a4173',schedule:{at,allowWhileIdle:true},isExactNotification:false}))
           if (notifications.length) await LocalNotifications.schedule({notifications})
         }
       }

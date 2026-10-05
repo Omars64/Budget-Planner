@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 
 export const preferenceEvent = 'budgetly:workspace-preferences'
 export const secondaryPages = [
+  ['/planner','Planner','Planning'],
   ['/upcoming','Upcoming','Planning'], ['/attention','Attention','Planning'], ['/calendar','Calendar','Planning'], ['/budgets','Budgets','Planning'], ['/goals','Goals & debts','Planning'], ['/analytics','Analytics','Planning'],
   ['/ask-ai','Ask Budgetly','Workspace'], ['/notes','Notes','Workspace'], ['/bank-messages','Bank messages','Workspace'], ['/feedback','Feedback','Workspace'],
 ]

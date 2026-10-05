@@ -1,4 +1,5 @@
 export const shortcutPages = [
+  ['/planner','Planner'],
   ['/transactions','Transactions'], ['/wallets','Wallets'], ['/budgets','Budgets'],
   ['/analytics','Analytics'], ['/upcoming','Upcoming'], ['/attention','Attention'],
   ['/calendar','Calendar'], ['/goals','Goals & debts'], ['/notes','Notes'], ['/ask-ai','Ask Budgetly'],
