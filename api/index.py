@@ -209,6 +209,7 @@ def verify_password(password: str, stored: str) -> bool:
 
 
 def user_payload(user: User):
+    from .google_auth import google_account_payload
     return {
         "id": user.id,
         "username": user.username,
@@ -216,6 +217,7 @@ def user_payload(user: User):
         "role": user.role,
         "active": user.active,
         "created_at": user.created_at.isoformat(),
+        **google_account_payload(user),
     }
 
 
@@ -525,6 +527,10 @@ def delete_account(request: Request, user: User = Depends(current_user), db: Ses
     db.query(NoteShare).filter(or_(NoteShare.member_id == user.id, NoteShare.note_id.in_(note_ids))).delete(synchronize_session=False)
     for model in [Transaction, Budget, Goal, Debt, Category, Wallet, Note, NoteFolder, Feedback, RecoveryPoint, RequestReceipt, BankMessage, MessageKey, AppSetting, PendingSignup]:
         db.query(model).filter(model.user_id == user.id).delete(synchronize_session=False) if hasattr(model, 'user_id') else None
+    from .google_auth import GoogleIdentity, GoogleAuthState
+    from .google_drive import GoogleDriveConnection, GoogleDriveOAuthAttempt
+    for model in (GoogleIdentity, GoogleAuthState, GoogleDriveConnection, GoogleDriveOAuthAttempt):
+        db.query(model).filter_by(user_id=user.id).delete(synchronize_session=False)
     db.delete(user); db.commit()
 
 
@@ -613,6 +619,10 @@ def admin_delete_user(user_id: int, admin: User = Depends(admin_user), db: Sessi
     for model in [Transaction, Budget, Goal, Debt, Category, Wallet]:
         db.query(model).filter(model.user_id == user_id).delete()
     db.query(AppSetting).filter(AppSetting.user_id == user_id).delete()
+    from .google_auth import GoogleIdentity, GoogleAuthState
+    from .google_drive import GoogleDriveConnection, GoogleDriveOAuthAttempt
+    for model in (GoogleIdentity, GoogleAuthState, GoogleDriveConnection, GoogleDriveOAuthAttempt):
+        db.query(model).filter_by(user_id=user_id).delete(synchronize_session=False)
     db.delete(row); db.commit()
 
 

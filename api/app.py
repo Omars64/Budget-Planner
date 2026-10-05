@@ -19,6 +19,8 @@ from . import statements
 from . import planned
 from . import financial_ledger
 from . import attention
+from . import google_auth
+from . import google_drive
 from .email_service import send_verification_code, smtp_status
 
 # Route signup verification through the hardened email transport. Keeping this
@@ -39,6 +41,8 @@ app.include_router(statements.router)
 app.include_router(planned.router)
 app.include_router(financial_ledger.router)
 app.include_router(attention.router)
+app.include_router(google_auth.router)
+app.include_router(google_drive.router)
 
 
 @app.get("/api/health/email")

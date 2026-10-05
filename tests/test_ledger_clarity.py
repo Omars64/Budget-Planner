@@ -232,7 +232,9 @@ def test_overview_excludes_owned_shared_and_incoming_shared_records(workspace):
     client.post('/api/transactions', json=tx(shared['id'], amount=400))
     client.post('/api/transactions', json=tx(shared['id'], amount=50, type='transfer', transfer_wallet_id=personal['id']))
     db.add(Budget(user_id=owner.id, name='Monthly', limit_amount=100, period='monthly', start_date=datetime(2026, 9, 1).date()))
-    for row in db.query(Transaction).filter_by(is_opening_balance=True): row.date = datetime(2026, 9, 1)
+    for row in db.query(Transaction).filter_by(is_opening_balance=True):
+        row.date = datetime(2026, 9, 1)
+        row.reporting_month = '2026-09'
     db.commit()
     overview = client.get('/api/dashboard?month=2026-09').json()
     assert overview['income'] == 100 and overview['opening_funds'] == 100
@@ -256,7 +258,9 @@ def test_drilldowns_match_displayed_spending_and_shared_access(workspace):
     private = wallet(client, 'Private', -50)
     shared = wallet(client, 'Shared', 100)
     share(db, shared['id'], owner, member)
-    for row in db.query(Transaction).all(): row.date = datetime(2026, 9, 1)
+    for row in db.query(Transaction).all():
+        row.date = datetime(2026, 9, 1)
+        row.reporting_month = '2026-09'
     category = Category(user_id=owner.id, name='Food', kind='expense')
     db.add(category); db.commit()
     client.post('/api/transactions', json=tx(private['id'], amount=4))
@@ -311,7 +315,9 @@ def test_shared_category_filter_and_negative_opening_are_not_spending(workspace)
     private = wallet(client, 'Overdraft', -50)
     category = Category(user_id=owner.id, name='Food', kind='expense')
     db.add(category); db.commit()
-    for row in db.query(Transaction).all(): row.date = datetime(2026, 9, 1)
+    for row in db.query(Transaction).all():
+        row.date = datetime(2026, 9, 1)
+        row.reporting_month = '2026-09'
     db.commit()
     overview = client.get('/api/dashboard?month=2026-09').json()
     assert overview['expense'] == 0 and overview['opening_debt'] == 50

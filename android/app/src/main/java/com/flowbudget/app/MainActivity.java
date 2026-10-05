@@ -10,6 +10,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(BudgetlyRemindersPlugin.class);
         registerPlugin(VoiceInputPlugin.class);
         registerPlugin(BudgetlyFeedbackPlugin.class);
+        registerPlugin(OAuthBrowserPlugin.class);
         super.onCreate(state);
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override public void handleOnBackPressed() {

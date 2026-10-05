@@ -7,6 +7,7 @@ from sqlalchemy import create_engine
 
 from api.database import Base, DATABASE_URL, engine
 from api import models, reliability_models, ai_models, passkeys  # noqa: F401
+from api import google_auth, google_drive  # noqa: F401
 
 config = context.config
 if config.config_file_name:

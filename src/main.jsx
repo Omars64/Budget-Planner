@@ -28,6 +28,7 @@ import './wallet-ledger.css'
 import './offline.css'
 import './wallet-notes-polish.css'
 import './workspace-polish.css'
+import './google.css'
 
 applyAppearance(readDeviceAppearance())
 

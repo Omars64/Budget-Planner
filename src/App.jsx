@@ -29,6 +29,7 @@ import Experience from './components/Experience'
 import { biometricSupported, unlockBiometric, cancelBiometric } from './lib/biometric'
 import DeviceSignInPreference from './components/DeviceSignInPreference'
 import PasswordRecovery from './components/PasswordRecovery'
+import GoogleSignIn from './components/GoogleSignIn'
 import { cancelReminder } from './lib/deviceNotifications'
 import { BankSms, smsAvailable } from './lib/bankSms'
 import { readDeviceAppearance, useAppearance } from './lib/appearance'
@@ -51,6 +52,7 @@ export function LoginScreen({ onLogin }) {
     await onLogin(result.user)
   }
   const passkeyLogin = async () => {
+    if(busy||googleBusy)return
     setBusy(true); setError('')
     try { const result = await unlockBiometric(); await finishLogin(result) }
     catch (err) { setError(['NotAllowedError', 'AbortError'].includes(err.name) ? 'Passkey cancelled or unavailable. You can use your password.' : err.message) }
@@ -65,6 +67,7 @@ export function LoginScreen({ onLogin }) {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [googleBusy,setGoogleBusy] = useState(false)
   const [retryAfter, setRetryAfter] = useState(0)
 
   useEffect(() => {
@@ -75,6 +78,7 @@ export function LoginScreen({ onLogin }) {
 
   const login = async e => {
     e.preventDefault()
+    if(busy||googleBusy)return
     setBusy(true); setError('')
     try {
       const result = await api('/api/auth/login', { method: 'POST', ...jsonBody({ email, password }) })
@@ -85,6 +89,7 @@ export function LoginScreen({ onLogin }) {
 
   const requestCode = async e => {
     e?.preventDefault()
+    if(busy||googleBusy)return
     setBusy(true); setError(''); setMessage('')
     try {
       const result = await api('/api/auth/signup/start', { method: 'POST', ...jsonBody(signup) })
@@ -108,7 +113,7 @@ export function LoginScreen({ onLogin }) {
     finally { setBusy(false) }
   }
 
-  const authOptions = <div className="auth-options"><label className="check-row remember-session"><input type="checkbox" checked={rememberMe} disabled={busy} onChange={e => { try { auth.setRemembered(e.target.checked); setRememberMe(e.target.checked); setError('') } catch (err) { setError(err.message) } }}/><span>Keep me signed in on this device</span></label><button type="button" className="auth-switch" onClick={()=>setMode('reset')}>Forgot password?</button></div>
+  const authOptions = <div className="auth-options"><label className="check-row remember-session"><input type="checkbox" checked={rememberMe} disabled={busy||googleBusy} onChange={e => { try { auth.setRemembered(e.target.checked); setRememberMe(e.target.checked); setError('') } catch (err) { setError(err.message) } }}/><span>Keep me signed in on this device</span></label><button type="button" className="auth-switch" onClick={()=>setMode('reset')}>Forgot password?</button></div>
 
   return <div className="auth-screen expanded-auth" onInvalid={e => setError(e.target.validationMessage)}>
     <header className="auth-brand"><BrandLogo /><span><strong>Budgetly</strong><small>Personal finance</small></span></header>
@@ -124,26 +129,28 @@ export function LoginScreen({ onLogin }) {
       {mode === 'login' && <>
         <h2>Welcome back</h2>
         <p className="auth-intro">Sign in to continue to your finances.</p>
-        <div className="segment-control signin-method" aria-label="Sign-in method"><button type="button" disabled={busy} className={signInMethod === 'password' ? 'active' : ''} onClick={() => setSignInMethod('password')}>Password</button><button type="button" disabled={busy || !biometricSupported()} className={signInMethod === 'passkey' ? 'active' : ''} onClick={() => setSignInMethod('passkey')}>Biometric / passkey</button></div>
-        {signInMethod === 'passkey' ? <div className="auth-passkey"><p className="auth-intro">Use the passkey saved to your device to sign in securely.</p>{error && <div className="form-error" role="alert">{error}</div>}{authOptions}<button className="button primary" disabled={busy} onClick={passkeyLogin}>{busy ? 'Verifying...' : 'Sign in with passkey'}</button></div> : <form onSubmit={login} className="auth-form">
+        <div className="segment-control signin-method" aria-label="Sign-in method"><button type="button" disabled={busy||googleBusy} className={signInMethod === 'password' ? 'active' : ''} onClick={() => setSignInMethod('password')}>Password</button><button type="button" disabled={busy || googleBusy || !biometricSupported()} className={signInMethod === 'passkey' ? 'active' : ''} onClick={() => setSignInMethod('passkey')}>Biometric / passkey</button></div>
+        {signInMethod === 'passkey' ? <div className="auth-passkey"><p className="auth-intro">Use the passkey saved to your device to sign in securely.</p>{error && <div className="form-error" role="alert">{error}</div>}{authOptions}<button className="button primary" disabled={busy||googleBusy} onClick={passkeyLogin}>{busy ? 'Verifying...' : 'Sign in with passkey'}</button></div> : <form onSubmit={login} className="auth-form">
           <label className="auth-entry"><span>Email</span><input required type="email" autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email address" /></label>
           <div className="auth-entry"><label htmlFor="login-password">Password</label><PasswordInput id="login-password" required minLength="8" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" /></div>
           {error && <div className="form-error">{error}</div>}
           {authOptions}
-          <div className="auth-action-row"><button className="button primary" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button></div>
+          <div className="auth-action-row"><button className="button primary" disabled={busy||googleBusy}>{busy ? 'Signing in…' : 'Sign in'}</button></div>
         </form>}
-        <DeviceSignInPreference disabled={busy} onChange={() => { setSignInMethod('password'); setError(''); refreshSignInPreference(v => v + 1) }}/>
+        <GoogleSignIn onLogin={finishLogin} disabled={busy} onBusyChange={setGoogleBusy}/>
+        <DeviceSignInPreference disabled={busy||googleBusy} onChange={() => { setSignInMethod('password'); setError(''); refreshSignInPreference(v => v + 1) }}/>
       </>}
 
       {mode === 'signup' && <>
         <h2>Create account</h2>
+        <GoogleSignIn onLogin={finishLogin} disabled={busy} onBusyChange={setGoogleBusy}/>
         <p className="auth-intro">One place for your personal and shared finances.</p>
         <form onSubmit={requestCode} className="auth-form">
           <label className="auth-entry"><span>Username</span><input required autoComplete="name" value={signup.username} onChange={e => setSignup({ ...signup, username: e.target.value })} placeholder="Your name" minLength="2" maxLength="80" /></label>
           <label className="auth-entry"><span>Email</span><input required type="email" autoComplete="email" value={signup.email} onChange={e => setSignup({ ...signup, email: e.target.value })} placeholder="you@example.com" /></label>
           <div className="auth-entry"><label htmlFor="signup-password">Password</label><PasswordInput id="signup-password" required autoComplete="new-password" value={signup.password} onChange={e => setSignup({ ...signup, password: e.target.value })} placeholder="At least 8 characters" minLength="8" maxLength="128" /></div>
           {error && <div className="form-error">{error}</div>}
-          <div className="auth-action-row"><button className="button primary" disabled={busy}>{busy ? 'Sending code…' : 'Continue to email verification'}</button></div>
+          <div className="auth-action-row"><button className="button primary" disabled={busy||googleBusy}>{busy ? 'Sending code…' : 'Continue to email verification'}</button></div>
         </form>
       </>}
 
@@ -284,10 +291,15 @@ export default function App() {
     void loadAppearance()
   }, [loadSettings, loadAppearance])
 
+  const reloadUser = useCallback(async () => {
+    const user = await api('/api/auth/me')
+    setSession({loading:false,user})
+  }, [])
+
   const value = useMemo(() => ({
     user: session.user, settings, setSettings, appearance, setAppearance,
-    refreshKey, refresh, notify, confirm, reloadSettings: loadSettings, reloadAppearance: loadAppearance, lock: signOut,
-  }), [session.user, settings, appearance, refreshKey, refresh, notify, confirm, loadSettings, loadAppearance, signOut])
+    refreshKey, refresh, notify, confirm, reloadSettings: loadSettings, reloadAppearance: loadAppearance, reloadUser, lock: signOut,
+  }), [session.user, settings, appearance, refreshKey, refresh, notify, confirm, loadSettings, loadAppearance, reloadUser, signOut])
 
   if (session.loading) return <div className="app-loading"><BrandLogo className="pulse" /></div>
   if (!session.user) return <LoginScreen onLogin={completeLogin} />

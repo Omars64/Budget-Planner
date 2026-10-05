@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import SharedTransactions from './SharedTransactions'
@@ -68,8 +68,9 @@ it('uses the same picker in a shared transaction and saves the selected time onc
   fireEvent.change(screen.getByLabelText('Calendar year'),{target:{value:'2026'}})
   // The initial month comes from the common Kuwait clock.
   const month = new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kuwait',month:'numeric'}).format(new Date())
-  for(let i=Number(month);i<9;i++) fireEvent.click(screen.getByRole('button',{name:'Next month'}))
-  for(let i=Number(month);i>9;i--) fireEvent.click(screen.getByRole('button',{name:'Previous month'}))
+  const calendar=within(screen.getByRole('dialog',{name:'Choose date'}))
+  for(let i=Number(month);i<9;i++) fireEvent.click(calendar.getByRole('button',{name:'Next month'}))
+  for(let i=Number(month);i>9;i--) fireEvent.click(calendar.getByRole('button',{name:'Previous month'}))
   fireEvent.click(screen.getByRole('button',{name:'Monday, 14 September 2026'}))
   fireEvent.click(screen.getByRole('button',{name:'Set date'}))
   fireEvent.click(screen.getByRole('button',{name:'Time',exact:true}))

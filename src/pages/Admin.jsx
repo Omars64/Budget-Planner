@@ -8,6 +8,7 @@ import OperationsPanel from '../components/OperationsPanel'
 import EmptyState from '../components/EmptyState'
 import SettingsSection from '../components/SettingsSection'
 import AssistantSettings from '../components/AssistantSettings'
+import GoogleMark from '../components/GoogleMark'
 
 const fresh = () => ({ username: '', email: '', password: '', role: 'user', active: true })
 const freshCategory = () => ({ name: '', kind: 'expense', icon: 'circle', color: '#0a4173' })
@@ -104,7 +105,7 @@ export default function Admin() {
       {!visible.length ? <EmptyState title="No users found" text="Try a different search or create a teammate."/> : <div className="user-table">
         {visible.map(row => <article className="user-row" key={row.id}>
           <span className={`round-icon ${row.active ? '' : 'inactive'}`}>{row.active ? <UserRoundCheck/> : <UserRoundX/>}</span>
-          <div className="tx-main"><strong>{row.username}</strong><small>{row.email}</small></div>
+          <div className="tx-main"><strong>{row.username}</strong><small className="user-email">{row.email}{row.signup_provider === 'google' && <GoogleMark size={14}/>}</small></div>
           <span className={`role-pill ${row.role}`}>{row.role}</span>
           <span className={`status-pill ${row.active ? 'active' : 'inactive'}`}>{row.active ? 'Active' : 'Inactive'}</span>
           <div className="row-actions always"><button onClick={() => openCategories(row)} aria-label={`Manage categories for ${row.username}`} title="Manage categories"><Palette size={16}/></button><button onClick={() => show(row)} aria-label="Edit"><Pencil size={16}/></button><button className="danger" disabled={row.id === user.id} onClick={() => remove(row)} aria-label="Delete"><Trash2 size={16}/></button></div>

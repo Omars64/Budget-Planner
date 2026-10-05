@@ -40,7 +40,7 @@ def confirmed(request, db, user):
     sid = getattr(request.state, 'session_id', None)
     session = db.get(AccountSession, sid) if sid else None
     if not session or not session.verified_at or session.verified_at < utc_now() - timedelta(minutes=5):
-        raise HTTPException(428, 'Confirm your password in Account security before this action.')
+        raise HTTPException(428, 'Confirm your identity before this action.')
 
 
 from .index import current_user, admin_user, verify_password, hash_password

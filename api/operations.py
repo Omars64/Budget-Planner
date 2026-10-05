@@ -60,6 +60,10 @@ def daily_snapshots(db):
     db.query(RecoveryPoint).filter(RecoveryPoint.reason=='Daily recovery snapshot',RecoveryPoint.created_at<utc_now()-timedelta(days=30)).delete(synchronize_session=False)
     db.query(ServiceEvent).filter(ServiceEvent.created_at<utc_now()-timedelta(days=30)).delete()
     db.query(RateBucket).filter(RateBucket.started<utc_now()-timedelta(days=2)).delete()
+    from .google_auth import GoogleAuthState
+    from .google_drive import GoogleDriveOAuthAttempt
+    db.query(GoogleAuthState).filter(GoogleAuthState.expires_at<utc_now()).delete(synchronize_session=False)
+    db.query(GoogleDriveOAuthAttempt).filter(GoogleDriveOAuthAttempt.expires_at<utc_now()).delete(synchronize_session=False)
     db.add(ServiceEvent(area='daily-recovery',status=200));db.commit()
     external = 0
     if external_backup_ready():
