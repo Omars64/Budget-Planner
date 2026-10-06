@@ -44,7 +44,8 @@ export default function Modal({ open, onClose, title, subtitle, children, footer
     update()
     viewport.addEventListener('resize', update)
     viewport.addEventListener('scroll', update)
-    return () => { viewport.removeEventListener('resize', update); viewport.removeEventListener('scroll', update); window.cancelAnimationFrame(frame) }
+    document.addEventListener('focusin', update)
+    return () => { viewport.removeEventListener('resize', update); viewport.removeEventListener('scroll', update); document.removeEventListener('focusin', update); window.cancelAnimationFrame(frame) }
   }, [open])
   useEffect(() => {
     if (!open) return
@@ -81,7 +82,12 @@ export default function Modal({ open, onClose, title, subtitle, children, footer
           <div hidden={discard}>{children}</div>
           {discard && <div role="alert"><p>Discard your unsaved changes?</p><div className="modal-actions"><button type="button" className="button ghost" onClick={() => setDiscard(false)}>Keep editing</button><button type="button" className="button danger" onClick={onClose}>Discard changes</button></div></div>}
         </div>
-        {footer && !discard && <div className="modal-footer">{typeof footer === 'function' ? footer(requestClose) : footer}</div>}
+        {footer && !discard && <div className="modal-footer" onClickCapture={event => {
+          const button = event.target.closest('button')
+          if (button?.textContent.trim() === 'Cancel' && (isDirty ?? dirty.current) && protectChanges && !preserveDraft) {
+            event.preventDefault(); event.stopPropagation(); requestClose()
+          }
+        }}>{typeof footer === 'function' ? footer(requestClose) : footer}</div>}
       </motion.div>
     </motion.div>}
   </AnimatePresence></div>, document.body)

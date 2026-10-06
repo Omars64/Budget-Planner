@@ -1,4 +1,6 @@
 import SettingsSection from '../components/SettingsSection'
+import RestorePreview from '../components/RestorePreview'
+import { backupPreview } from '../lib/backupPreview'
 import NotificationPreferences from '../components/NotificationPreferences'
 import { requestUpdatePermission } from '../components/UpdateNotificationPreference'
 import { syncUpdatePush } from '../lib/updatePush'
@@ -56,6 +58,7 @@ export default function Settings(){
   const [statementWallets,setStatementWallets]=useState([])
   const [statement,setStatement]=useState(()=>{const today=dateInput().slice(0,10);return {from:`${today.slice(0,4)}-01-01`,to:today,wallet:'',format:'xlsx'}})
   const [statementBusy,setStatementBusy]=useState(false)
+  const [restorePreview,setRestorePreview]=useState(null)
   const [biometric,setBiometric]=useState(false)
   const [passkeyPassword,setPasskeyPassword]=useState('')
   const [passkeyBusy,setPasskeyBusy]=useState(false)
@@ -89,7 +92,23 @@ export default function Settings(){
   const removeCat=async c=>{if(!await confirm(`Delete ${c.name}?`))return;try{await api(`/api/categories/${c.id}`,{method:'DELETE'});setCats(await api('/api/categories'));refresh();notify('Category deleted')}catch(err){notify(err.message,'error')}}
   const exportBackup=async()=>{try{const data=await api('/api/backup');const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});await saveDownload(blob,`flowbudget-backup-${new Date().toISOString().slice(0,10)}.json`);notify('Backup exported')}catch(err){notify(err.message,'error')}}
   const exportStatement=async e=>{e.preventDefault();if(statement.from>statement.to){notify('From date must be on or before To date','error');return}setStatementBusy(true);try{const params=new URLSearchParams({from_date:statement.from,to_date:statement.to,format:statement.format});if(statement.wallet)params.set('wallet_id',statement.wallet);const blob=await apiFile(`/api/backup/statement?${params}`);await saveDownload(blob,`budgetly-statement-${statement.from}-${statement.to}.${statement.format}`);notify('Statement exported')}catch(err){notify(err.message,'error')}finally{setStatementBusy(false)}}
-  const restore=async e=>{const file=e.target.files?.[0]; if(!file)return; try{const data=JSON.parse(await file.text());await api('/api/backup/restore',{method:'POST',body:JSON.stringify(data)});await reloadSettings();refresh();setCats(await api('/api/categories'));notify('Backup restored')}catch(err){notify(`Restore failed: ${err.message}`,'error')} finally {e.target.value=''}}
+  const restore=async e=>{
+    const input=e.target, file=input.files?.[0]
+    input.value=''
+    if(!file)return
+    try{
+      if(file.size>25_000_000)throw new Error('This backup is too large to preview.')
+      const data=JSON.parse(await file.text())
+      setRestorePreview({name:file.name,data,counts:backupPreview(data)})
+    }catch(err){notify(`Restore failed: ${err.message}`,'error')}
+  }
+  const confirmRestore=async data=>{
+    await api('/api/backup/restore',{method:'POST',body:JSON.stringify(data)})
+    setRestorePreview(null)
+    notify('Backup restored')
+    try{await reloadSettings();await refresh();setCats(await api('/api/categories'))}
+    catch{notify('Restore succeeded. Reopen Settings to refresh the displayed records.','error')}
+  }
   const clearWorkspace=async e=>{e.preventDefault();try{const result=await api('/api/workspace/clear',{method:'POST',...jsonBody({confirmation:'CLEAR',scope:clearScope})});await reloadSettings();refresh();setCats(await api('/api/categories'));setClearOpen(false);setClearConfirm('');notify(`Workspace cleared. Recovery copy #${result.recovery_id} was saved.`)}catch(err){notify(err.message,'error')}}
 
   const updateAppearance=async patch=>{setAppearanceBusy(true);try{const updated=await api('/api/account/appearance',{method:'PUT',...jsonBody(patch)});setAppearance(updated);return updated}finally{setAppearanceBusy(false)}}
@@ -101,6 +120,7 @@ export default function Settings(){
   const disableDeviceSignIn=async()=>{if(passkeyBusy)return;setPasskeyBusy(true);try{await disableBiometric();setBiometric(false);notify('All passkeys revoked')}catch(err){notify(err.message,'error')}finally{setPasskeyBusy(false)}}
 
   return <div className="settings-grid">
+    {restorePreview && <RestorePreview preview={restorePreview} onClose={()=>setRestorePreview(null)} onRestore={confirmRestore}/>}
     <GuestRecords/>
     <AccountSecurity/>
     <TrashPanel/>

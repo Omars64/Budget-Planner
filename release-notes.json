@@ -1,4 +1,8 @@
 {
+  "5.12.7": [
+    { "title": "Review before restoring", "detail": "Preview backup record counts and confirm before replacing your workspace." },
+    { "title": "Safer forms", "detail": "Unsaved edits are protected when cancelling dialog footers, with improved keyboard focus handling." }
+  ],
   "5.12.6": [
     { "title": "More dependable update alerts", "detail": "Improved Android background delivery and release-triggered notifications." },
     { "title": "Check notification delivery", "detail": "View registered devices and send a test notification from Settings." }

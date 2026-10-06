@@ -2,6 +2,14 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, expect, test, vi } from 'vitest'
 import Modal from './Modal'
 afterEach(cleanup)
+test('footer cancellation also protects unsaved edits', async () => {
+  const close=vi.fn()
+  render(<Modal open protectChanges title="Edit record" onClose={close} footer={<button type="button" onClick={close}>Cancel</button>}><input aria-label="Description"/></Modal>)
+  fireEvent.change(screen.getByLabelText('Description'),{target:{value:'Changed'}})
+  fireEvent.click(screen.getByRole('button',{name:'Cancel'}))
+  expect(close).not.toHaveBeenCalled()
+  await screen.findByText('Discard your unsaved changes?')
+})
 test('dirty edits survive Escape and Android Back until explicitly discarded', async () => {
   const close=vi.fn()
   render(<Modal open protectChanges title="Edit record" onClose={close}><form><input aria-label="Description" defaultValue="Original"/><button type="button" onClick={close}>Cancel</button></form></Modal>)
