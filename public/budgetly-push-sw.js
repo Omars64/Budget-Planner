@@ -6,7 +6,11 @@ self.addEventListener('message', event => {
     const store = await self.caches.open(preferenceStore)
     await store.put('/budgetly-push-enabled', new Response(String(Boolean(event.data.enabled))))
     event.ports[0]?.postMessage({saved:true})
-    if (!event.data.enabled) for (const notice of await self.registration.getNotifications({tag:'budgetly-update'})) notice.close()
+    if (!event.data.enabled) {
+      for (const tag of ['budgetly-update', 'budgetly-test']) {
+        for (const notice of await self.registration.getNotifications({tag})) notice.close()
+      }
+    }
   })())
 })
 self.addEventListener('push', event => {
@@ -17,9 +21,9 @@ self.addEventListener('push', event => {
     let data
     try { data = event.data.json() } catch { return }
     if (!/^\d+\.\d+\.\d+$/.test(data.version)) return
-    await self.registration.showNotification(`Budgetly ${data.version} is available`, {
-      body: 'Open Budgetly to load the latest version.', icon: '/flowbudget-logo.png',
-      tag: 'budgetly-update', data: { version: data.version }
+    await self.registration.showNotification(data.test === true ? 'Budgetly test notification' : `Budgetly ${data.version} is available`, {
+      body: data.test === true ? 'Notifications are reaching this device.' : 'Open Budgetly to load the latest version.', icon: '/flowbudget-logo.png',
+      tag: data.test === true ? 'budgetly-test' : 'budgetly-update', data: { version: data.version }
     })
   })())
 })

@@ -3,9 +3,11 @@ import {BellRing} from 'lucide-react'
 import {testNotification,isNativeApp} from '../lib/deviceNotifications'
 import {useApp} from '../App'
 import { TimeField } from './DateTimeField'
+import UpdateDelivery from './UpdateDelivery'
 
 export default function NotificationPreferences({form,setForm}) {
-  return <><label className="check-row"><input type="checkbox" checked={form.update_notifications_enabled !== false} onChange={event => setForm({...form, update_notifications_enabled:event.target.checked})}/><span>New Budgetly updates</span></label><ReminderPreferences form={form} setForm={setForm}/></>
+  const {isGuest}=useApp()
+  return <><label className="check-row"><input type="checkbox" checked={form.update_notifications_enabled !== false} onChange={event => setForm({...form, update_notifications_enabled:event.target.checked})}/><span>New Budgetly updates</span></label>{!isGuest && <UpdateDelivery/>}<ReminderPreferences form={form} setForm={setForm}/></>
 }
 function ReminderPreferences({form,setForm}){
   const {notify}=useApp()

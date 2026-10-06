@@ -49,7 +49,9 @@ Android checks the official release manifest; browser checks the deployed backen
 6. Redeploy. `/api/app-updates/push-config` returns only booleans and the public browser key. Android also checks that Firebase is initialized locally; missing configuration never starts registration.
 7. Users sign in, enable New Budgetly updates, grant OS permission, and save. Saving reports setup/permission limitations. Browser service worker handles only notifications: it does not intercept fetches, cache pages or read financial records.
 8. Set the existing Vercel `CRON_SECRET`. Daily maintenance dispatches new versions. On Hobby this means up to a day of delay, plus platform delivery delays. Each run is bounded; larger audiences require a queue/worker rather than increasing the serverless execution time.
-9. Optional immediate dispatch after publishing: set local `BUDGETLY_UPDATE_PUSH_SECRET` to the same cron secret (outside the repository). The batch publisher calls the protected production endpoint after publication. Failure does not undo a successful release; daily maintenance retries. The new backend must already be deployed for immediate dispatch to work.
+9. Recommended immediate dispatch: set the same strong `UPDATE_RELEASE_SECRET` in GitHub Actions repository secrets and Vercel Production. The release-published workflow waits for the matching public release manifest and calls the update-only endpoint, with bounded retries. This key cannot run financial maintenance. Redeploy after adding it. The independent daily update-check cron provides a fallback. The older optional local `BUDGETLY_UPDATE_PUSH_SECRET` remains supported but is no longer required with the workflow configured.
+
+10. Settings > Notifications > Update delivery lists only the signed-in user's registered devices. Test notification sends a short-lived cloud test without inventing a newer release or marking an update as seen. Provider acceptance is not proof of device receipt: confirm on the closed device. Android update messages use high-priority transport; force-stop and OS restrictions can still prevent delivery.
 
 ## Delivery Safety and Limitations
 

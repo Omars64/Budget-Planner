@@ -117,3 +117,80 @@ def test_web_sender_accepts_private_pem_without_network(workspace, monkeypatch):
     assert push.send_device(db.get(push.UpdatePushDevice, body['id']), '99.0.0') == 200
     assert isinstance(calls[0][1]['vapid_private_key'], Vapid01)
     assert calls[0][1]['timeout'] == 5
+
+
+def test_device_status_is_owned_and_never_exposes_subscription(workspace):
+    client, db, user = workspace
+    body = payload(); client.put('/api/app-updates/push-device', json=body)
+    other = User(username='Other', email='other@example.test', password_hash='unused')
+    db.add(other); db.flush()
+    db.add(push.UpdatePushDevice(id=str(uuid4()), user_id=other.id, platform='browser', payload='private', installed_version='1.0.0'))
+    db.commit()
+    result = client.get('/api/app-updates/push-devices')
+    assert result.status_code == 200
+    assert result.headers['cache-control'] == 'no-store'
+    assert [item['id'] for item in result.json()['devices']] == [body['id']]
+    assert 'payload' not in result.text and 'endpoint' not in result.text
+
+
+def test_test_delivery_does_not_mark_release_seen_and_is_rate_limited(workspace, monkeypatch):
+    client, db, _ = workspace
+    body = payload(); client.put('/api/app-updates/push-device', json=body)
+    calls = []
+    monkeypatch.setattr(push, 'send_device', lambda row, version, test=False: calls.append((version,test)) or 200)
+    path = '/api/app-updates/push-device/' + body['id'] + '/test'
+    for _ in range(3):
+        result = client.post(path)
+        assert result.status_code == 200 and result.json()['accepted'] is True
+    assert client.post(path).status_code == 429
+    assert calls == [('1.0.0', True)] * 3
+    assert db.get(push.UpdatePushDevice, body['id']).last_version is None
+
+
+def test_test_delivery_requires_ownership_and_removes_expired_registration(workspace, monkeypatch):
+    client, db, _ = workspace
+    assert client.post('/api/app-updates/push-device/' + str(uuid4()) + '/test').status_code == 404
+    body = payload(); client.put('/api/app-updates/push-device', json=body)
+    monkeypatch.setattr(push, 'send_device', lambda *args, **kwargs: 410)
+    assert client.post('/api/app-updates/push-device/' + body['id'] + '/test').status_code == 409
+    assert db.get(push.UpdatePushDevice, body['id']) is None
+
+
+def test_android_uses_visible_high_priority_without_exposing_financial_data(workspace, monkeypatch):
+    import httpx
+    from google.oauth2 import service_account
+    from types import SimpleNamespace
+    monkeypatch.setenv('FIREBASE_SERVICE_ACCOUNT_JSON', '{}')
+    fake = SimpleNamespace(project_id='budgetly-test', token='private', refresh=lambda request: None)
+    monkeypatch.setattr(service_account.Credentials, 'from_service_account_info', lambda *args, **kwargs: fake)
+    calls = []
+    real_client = httpx.Client
+    def receive(request):
+        import json
+        calls.append(json.loads(request.content))
+        return httpx.Response(200, json={'name':'accepted'})
+    monkeypatch.setattr(httpx, 'Client', lambda **kwargs: real_client(transport=httpx.MockTransport(receive), **kwargs))
+    row = push.UpdatePushDevice(platform='android', installed_version='1.0.0', payload=push.cipher().encrypt(b'"test-registration-token"').decode())
+    assert push.send_device(row, '99.0.0') == 200
+    assert calls[0]['message']['android']['priority'] == 'high'
+    assert 'notification' not in calls[0]['message']
+    assert calls[0]['message']['data']['budgetlyUpdate'] == 'true'
+    assert push.send_device(row, '1.0.0', test=True) == 200
+    assert calls[1]['message']['notification']['title'] == 'Budgetly test notification'
+    assert calls[1]['message']['android']['ttl'] == '300s'
+
+
+def test_release_trigger_has_separate_update_only_authentication(workspace, monkeypatch):
+    from api import operations
+    client, db, _ = workspace
+    app = FastAPI(); app.include_router(operations.router)
+    app.dependency_overrides[get_db] = lambda: db
+    monkeypatch.setenv('UPDATE_RELEASE_SECRET', 'release-only')
+    monkeypatch.setenv('CRON_SECRET', 'maintenance-only')
+    monkeypatch.setattr(push, 'dispatch_updates', lambda db: {'configured':True,'sent':0,'failed':0})
+    with TestClient(app) as release_client:
+        path = '/api/maintenance/release-updates'
+        assert release_client.post(path).status_code == 401
+        assert release_client.post(path, headers={'Authorization':'Bearer maintenance-only'}).status_code == 401
+        assert release_client.post(path, headers={'Authorization':'Bearer release-only'}).status_code == 200
+        assert release_client.get('/api/maintenance/update-check', headers={'Authorization':'Bearer release-only'}).status_code == 401

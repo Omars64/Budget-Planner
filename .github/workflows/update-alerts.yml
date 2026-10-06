@@ -1,0 +1,46 @@
+name: Notify opted-in devices of a release
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: budgetly-release-alerts
+  cancel-in-progress: false
+jobs:
+  send:
+    if: github.repository == 'Omars64/Budget-Planner' && (github.event_name == 'workflow_dispatch' || (!github.event.release.prerelease && !github.event.release.draft))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Send update alerts with bounded retries
+        env:
+          UPDATE_RELEASE_SECRET: ${{ secrets.UPDATE_RELEASE_SECRET }}
+          RELEASE_VERSION: ${{ github.event.release.tag_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$UPDATE_RELEASE_SECRET" ]; then
+            echo "Configure the update-only UPDATE_RELEASE_SECRET in GitHub and Vercel Production."
+            exit 1
+          fi
+          for attempt in $(seq 1 20); do
+            latest=$(curl --silent --show-error --max-time 20 https://budget-planner-ecru-seven.vercel.app/api/app-updates/latest || true)
+            if [ -n "$RELEASE_VERSION" ] && ! printf '%s' "$latest" | python3 -c 'import json,os,sys;sys.exit(0 if json.load(sys.stdin).get("version")==os.environ["RELEASE_VERSION"].removeprefix("v") else 1)'; then
+              sleep 30
+              continue
+            fi
+            code=$(curl --silent --show-error --max-time 35 --output /tmp/update-result.json --write-out '%{http_code}' \
+              --request POST --header "Authorization: Bearer $UPDATE_RELEASE_SECRET" \
+              https://budget-planner-ecru-seven.vercel.app/api/maintenance/release-updates || true)
+            if [ "$code" = "200" ]; then
+              cat /tmp/update-result.json
+              if python3 -c 'import json,sys;r=json.load(open("/tmp/update-result.json"));sys.exit(0 if r.get("configured") and r.get("failed",0)==0 and r.get("sent",0)==0 else 1)'; then
+                exit 0
+              fi
+            fi
+            sleep 30
+          done
+          echo "Alert dispatch did not finish. Check deployment/sender configuration; daily maintenance remains a fallback."
+          exit 1

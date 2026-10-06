@@ -101,8 +101,20 @@ def maintenance(request:Request,db=Depends(get_db)):
 
 
 @router.post('/api/maintenance/updates')
+@router.get('/api/maintenance/update-check')
 def push_updates_now(request: Request, db=Depends(get_db)):
     cron_auth(request)
+    from .update_push import dispatch_updates
+    return dispatch_updates(db)
+
+
+@router.post('/api/maintenance/release-updates')
+def release_updates(request: Request, db=Depends(get_db)):
+    secret = os.getenv('UPDATE_RELEASE_SECRET', '')
+    if not secret or not hmac.compare_digest(request.headers.get('Authorization', ''), 'Bearer ' + secret):
+        raise HTTPException(401, 'Unauthorized')
+    from .account_security import limit
+    limit(db, 'release-update-dispatch', maximum=12, seconds=300)
     from .update_push import dispatch_updates
     return dispatch_updates(db)
 

@@ -1,4 +1,8 @@
 {
+  "5.12.6": [
+    { "title": "More dependable update alerts", "detail": "Improved Android background delivery and release-triggered notifications." },
+    { "title": "Check notification delivery", "detail": "View registered devices and send a test notification from Settings." }
+  ],
   "5.12.5": [
     { "title": "A clearer Android update experience", "detail": "Review the version and changes in a focused popup before downloading the update." },
     { "title": "Know what changed", "detail": "A What's new popup highlights the improvements after you sign in to an updated version." },

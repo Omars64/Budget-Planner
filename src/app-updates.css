@@ -30,3 +30,7 @@
 .release-meta { display:flex; justify-content:space-between; color:var(--muted); font-size:12px; margin-top:24px; }
 .release-popup progress { width:100%; margin-top:16px; accent-color:var(--accent); }
 .release-status { font-size:13px; line-height:1.5; margin-bottom:0; }
+.update-delivery { border-top:1px solid var(--line); padding-top:14px; }
+.update-delivery summary { cursor:pointer; font-size:14px; padding:10px 0; }
+.update-delivery .button-row { flex-wrap:wrap; }
+.update-delivery p { font-size:13px; overflow-wrap:anywhere; }

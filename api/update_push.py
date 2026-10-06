@@ -110,17 +110,17 @@ def newer(left, right):
     return tuple(map(int, left.split('.'))) > tuple(map(int, right.split('.')))
 
 
-def send_device(row, version):
+def send_device(row, version, test=False):
     value = json.loads(cipher().decrypt(row.payload.encode()))
-    title = f'Budgetly {version} is available'
-    body = 'Open Budgetly to review the latest update.'
+    title = 'Budgetly test notification' if test else f'Budgetly {version} is available'
+    body = 'Notifications are reaching this device.' if test else 'Open Budgetly to review the latest update.'
     if row.platform == 'browser':
         from pywebpush import webpush, WebPushException
         from py_vapid import Vapid
         private_key = os.environ['WEB_PUSH_PRIVATE_KEY'].replace('\\n', '\n')
         vapid = Vapid.from_pem(private_key.encode()) if '-----BEGIN' in private_key else Vapid.from_string(private_key)
         try:
-            webpush(value, json.dumps({'version': version, 'title': title, 'body': body}),
+            webpush(value, json.dumps({'version': version, 'title': title, 'body': body, 'test': test}),
                     vapid_private_key=vapid,
                     vapid_claims={'sub': os.environ['WEB_PUSH_SUBJECT']}, ttl=86400, timeout=5)
             return 200
@@ -142,11 +142,46 @@ def send_device(row, version):
     with httpx.Client(timeout=5, follow_redirects=False) as client:
         result = client.post(f'https://fcm.googleapis.com/v1/projects/{project}/messages:send',
             headers={'Authorization': f'Bearer {credentials.token}'}, json={'message': {
-                'token': value, 'data': {'budgetlyUpdate': 'true', 'version': version, 'title': title, 'body': body},
-                'android': {'priority': 'normal', 'ttl': '86400s', 'collapse_key': 'budgetly-updates'}}})
+                'token': value,
+                'data': {'budgetlyUpdateTest' if test else 'budgetlyUpdate': 'true', 'version': version, 'title': title, 'body': body},
+                # Visible alerts may wake a sleeping device; background financial work never uses this channel.
+                'android': {'priority': 'high', 'ttl': '300s' if test else '86400s',
+                            'collapse_key': 'budgetly-test' if test else 'budgetly-updates',
+                            **({'notification': {'channel_id': 'budgetly-updates', 'tag': 'budgetly-test'}} if test else {})},
+                **({'notification': {'title': title, 'body': body}} if test else {})}})
     if result.status_code == 404 and 'UNREGISTERED' in result.text:
         return 410
     return result.status_code
+
+
+@router.get('/api/app-updates/push-devices')
+def device_status(response: Response, user=Depends(current_user), db=Depends(get_db)):
+    response.headers['Cache-Control'] = 'no-store'
+    rows = db.query(UpdatePushDevice).filter_by(user_id=user.id).order_by(UpdatePushDevice.updated_at.desc()).all()
+    return {'devices': [{'id': row.id, 'platform': row.platform, 'installed_version': row.installed_version,
+                         'last_accepted_version': row.last_version,
+                         'registered_at': row.updated_at.isoformat() + 'Z'} for row in rows]}
+
+
+@router.post('/api/app-updates/push-device/{device_id}/test')
+def test_delivery(device_id: UUID, user=Depends(current_user), db=Depends(get_db)):
+    from .account_security import limit
+    limit(db, f'update-push-test:{user.id}', maximum=3, seconds=300)
+    row = db.query(UpdatePushDevice).filter_by(id=str(device_id), user_id=user.id).first()
+    if not row:
+        raise HTTPException(404, 'Registered device not found. Save notifications on that device first.')
+    if not configured()[row.platform]:
+        raise HTTPException(503, 'Notification sender is not configured.')
+    try:
+        status = send_device(row, row.installed_version, test=True)
+    except Exception:
+        raise HTTPException(503, 'The notification provider could not be reached. Please retry.') from None
+    if status in (404, 410):
+        db.delete(row); db.commit()
+        raise HTTPException(409, 'Device registration expired. Save notifications on that device again.')
+    if not 200 <= status < 300:
+        raise HTTPException(503, 'The notification provider rejected this test. Check sender configuration.')
+    return {'accepted': True, 'message': 'Test accepted by the provider. Check the selected device; delivery is not yet confirmed.'}
 
 
 def dispatch_updates(db):

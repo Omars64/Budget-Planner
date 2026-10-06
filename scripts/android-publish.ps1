@@ -100,11 +100,11 @@ function Invoke-BudgetlyRelease {
         }
         $null = Run gh.exe @('release', 'edit', $tag, '--repo', $repo, '--draft=false', '--latest')
         Write-Host "RELEASE PUBLISHED: https://github.com/$repo/releases/tag/$tag" -ForegroundColor Green
-        Write-Host 'Budgetly will discover this release through normal update checks. Configured closed-app push is also dispatched by daily maintenance.'
+        Write-Host 'GitHub release alerts run automatically when UPDATE_RELEASE_SECRET is configured. Daily update checks provide a fallback.'
         if ($env:BUDGETLY_UPDATE_PUSH_SECRET) {
             try {
                 $result = Invoke-RestMethod -Method Post -Uri 'https://budget-planner-ecru-seven.vercel.app/api/maintenance/updates' -Headers @{Authorization="Bearer $env:BUDGETLY_UPDATE_PUSH_SECRET"} -TimeoutSec 30
-                Write-Host "Update push: $($result.sent) delivered, $($result.failed) pending retry."
+                Write-Host "Update push: $($result.sent) accepted by providers, $($result.failed) pending retry. Receipt on devices is not confirmed."
             } catch { Write-Warning 'Release published, but immediate push could not complete. Daily maintenance will retry; check deployment and push configuration.' }
         }
         Write-Host 'Vercel deployment is triggered by Git push; this launcher does not wait for its result.'
