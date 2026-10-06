@@ -1,4 +1,5 @@
 import { Capacitor } from '@capacitor/core'
+import {currencyDigits} from './currency'
 import { guestActive, guestApi, requestGuestSignIn } from './guest'
 import { clearOfflineCache } from './offlineStore'
 import { cacheOfflineResponse, canQueueOffline, offlineUser, queueOfflineTransaction, readOfflineResponse, setOfflineUser, syncOfflineQueue } from './offlineSync'
@@ -155,11 +156,12 @@ export const money = (value, currency = 'KWD', compact = false) => {
   try {
     return new Intl.NumberFormat(undefined, {
       style: 'currency', currency,
-      maximumFractionDigits: currency === 'KWD' ? 3 : 2,
+      minimumFractionDigits: compact ? 0 : currencyDigits(currency),
+      maximumFractionDigits: currencyDigits(currency),
       notation: compact ? 'compact' : 'standard',
     }).format(n)
   } catch {
-    return `${n.toFixed(2)} ${currency}`
+    return `${n.toFixed(currencyDigits(currency))} ${currency}`
   }
 }
 

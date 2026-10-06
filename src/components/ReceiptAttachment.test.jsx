@@ -23,7 +23,7 @@ test('keeps receipt requests hidden until expanded and requires an explicit save
   fireEvent.click(screen.getByRole('button',{name:'Save receipt'}))
   await screen.findByText('Receipt saved.')
   expect(api).toHaveBeenLastCalledWith('/api/transactions/12/receipt',expect.objectContaining({method:'PUT'}))
-  expect(dirty).toHaveBeenLastCalledWith(false)
+  await waitFor(()=>expect(dirty).toHaveBeenLastCalledWith(false))
 })
 test('keeps an unsaved photo available after a failed upload',async()=>{
   const {container}=render(<ReceiptAttachment transactionId={12}/>)

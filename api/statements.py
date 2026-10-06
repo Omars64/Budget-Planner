@@ -7,6 +7,7 @@ from html import escape
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
+from .currency import currency_digits, currency_number
 from sqlalchemy import or_
 
 from .database import get_db
@@ -111,7 +112,7 @@ def display_row(row):
     values = list(row)
     for index in (7, 8, 9):
         if values[index] != '':
-            values[index] = f'{values[index]:,.3f}'
+            values[index] = currency_number(values[index],values[10])
     return values
 
 
@@ -136,7 +137,9 @@ def as_xlsx(rows):
         ws.column_dimensions[get_column_letter(index)].width = width
     for row in ws.iter_rows(min_row=2):
         for index in (7, 8, 9):
-            row[index].number_format = '#,##0.000;[Red](#,##0.000)'
+            digits=currency_digits(row[10].value)
+            pattern='#,##0'+('.'+'0'*digits if digits else '')
+            row[index].number_format = f'{pattern};[Red]({pattern})'
         if row[4].value == 'Opening balance':
             for cell in row:
                 cell.fill = PatternFill('solid', fgColor='EAF1F5')

@@ -15,6 +15,7 @@ import BalancePreview from './BalancePreview'
 import { transactionSaved } from '../lib/savedFeedback'
 import ReportingMonthField from './ReportingMonthField'
 import RecentDescriptions from './RecentDescriptions'
+import ReceiptDraft from './ReceiptDraft'
 import { recentEntries, rememberEntry, useWorkspacePreferences } from '../lib/workspacePreferences'
 
 const blank = () => ({ type: 'expense', amount: '', description: '', notes: '', date: dateInput(), reporting_month: '', wallet_id: '', transfer_wallet_id: '', category_id: '', recurring_frequency: 'none', recurring_until: '' })
@@ -32,6 +33,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(false)
   const [voiceActive, setVoiceActive] = useState(false)
+  const [photoBusy,setPhotoBusy]=useState(false)
   const [advanced, setAdvanced] = useState(false)
   const [schedule, setSchedule] = useState(false)
   const submitting = useRef(false)
@@ -42,7 +44,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
     setError('')
     setErrors({})
     setLoading(true)
-    setAdvanced(Boolean(editing?.recurring_frequency && editing.recurring_frequency !== 'none'))
+    setAdvanced(false)
     const resumeSchedule = !editing && !isGuest && sessionStorage.getItem(`budgetly_schedule_resume_${user.id}`) === 'true'
     setSchedule(resumeSchedule)
     const controller = new window.AbortController()
@@ -83,7 +85,8 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
 
   const submit = async e => {
     e.preventDefault()
-    if (submitting.current || loading || voiceActive) return
+    if (submitting.current || loading || voiceActive || photoBusy) return
+    if(schedule && form.receipt){setError('Record now to save this reference image. Scheduled entries do not support images yet.');return}
     const invalid = transactionErrors(form)
     if (schedule && (form.recurring_frequency !== 'none' || form.recurring_until)) {
       setError('Scheduled entries must be one-time. Turn off Repeat first.'); setAdvanced(true); return
@@ -113,7 +116,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
     finally { submitting.current = false; setBusy(false) }
   }
 
-  return <Modal preserveDraft={!editing} protectChanges={Boolean(editing)} isDirty={Boolean(editing && baseline.current && JSON.stringify(form) !== baseline.current)} open={open} onClose={() => !busy && onClose()} title={editing ? 'Edit transaction' : 'Add transaction'} footer={close => <div className="modal-actions"><button type="button" className="button ghost" disabled={busy} onClick={close}>Cancel</button><button type="submit" form={formId} className="button primary" disabled={busy || loading || voiceActive}>{loading ? 'Loading wallets...' : busy ? 'Saving…' : editing ? 'Save changes' : schedule ? 'Schedule entry' : 'Add transaction'}</button></div>}>
+  return <Modal preserveDraft={!editing} protectChanges={Boolean(editing)} isDirty={Boolean(editing && baseline.current && JSON.stringify(form) !== baseline.current)} open={open} onClose={() => !busy && !photoBusy && onClose()} title={editing ? 'Edit transaction' : 'Add transaction'} footer={close => <div className="modal-actions"><button type="button" className="button ghost" disabled={busy || photoBusy} onClick={close}>Cancel</button><button type="submit" form={formId} className="button primary" disabled={busy || loading || voiceActive || photoBusy}>{loading ? 'Loading wallets...' : photoBusy ? 'Preparing photo...' : busy ? 'Saving…' : editing ? 'Save changes' : schedule ? 'Schedule entry' : 'Add transaction'}</button></div>}>
     <form id={formId} onSubmit={submit} noValidate className="stack gap-18 transaction-form">
       <fieldset className="transaction-fields stack gap-18" disabled={busy || loading}>
       <div className="segment-control three" role="group" aria-label="Transaction type">
@@ -159,6 +162,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
         {form.recurring_frequency !== 'none' && <div><DateField label="Repeat until" value={form.recurring_until} min={form.date.slice(0,10)} onChange={value => set('recurring_until',value)} disabled={busy || loading}/>{errors.recurring_until && <small className="field-error">{errors.recurring_until}</small>}</div>}
 
         <label className="field"><span>Notes (optional)</span><textarea rows="3" value={form.notes} onChange={e => set('notes', e.target.value)}/></label>
+        {!isGuest&&!schedule&&<ReceiptDraft value={form.receipt} onChange={value=>set('receipt',value)} onBusy={setPhotoBusy} disabled={busy||loading}/>}
       </div></details>
       {error && <div className="form-error" role="alert">{error}</div>}
       </fieldset>

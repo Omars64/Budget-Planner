@@ -1,6 +1,6 @@
 # Daily-use improvements
 
-Version 5.13.0 builds on existing entry memory, statement import, weekly summary,
+Version 5.14.0 builds on existing entry memory, statement import, weekly summary,
 search filters and restore confirmation. No paid AI extraction is enabled.
 
 ## Workflows
@@ -8,12 +8,21 @@ search filters and restore confirmation. No paid AI extraction is enabled.
 - Entry: choose a remembered description to prepare a wallet/category draft.
   Archived/missing choices are not applied, edits are not overwritten, and Save is
   still required. Personal preferences can disable memory and suggestions.
-- Receipts: open a personal transaction's details, expand Receipt, take or choose
-  a photo, review, then Save receipt. Photos are compressed and validated on the
-  server. They are private to the record owner, included in JSON/Drive backups,
-  remapped on restore, and preserved when the transaction is moved to Trash.
-  Receipt uploads require a connection; failed uploads keep the photo for retry.
-  Guest and shared-wallet receipt handling is not enabled in this release.
+- References: expand More options in a personal or shared Record now form, take
+  or choose a photo, then save the entry. The record and image save atomically,
+  including offline-queued new entries. Existing references remain unchanged if
+  no replacement image is selected. Shared members can view images; editing an
+  existing reference requires transaction edit access. Photos are compressed and
+  server-validated, included in the owner's JSON/Drive backup and Trash recovery.
+  Guest and scheduled references are not enabled. Standalone receipt updates
+  require a connection; failures keep the draft for retry.
+- Currency: account and guest settings use the same supported-currency catalog.
+  Amount displays, attention guidance, AI fallback and exports use currency
+  decimal precision. Changes never convert or rewrite underlying amounts. Bank
+  message suggestions use the selected currency and flag foreign-currency alerts.
+- Scrolling: the global number-input wheel guard removes number focus on wheel
+  without preventing normal page scrolling. Money inputs preserve raw precision
+  and show currency-appropriate zero placeholders and decimal keyboards.
 - Statement matching: possible matches have the same wallet, type and amount,
   within three days. Similar rows are unchecked until reviewed. A confirmed match
   keeps the existing transaction, without modifying it or adding a second record.

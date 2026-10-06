@@ -67,11 +67,11 @@ def test_viewer_can_export_statement_with_prior_opening_balance(workspace):
     assert response.status_code == 200, response.text
     rows = list(csv.DictReader(io.StringIO(response.content.decode('utf-8-sig'))))
     assert rows[0]['Entry'] == 'Opening balance'
-    assert rows[0]['Balance'] == '50.000'
+    assert rows[0]['Balance'] == '50.00'
     assert rows[1]['Description'] == 'Breakfast'
     assert rows[1]['Reporting month'] == '2026-09'
-    assert rows[1]['Money out'] == '2.250'
-    assert rows[1]['Balance'] == '47.750'
+    assert rows[1]['Money out'] == '2.25'
+    assert rows[1]['Balance'] == '47.75'
     assert rows[1]['Notes'] == 'Cafe'
     assert rows[1]['Currency'] == 'USD'
     actor['user'] = stranger

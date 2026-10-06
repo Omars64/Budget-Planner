@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowLeft, RefreshCw, Sparkles } from 'lucide-react'
 import { api, auth, flushOfflineTransactions, jsonBody } from './lib/api'
+import {installMoneyInputDefaults} from './lib/moneyInputs'
 import { rememberOfflineSession, restoreOfflineSession, setOfflineUser } from './lib/offlineSync'
 import AppShell from './components/AppShell'
 const Overview = lazy(() => import('./pages/Overview'))
@@ -208,6 +209,7 @@ export default function App() {
   const { confirm, confirmation } = useConfirmation()
   const [session, setSession] = useState({ loading: true, user: null })
   const [settings, setSettings] = useState(() => ({ ...readDeviceAppearance(), currency: 'KWD', display_name: 'Budgetly', week_starts_on: 'sunday', compact_numbers: false }))
+  useEffect(()=>installMoneyInputDefaults(document,settings.currency),[settings.currency])
   useAppearance(settings)
   const [appearance, setAppearance] = useState({ profile_image: '', wallpaper_image: '' })
   const [refreshKey, setRefreshKey] = useState(0)

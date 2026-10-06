@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from .database import get_db
+from .currency import currency_amount
 from .extensions import shared_wallet_ids
 from .index import budget_spent, current_user, setting
 from .models import Budget, Debt, Goal, PlannedTransaction, User, Wallet
@@ -21,7 +22,7 @@ def amount(value) -> Decimal:
 
 
 def money(value, currency: str) -> str:
-    return f"{currency} {amount(value):,.3f}"
+    return currency_amount(amount(value),currency)
 
 
 def item(kind: str, severity: str, title: str, detail: str, path: str, **extra) -> dict:

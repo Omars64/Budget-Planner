@@ -6,6 +6,7 @@ import { rememberEntry } from '../lib/workspacePreferences'
 
 vi.mock('../App', () => ({useApp:() => ({user:{id:9},settings:{currency:'KWD'}})}))
 vi.mock('../lib/api', () => ({api:vi.fn(),jsonBody:data=>({body:JSON.stringify(data)}),money:n=>'KWD '+Number(n||0).toFixed(3)}))
+vi.mock('../lib/receiptImage',()=>({receiptImage:vi.fn(async()=>({name:'reference.jpg',image:'data:image/jpeg;base64,AA=='}))}))
 afterEach(cleanup)
 beforeAll(() => {
   window.HTMLDialogElement.prototype.showModal = function () { this.open = true }
@@ -20,6 +21,21 @@ async function mount() {
   render(<TransactionModal open onClose={vi.fn()} onSaved={vi.fn()}/> )
   await waitFor(() => expect(screen.getByRole('button',{name:'Add transaction'})).toBeEnabled())
 }
+it('keeps image selection under collapsed More options and submits it with the entry',async()=>{
+  await mount()
+  const options=screen.getByText('More options').closest('details')
+  expect(options).not.toHaveAttribute('open')
+  fireEvent.click(screen.getByText('More options'))
+  fireEvent.change(screen.getByLabelText('Choose reference image'),{target:{files:[new globalThis.File(['photo'],'reference.jpg',{type:'image/jpeg'})]}})
+  await screen.findByAltText('Reference image draft')
+  fireEvent.change(document.querySelector('.amount-input input'),{target:{value:'4.5'}})
+  fireEvent.change(screen.getByLabelText('Description'),{target:{value:'Test photo'}})
+  fireEvent.click(screen.getByRole('button',{name:'Add transaction',exact:true}))
+  await waitFor(()=>expect(api).toHaveBeenCalledWith('/api/transactions',expect.objectContaining({method:'POST'})))
+  const payload=JSON.parse(api.mock.calls.find(([path])=>path==='/api/transactions')[1].body)
+  expect(payload.receipt.name).toBe('reference.jpg')
+  expect(payload.amount).toBe(4.5)
+})
 it('keeps templates collapsed and explains invalid amounts', async () => {
   await mount()
   expect(screen.getByText('Templates').closest('details')).not.toHaveAttribute('open')

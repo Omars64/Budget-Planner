@@ -4,6 +4,7 @@ from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 import httpx
 from fastapi import HTTPException
+from .currency import currency_amount
 from .ai_context import build_context, transaction_fact, scope_wallets, ledger_query
 from .ai_actions import target
 from .ai_settings import assistant_status
@@ -77,7 +78,7 @@ def _decimal(value):
 
 
 def _money(value, currency):
-    return f'{currency} {_decimal(value):.3f}'
+    return currency_amount(_decimal(value),currency)
 
 
 def _activity_answer(facts, question):

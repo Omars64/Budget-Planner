@@ -5,6 +5,7 @@ import { api, jsonBody } from '../lib/api'
 import { clearGuest, guestCsv, GUEST_KEY, GUEST_IMPORT_KEY } from '../lib/guest'
 import { saveDownload } from '../lib/download'
 import SettingsSection from '../components/SettingsSection'
+import CurrencyField from '../components/CurrencyField'
 import ComfortSettings from '../components/ComfortSettings'
 import WorkspacePreferences from '../components/WorkspacePreferences'
 import AccentPicker from '../components/AccentPicker'
@@ -30,7 +31,7 @@ export default function GuestSettings() {
     <SettingsSection title="Personal preferences"><ComfortSettings/><WorkspacePreferences/><form className="stack gap-16" onSubmit={save}>
       <label className="field"><span>Appearance</span><select aria-label="Appearance" value={form.theme} onChange={event => setForm({ ...form, theme: event.target.value })}><option value="system">Match device</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
       <AccentPicker value={form.accent_color || '#0a4173'} onChange={value => setForm({ ...form, accent_color: value })}/>
-      <label className="field"><span>Currency</span><select aria-label="Currency" value={form.currency} onChange={event => setForm({ ...form, currency: event.target.value })}>{['KWD', 'USD', 'EUR', 'GBP', 'INR', 'AED', 'SAR'].map(value => <option key={value}>{value}</option>)}</select></label>
+      <CurrencyField value={form.currency} onChange={currency=>setForm({...form,currency})}/>
       <label className="field"><span>Wallpaper</span><select aria-label="Wallpaper" value={form.wallpaper_style} onChange={event => setForm({ ...form, wallpaper_style: event.target.value, wallpaper_enabled: event.target.value !== 'none' })}><option value="none">None</option><option value="budgetly">Budgetly</option></select></label>
       <label className="check-row"><input type="checkbox" checked={form.compact_numbers} onChange={event => setForm({ ...form, compact_numbers: event.target.checked })}/><span>Compact numbers</span></label>
       <button className="button primary"><Save size={17}/>Save preferences</button>

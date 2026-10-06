@@ -11,7 +11,7 @@ from sqlalchemy.pool import StaticPool
 from api.app import app
 from api.database import Base, get_db
 from api.index import current_user, export_backup
-from api.models import Transaction, TransactionReceipt, User, Wallet
+from api.models import Transaction, TransactionReceipt, User, Wallet, WalletShare
 from api.recovery import trash
 
 @pytest.fixture
@@ -92,3 +92,64 @@ def test_preview_flags_duplicates_within_the_same_csv(workspace):
     rows=client.post('/api/statements/preview',json={'wallet_id':wallet.id,'text':'date,description,amount,type\n2026-10-06,New,5,expense\n2026-10-06,New,5.000,expense'}).json()
     assert not rows[0]['duplicate']
     assert rows[1]['duplicate']
+
+def transaction_body(wallet,**extra):
+    return {'type':'expense','amount':5,'description':'Reference test','date':'2026-10-06T12:00:00','wallet_id':wallet.id,**extra}
+
+def test_reference_saves_atomically_and_is_idempotent(workspace):
+    client,db,user,other,wallet,tx,actor=workspace
+    body=transaction_body(wallet,receipt=photo())
+    headers={'Idempotency-Key':'reference-image-test'}
+    first=client.post('/api/transactions',json=body,headers=headers)
+    assert first.status_code==201,first.text
+    second=client.post('/api/transactions',json=body,headers=headers)
+    assert first.json()['id']==second.json()['id']
+    assert db.query(TransactionReceipt).count()==1
+    row=db.get(Transaction,first.json()['id'])
+    invalid=transaction_body(wallet,amount=99,receipt={'name':'bad.svg','image':'data:image/svg+xml;base64,AAAA'})
+    assert client.put(f'/api/transactions/{row.id}',json=invalid,headers={'If-Match':first.json()['revision']}).status_code==422
+    db.rollback()
+    assert db.get(Transaction,row.id).amount==Decimal('5')
+    assert db.get(TransactionReceipt,row.id).name=='receipt.jpg'
+
+def test_shared_reference_respects_view_add_and_edit_access(workspace):
+    client,db,user,other,wallet,tx,actor=workspace
+    share=WalletShare(wallet_id=wallet.id,owner_id=user.id,member_user_id=other.id,invitee_email=other.email,permission='view')
+    db.add(share);db.commit()
+    client.put(f'/api/transactions/{tx.id}/receipt',json=photo())
+    actor['user']=other
+    path=f'/api/shared/transactions/{tx.id}/receipt'
+    assert client.get(path).status_code==200
+    assert client.put(path,json=photo()).status_code==403
+    assert client.delete(path).status_code==403
+    assert client.get(f'/api/transactions/{tx.id}/receipt').status_code==404
+    share.permission='add';db.commit()
+    response=client.post('/api/shared/transactions',json=transaction_body(wallet,receipt=photo()))
+    assert response.status_code==201,response.text
+    assert db.get(TransactionReceipt,response.json()['id']).name=='receipt.jpg'
+    assert client.put(path,json=photo()).status_code==403
+    share.permission='edit';db.commit()
+    assert client.put(path,json=photo()).status_code==200
+    assert client.delete(path).status_code==204
+    db.delete(share);db.commit()
+    assert client.get(path).status_code==404
+
+def test_currency_selection_persists_and_rejects_invalid_codes(workspace):
+    client,db,user,other,wallet,tx,actor=workspace
+    for code in ('USD','JPY','BHD','INR'):
+        response=client.put('/api/settings',json={'currency':code})
+        assert response.status_code==200,response.text
+        assert client.get('/api/settings').json()['currency']==code
+    assert client.put('/api/settings',json={'currency':'BAD'}).status_code==422
+    from api.currency import currency_amount
+    assert currency_amount(Decimal('12.345'),'USD')=='USD 12.35'
+    assert currency_amount(Decimal('12.345'),'BHD')=='BHD 12.345'
+    assert currency_amount(Decimal('12'),'JPY')=='JPY 12'
+
+def test_bank_suggestions_use_selected_currency_without_converting():
+    from api.message_parser import suggest
+    assert suggest('Paid USD 12.34 at Store','USD')['amount']=='12.34'
+    assert suggest('Paid INR 120 at Store','INR')['amount']=='120'
+    foreign=suggest('Paid KWD 12.345 at Store','USD')
+    assert foreign['amount']==''
+    assert any('different currency' in warning for warning in foreign['warnings'])

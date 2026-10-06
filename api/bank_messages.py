@@ -76,11 +76,13 @@ def paste_message(payload: MessageIn, user=Depends(current_user), db=Depends(get
 @router.get('/api/bank-messages')
 def messages(user=Depends(current_user), db=Depends(get_db)):
     from .message_parser import suggest
+    from .index import setting
+    currency=setting(db,user.id,'currency','KWD')
     rows=db.query(BankMessage).filter_by(user_id=user.id, recorded=False).order_by(BankMessage.id.desc()).limit(500).all()
     texts={}
     for row in db.query(BankMessage).filter_by(user_id=user.id).all():
         key=(row.bank,row.message.strip());texts[key]=texts.get(key,0)+1
-    return [{'id':r.id,'bank':r.bank,'message':r.message,'created_at':r.created_at.isoformat()+'Z','suggestions':suggest(r.message),'possible_duplicate':texts[(r.bank,r.message.strip())]>1} for r in rows]
+    return [{'id':r.id,'bank':r.bank,'message':r.message,'created_at':r.created_at.isoformat()+'Z','suggestions':suggest(r.message,currency),'possible_duplicate':texts[(r.bank,r.message.strip())]>1} for r in rows]
 
 
 @router.post('/api/bank-messages/{message_id}/record')

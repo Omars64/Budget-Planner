@@ -9,6 +9,7 @@ const ledger = vi.hoisted(() => ({rows:[]}))
 vi.mock('../App', () => ({useApp:() => ({settings:{currency:'KWD'},refreshKey:0,refresh:vi.fn(),notify:vi.fn(),confirm:vi.fn()})}))
 vi.mock('../lib/api', () => ({api:vi.fn(),jsonBody:data=>({body:JSON.stringify(data)}),money:n=>'KWD '+Number(n||0).toFixed(3),readCached:()=>null}))
 vi.mock('../lib/useLedger', () => ({default:()=>({rows:ledger.rows,loading:false,hasMore:false,page:1})}))
+vi.mock('../lib/receiptImage',()=>({receiptImage:vi.fn(async()=>({name:'reference.jpg',image:'data:image/jpeg;base64,AA=='}))}))
 beforeAll(() => {
   window.HTMLDialogElement.prototype.showModal = function () { this.open = true }
   window.HTMLDialogElement.prototype.close = function () { this.open = false }
@@ -20,6 +21,21 @@ beforeEach(() => {
   localStorage.clear()
   ledger.rows = []
   api.mockImplementation(path=>Promise.resolve(path==='/api/shared/wallets'?[wallet]:[]))
+})
+
+it('attaches a shared reference inside collapsed More options and saves it atomically',async()=>{
+  render(<MemoryRouter><SharedTransactions/></MemoryRouter>)
+  await screen.findByText('Household')
+  fireEvent(window,new window.Event('budgetly:add-shared-transaction'))
+  expect(screen.getByText('More options').closest('details')).not.toHaveAttribute('open')
+  fireEvent.click(screen.getByText('More options'))
+  fireEvent.change(screen.getByLabelText('Choose reference image'),{target:{files:[new globalThis.File(['photo'],'reference.jpg',{type:'image/jpeg'})]}})
+  await screen.findByAltText('Reference image draft')
+  fireEvent.change(screen.getByLabelText('Amount'),{target:{value:'4.5'}})
+  fireEvent.change(screen.getByLabelText('Description'),{target:{value:'Shared reference'}})
+  fireEvent.click(screen.getByRole('button',{name:'Save',exact:true}))
+  await waitFor(()=>expect(api).toHaveBeenCalledWith('/api/shared/transactions',expect.objectContaining({method:'POST'})))
+  expect(JSON.parse(api.mock.calls.find(([path])=>path==='/api/shared/transactions')[1].body).receipt.name).toBe('reference.jpg')
 })
 
 it('recovers a shared draft after closing and navigating away, then clears it only after a successful save', async () => {

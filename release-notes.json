@@ -1,4 +1,9 @@
 {
+  "5.14.0": [
+    {"title":"Reference photos while recording","detail":"Attach a photo under More options in personal and shared transaction forms. Shared images follow wallet permissions."},
+    {"title":"Safer amount fields","detail":"Scrolling over number inputs no longer changes your entered amounts."},
+    {"title":"Choose your currency","detail":"Select your account currency in Settings, with consistent currency labels and decimal formatting across the workspace and exports. Existing amounts are not exchange-converted."}
+  ],
   "5.13.0": [
     { "title": "Smarter daily entry", "detail": "Common descriptions can prepare a wallet and category draft for your review." },
     { "title": "Keep receipt photos", "detail": "Capture or attach a receipt inside transaction details. Receipts are included in backup and recovery." },

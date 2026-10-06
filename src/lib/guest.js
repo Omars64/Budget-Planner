@@ -1,5 +1,6 @@
 import { dateInput } from './time'
 import { weeklySummary } from './weeklySummary'
+import {validCurrency} from './currency'
 
 export const GUEST_KEY = 'budgetly_guest_workspace_v1'
 export const GUEST_IMPORT_KEY = 'budgetly_guest_import_pending_v1'
@@ -111,7 +112,7 @@ async function handle(path, options) {
   let result
   if (route === '/api/settings') {
     if (method === 'GET') return data.settings
-    if (method === 'PUT') { for (const [key, value] of Object.entries(body)) if (allowedSettings.has(key)) data.settings[key] = value }
+    if (method === 'PUT') { if(body.currency&&!validCurrency(body.currency))fail('Choose a supported currency.'); for (const [key, value] of Object.entries(body)) if (allowedSettings.has(key)) data.settings[key] = value }
     else fail('This operation is not available.')
     result = data.settings
   } else if (route === '/api/account/appearance' && method === 'GET') return { profile_image: '', wallpaper_image: '' }

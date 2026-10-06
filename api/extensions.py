@@ -20,7 +20,7 @@ from .data_safety import save_recovery
 
 from .database import get_db
 from .models import Category, PendingSignup, Transaction, PlannedTransaction, User, Wallet, WalletShare
-from .schemas import TransactionIn
+from .schemas import TransactionIn, TransactionWriteIn
 from .ledger_filters import ledger_options, filter_ledger
 from .ledger_accounting import require_regular_transaction
 from .index import (
@@ -65,7 +65,7 @@ class AppearanceIn(BaseModel):
     wallpaper_image: Optional[str] = None
 
 
-class SharedTransactionIn(TransactionIn):
+class SharedTransactionIn(TransactionWriteIn):
     @model_validator(mode="after")
     def no_recurring_shared(self):
         if self.recurring_frequency != "none" or self.recurring_until is not None:
@@ -346,7 +346,10 @@ def create_shared_transaction(payload: SharedTransactionIn, request: Request, us
     source = validate_shared_tx(db, user, payload)
     receipt, previous = reserve(db, user.id, 'shared-transaction', request.headers.get('Idempotency-Key'), payload)
     if previous is not None: return previous
-    row = Transaction(user_id=source.user_id, recorded_by_id=user.id, **payload.model_dump()); db.add(row); db.flush(); db.refresh(row)
+    row = Transaction(user_id=source.user_id, recorded_by_id=user.id, **payload.model_dump(exclude={'receipt'})); db.add(row); db.flush(); db.refresh(row)
+    if payload.receipt:
+        from .receipts import store_receipt
+        store_receipt(db, row.id, payload.receipt)
     from .account_security import audit
     audit(db, row.user_id, user.id, 'Added shared transaction', f'wallet:{row.wallet_id}')
     result = shared_tx_payload(db, user, row, shared_wallet_ids(db, user))
@@ -371,7 +374,10 @@ def update_shared_transaction(transaction_id: int, payload: SharedTransactionIn,
     if source.id != row.wallet_id:
         audit(db, source.user_id, user.id, f'Moved transaction #{row.id} to wallet', f'wallet:{source.id}')
     row.user_id = source.user_id
-    for key, value in payload.model_dump().items(): setattr(row, key, value)
+    for key, value in payload.model_dump(exclude={'receipt'}).items(): setattr(row, key, value)
+    if payload.receipt:
+        from .receipts import store_receipt
+        store_receipt(db, row.id, payload.receipt)
     db.commit(); db.refresh(row); return shared_tx_payload(db, user, row, shared_wallet_ids(db, user))
 
 
@@ -386,7 +392,8 @@ def delete_shared_transaction(transaction_id: int, undo: bool = False, user: Use
     from .recovery import trash
     deleted = trash(db, row, user, 'transaction')
     # Shared recurrence children stay recorded; do not duplicate them on restore.
-    deleted.payload = json.dumps({'item': json.loads(deleted.payload)['item']})
+    snapshot=json.loads(deleted.payload)
+    deleted.payload = json.dumps({'item': snapshot['item'], 'receipts':snapshot.get('receipts',[])})
     db.query(Transaction).filter(Transaction.recurring_parent_id == row.id).update({Transaction.recurring_parent_id: None}, synchronize_session=False)
     db.delete(row); db.commit()
     if undo:

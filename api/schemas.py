@@ -1,7 +1,8 @@
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal, Optional
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator, field_validator
+from .currency import CURRENCY_CODES
 from .timekeeping import ledger_time
 
 
@@ -107,6 +108,15 @@ class TransactionIn(BaseModel):
         return self
 
 
+class ReceiptIn(BaseModel):
+    name: str = Field(min_length=1, max_length=180)
+    image: str = Field(max_length=2_000_000)
+
+
+class TransactionWriteIn(TransactionIn):
+    receipt: Optional[ReceiptIn] = None
+
+
 class TransactionOut(TransactionIn, ORMModel):
     id: int
     wallet_name: str = ""
@@ -194,7 +204,14 @@ class SettingsPayload(BaseModel):
     accent_color: str = Field(default='#0a4173', pattern=r'^#[0-9a-fA-F]{6}$')
     reminders_enabled: bool = False
     reminder_time: str = Field(default='20:00', pattern=r'^([01]\d|2[0-3]):[0-5]\d$')
-    currency: str = Field(default="KWD", min_length=3, max_length=6)
+    currency: str = Field(default="KWD", min_length=3, max_length=3)
     display_name: str = Field(default="My Budget", min_length=1, max_length=80)
     week_starts_on: Literal["sunday", "monday"] = "sunday"
     compact_numbers: bool = False
+
+    @field_validator('currency')
+    @classmethod
+    def supported_currency(cls,value):
+        value=value.upper()
+        if value not in CURRENCY_CODES:raise ValueError('Choose a supported currency')
+        return value

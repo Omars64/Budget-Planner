@@ -2,7 +2,7 @@
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
 from .database import get_db
@@ -19,6 +19,13 @@ class PlanIn(BaseModel):
     transaction: TransactionIn
     status: Literal['planned', 'scheduled'] = 'planned'
     reminder_enabled: bool = True
+
+    @field_validator('transaction',mode='before')
+    @classmethod
+    def no_scheduled_photo(cls,value):
+        if isinstance(value,dict) and value.get('receipt'):
+            raise ValueError('Reference images are supported when recording now, not scheduling.')
+        return value
 
 
 def access(db, user, wallet_id):

@@ -26,7 +26,7 @@ from .database import Base, IS_EPHEMERAL_VERCEL_SQLITE, SessionLocal, engine, ge
 from .models import AppSetting, Budget, Category, Debt, Goal, PendingSignup, Transaction, PlannedTransaction, User, Wallet, WalletShare, WalletBalanceCheck, Note, NoteFolder, NoteShare, Feedback
 from .schemas import (
     BudgetIn, CategoryIn, ContributionIn, DebtIn, GoalIn, LoginPayload, PinPayload,
-    SettingsPayload, TransactionIn, UserCreate, UserUpdate, WalletIn,
+    SettingsPayload, TransactionIn, TransactionWriteIn, UserCreate, UserUpdate, WalletIn,
 )
 from .seed import EXPENSE_CATEGORIES, INCOME_CATEGORIES, demo_seed_enabled, ensure_default_categories, seed_database
 from .models import RecoveryPoint, NoteRevision, utc_now
@@ -876,11 +876,14 @@ def validate_transaction_references(db: Session, user_id: int, payload: Transact
 
 
 @app.post("/api/transactions", status_code=201)
-def create_transaction(payload: TransactionIn, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def create_transaction(payload: TransactionWriteIn, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
     receipt, previous = reserve(db, user.id, 'transaction', request.headers.get('Idempotency-Key'), payload)
     if previous is not None: return previous
     validate_transaction_references(db, user.id, payload)
-    row = Transaction(user_id=user.id, recorded_by_id=user.id, **payload.model_dump()); db.add(row); db.flush(); db.refresh(row)
+    row = Transaction(user_id=user.id, recorded_by_id=user.id, **payload.model_dump(exclude={'receipt'})); db.add(row); db.flush(); db.refresh(row)
+    if payload.receipt:
+        from .receipts import store_receipt
+        store_receipt(db, row.id, payload.receipt)
     result = tx_payload(row)
     if receipt: receipt.response = json.dumps(result)
     from .account_security import audit
@@ -890,7 +893,7 @@ def create_transaction(payload: TransactionIn, request: Request, user: User = De
 
 
 @app.put("/api/transactions/{item_id}")
-def update_transaction(item_id: int, payload: TransactionIn, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def update_transaction(item_id: int, payload: TransactionWriteIn, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
     row = db.query(Transaction).filter(Transaction.id == item_id, Transaction.user_id == user.id).with_for_update().first()
     if not row: raise HTTPException(404, "Transaction not found")
     check_revision(request, row)
@@ -898,7 +901,10 @@ def update_transaction(item_id: int, payload: TransactionIn, request: Request, u
     from .account_security import audit
     audit(db, user.id, user.id, 'Edited transaction', f'transaction:{row.id}')
     validate_transaction_references(db, user.id, payload)
-    for k, v in payload.model_dump().items(): setattr(row, k, v)
+    for k, v in payload.model_dump(exclude={'receipt'}).items(): setattr(row, k, v)
+    if payload.receipt:
+        from .receipts import store_receipt
+        store_receipt(db, row.id, payload.receipt)
     db.commit(); db.refresh(row); return tx_payload(row)
 
 

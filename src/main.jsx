@@ -5,6 +5,7 @@ import { HashRouter } from 'react-router-dom'
 import MotionPreferences from './components/MotionPreferences'
 import { applyAppearance, readDeviceAppearance } from './lib/appearance'
 import App from './App'
+import {installNumberWheelGuard} from './lib/numberWheel'
 import DownloadApp from './pages/DownloadApp'
 import './styles.css'
 import './attention.css'
@@ -35,6 +36,8 @@ import './guest.css'
 import './ux-refinements.css'
 
 applyAppearance(readDeviceAppearance())
+const removeNumberWheelGuard=installNumberWheelGuard()
+if(import.meta.hot)import.meta.hot.dispose(removeNumberWheelGuard)
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
