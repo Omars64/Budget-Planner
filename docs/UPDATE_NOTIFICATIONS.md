@@ -1,5 +1,22 @@
 # Update Notifications (5.11.0)
 
+## 5.12.3 Verification (2026-10-06)
+
+Version 5.12.3 uses Android version code 53. Keep the test phone on 5.12.2,
+signed in, with New Budgetly updates saved and Android notifications allowed.
+Close normally, not with Force stop. Publish 5.12.3 before expecting an alert;
+editing package.json or building an unpublished APK cannot notify a device.
+Daily dispatch is scheduled at 01:00 UTC (04:00 Kuwait time); delivery may be
+delayed by platform restrictions. Immediate dispatch requires the configured
+maintenance secret as described below. Do not put that secret in the repository.
+
+The Firebase public Android key was restricted to com.flowbudget.app and the
+verified release signing certificate. GitHub secret-scanning alert 1 was
+resolved as a verified public client key, not a server secret. The production
+Drive connect, backup, download response, and disconnect flows succeeded;
+the downloaded-file restore and real-device push checks remain separate
+acceptance steps and must not be inferred from unit-test results.
+
 ## Production Activation (2026-10-05)
 
 Firebase is associated with `thermal-pattern-510706-g0` on the Spark free plan. Android package `com.flowbudget.app` is registered, and its public SDK configuration is included in the repository. Analytics and paid billing were not enabled.

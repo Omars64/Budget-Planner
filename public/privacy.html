@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Budgetly privacy policy, including optional Google sign-in, Drive backups, notifications and AI.">
+  <title>Privacy Policy | Budgetly</title>
+  <link rel="icon" href="/favicon.ico">
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; background: #f5f7fa; color: #20252b; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { max-width: 800px; margin: auto; padding: 32px 24px 64px; }
+    header { display: flex; align-items: center; gap: 14px; padding-bottom: 24px; border-bottom: 1px solid #ccd3db; }
+    header img { width: 48px; height: 48px; }
+    h1 { margin: 0; font-size: 28px; }
+    h2 { font-size: 20px; margin-top: 32px; }
+    p, li { line-height: 1.7; overflow-wrap: anywhere; }
+    a { color: #2457bc; }
+    .date { color: #5b6470; }
+    @media (prefers-color-scheme: dark) { :root { background: #15191d; color: #e4e9ed; } a { color: #9bc4ff; } .date { color: #b2bdc8; } header { border-color: #3b454f; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header><img src="/flowbudget-logo.png" alt=""><div><h1>Budgetly Privacy Policy</h1><a href="/">Open Budgetly</a></div></header>
+    <p class="date">Effective date: 6 October 2026</p>
+    <p>Budgetly is operated by Omar Solanki. For privacy questions or data requests, contact <a href="mailto:omarsolanki46@gmail.com">omarsolanki46@gmail.com</a>.</p>
+
+    <h2>Information and purpose</h2>
+    <p>Budgetly processes your account name, email and authentication information, preferences, and records you choose to enter: wallets, transactions, budgets, goals, debts, notes, attachments, bank messages and conversations. Device notification registrations and security or service events support enabled features and service operation. Financial forecasts are estimates, not guarantees or financial advice.</p>
+    <p>Guest records stay in your browser or device storage. Clearing storage or uninstalling may remove them. Account features use our hosted service; offline features can retain local copies and pending changes. Importing guest records requires confirmation.</p>
+
+    <h2>Sharing and administration</h2>
+    <p>Shared wallets and notes make selected records available to their authorized members. Members may retain exports or copies. Administrators manage accounts and categories; the operator and authorized infrastructure administrators can access hosted information to operate, support and secure the service. Budgetly is not an end-to-end encrypted financial vault.</p>
+
+    <h2>Google sign-in</h2>
+    <p>Google sign-in is optional. Google provides identity information to verify your account; you choose your Budgetly name. Budgetly does not receive your Google password. Signing in with Google does not automatically store your financial records in Google Drive.</p>
+
+    <h2>Optional Google Drive backup</h2>
+    <p>Drive connection requires separate authorization. Budgetly requests <code>drive.file</code> permission for files used with the app, not unrestricted Drive access. Requested backups export your owned workspace to your selected Google account. Budgetly lists and downloads backups associated with that connection for restoration.</p>
+    <p>The export is readable JSON, not a separately password-encrypted archive. Keep it private. Stored Drive refresh credentials are encrypted on the server; that does not make the backup end-to-end encrypted.</p>
+    <p>Disconnecting clears stored Drive credentials and attempts to revoke authorization. Budgetly reports revocation failures; access can also be removed through your Google Account. Disconnecting or deleting your Budgetly account does not delete Drive backup files. You control their sharing and deletion.</p>
+    <p>Budgetly's use and transfer of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including its Limited Use requirements.</p>
+
+    <h2>Notifications and AI</h2>
+    <p>Enabling closed-app update notifications registers your device or browser. Firebase Cloud Messaging and browser push services deliver generic version alerts, without financial records. Disable them in Budgetly settings or device/browser permissions. Delivery depends on device, network and browser support.</p>
+    <p>Built-in guidance does not require an external AI response. When external AI is enabled and you use it, OpenAI receives your question, relevant selected financial context and recent conversation needed for the response. Requests set <code>store: false</code>; this is not a promise of zero provider retention. Provider processing follows its applicable terms and policies. Conversations can be stored in Budgetly. AI suggestions require your approval before records are changed.</p>
+
+    <h2>Providers and processing locations</h2>
+    <p>Vercel hosts the service and Neon supplies its production database. Google handles Google sign-in and optional Drive backups, Firebase and browser push providers handle enabled notifications, and OpenAI handles external AI requests when enabled. Verification and account emails use the service's configured SMTP email provider and your email provider. Providers may process information outside your country under their applicable policies. Contact the operator for current processing-location and email-provider details.</p>
+
+    <h2>Retention, deletion and security</h2>
+    <p>Account records remain available while your account is maintained, unless deleted through available controls. Trash recovery is offered for 30 days; expiration of recovery availability is not a guarantee that every underlying copy is immediately erased. Daily in-database recovery snapshots and service events older than 30 days are removed by maintenance. Inactive update registrations are pruned after 180 days.</p>
+    <p>Deleting an account removes its live private workspace and associated account connections and attempts to revoke Google access. Shared records owned by other accounts and copies already exported by members are not necessarily removed. Downloaded and Drive backups remain under your control. Hosting/database recovery copies or separately configured external backups may persist according to their configured retention. Contact the operator for assistance; immediate deletion from every provider backup is not promised.</p>
+    <p>Authentication, access controls and encryption for certain credentials help protect information, but no system can guarantee absolute security. Do not enter account passwords, card security codes or unnecessary sensitive information in records.</p>
+
+    <h2>Your choices and contact</h2>
+    <p>You can use guest mode, decline Google sign-in or Drive, choose not to use external AI, control notifications, export your records and request account deletion. Uninstalling the app does not delete a hosted account. For access, correction, deletion or other applicable privacy-rights requests, email <a href="mailto:omarsolanki46@gmail.com">omarsolanki46@gmail.com</a>.</p>
+    <p>Updates to this policy will be published here with a revised effective date. Material changes will be identified through the service or its update information.</p>
+  </main>
+</body>
+</html>

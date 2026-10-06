@@ -2,6 +2,11 @@
 
 Draft prepared: 6 October 2026. Not published or effective yet.
 
+Historical draft: the operator approved publication on 6 October 2026. The
+current policy source is `public/privacy.html`, served at
+`https://budget-planner-ecru-seven.vercel.app/privacy.html` after deployment.
+Do not use this historical draft as the OAuth privacy-policy URL.
+
 Before publication, the operator must confirm the hosting/database providers,
 retention and deletion practices, administrator access, applicable jurisdictions,
 and contact details below. This draft is not a substitute for legal review.
