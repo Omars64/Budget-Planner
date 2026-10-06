@@ -52,6 +52,14 @@ def test_reject_invalid_release(field, value):
         updates.validate_release({**RELEASE, field: value})
 
 
+def test_release_notes_are_optional_bounded_and_sanitized():
+    result = updates.validate_release({**RELEASE, 'notes': [
+        {'title': 'Safer updates', 'detail': 'Verified download', 'extra': 'ignored'},
+        {'title': 'Invalid'}, {'title': 'x' * 101, 'detail': 'Too long'}]})
+    assert result['notes'] == [{'title': 'Safer updates', 'detail': 'Verified download'}]
+    assert 'notes' not in updates.validate_release({**RELEASE, 'notes': [{}] * 13})
+
+
 def test_bounded_redirects_and_no_user_headers(monkeypatch):
     real_client = httpx.Client
     calls = []

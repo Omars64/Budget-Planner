@@ -1,0 +1,12 @@
+{
+  "5.12.5": [
+    { "title": "A clearer Android update experience", "detail": "Review the version and changes in a focused popup before downloading the update." },
+    { "title": "Know what changed", "detail": "A What's new popup highlights the improvements after you sign in to an updated version." },
+    { "title": "Smoother, more accessible popups", "detail": "Rounded corners, a gentle slide-up animation, and support for reduced motion." }
+  ],
+  "5.12.4": [
+    { "title": "Safer backup restores", "detail": "Completed scheduled entries stay completed when you restore a backup." },
+    { "title": "Optional Google Drive backup", "detail": "Connect your Drive to save and restore your Budgetly records." },
+    { "title": "Clearer privacy information", "detail": "Read how your data is stored and which optional services use it." }
+  ]
+}

@@ -37,7 +37,15 @@ def validate_release(value):
             or len(url.path[len(prefix):].split('/')) != 2 or '..' in url.path
             or '%2f' in url.path.lower()):
         raise ValueError('Invalid release')
-    return {key: value[key] for key in ('schema', 'packageId', 'version', 'versionCode', 'size', 'sha256', 'url')}
+    result = {key: value[key] for key in ('schema', 'packageId', 'version', 'versionCode', 'size', 'sha256', 'url')}
+    notes = value.get('notes')
+    if isinstance(notes, list) and len(notes) <= 12:
+        result['notes'] = [
+            {'title': item['title'], 'detail': item['detail']} for item in notes
+            if isinstance(item, dict) and isinstance(item.get('title'), str) and 0 < len(item['title'].strip()) <= 100
+            and isinstance(item.get('detail'), str) and 0 < len(item['detail'].strip()) <= 350
+        ]
+    return result
 
 
 def load_release():

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Download, RefreshCw, X } from 'lucide-react'
+import { Check, Download, RefreshCw } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { useNavigate } from 'react-router-dom'
 import { LocalNotifications } from '@capacitor/local-notifications'
@@ -7,8 +7,11 @@ import { androidUpdatesAvailable, AppUpdater, fetchRelease, fetchWebRelease, new
 import { notificationSettingsChangedEvent, updateNotificationsEnabled } from '../lib/notificationSettings'
 import { cancelUpdateNotification, notifyAppUpdate } from '../lib/updateNotifications'
 import { syncUpdatePush } from '../lib/updatePush'
+import Modal from './Modal'
+import { version } from '../../package.json'
+import { hasSeenRelease, markReleaseSeen, releaseNotes } from '../lib/releaseNotes'
 
-export default function AndroidUpdate({ authentication = false }) {
+export default function AndroidUpdate({ authentication = false, userId, guest = false }) {
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const [alerts, setAlerts] = useState(updateNotificationsEnabled)
@@ -17,6 +20,8 @@ export default function AndroidUpdate({ authentication = false }) {
   const [message, setMessage] = useState('')
   const [progress, setProgress] = useState(0)
   const [dismissed, setDismissed] = useState(false)
+  const [whatsNew, setWhatsNew] = useState(false)
+  const [manualOpen, setManualOpen] = useState(false)
   const mounted = useRef(false)
   const busy = useRef(false)
   const checking = useRef(null)
@@ -24,6 +29,24 @@ export default function AndroidUpdate({ authentication = false }) {
   const native = androidUpdatesAvailable()
   const enabled = true
   const settings = !authentication && pathname === '/settings'
+  const currentNotes = releaseNotes(version)
+
+  useEffect(() => {
+    if (authentication || guest || userId == null || hasSeenRelease(userId, version) || !currentNotes.length) return
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'hidden' || document.querySelector('[aria-modal="true"], dialog[open]') || document.body.classList.contains('driver-active')) return
+      setWhatsNew(true)
+      clearInterval(timer)
+    }, 800)
+    return () => clearInterval(timer)
+    // Release notes are fixed for the installed build.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authentication, guest, userId])
+
+  function closeWhatsNew() {
+    markReleaseSeen(userId, version)
+    setWhatsNew(false)
+  }
 
   async function check(manual = false) {
     if (!enabled || busy.current || checking.current || (!manual && Date.now() - lastCheck.current < 21600000)) return
@@ -38,6 +61,7 @@ export default function AndroidUpdate({ authentication = false }) {
       const available = latest && (native ? latest.versionCode > info.versionCode : newerVersion(latest.version))
       setRelease(available ? latest : null)
       setDismissed(false)
+      if (manual && available && native) setManualOpen(true)
       setStatus('idle')
       void syncUpdatePush(updateNotificationsEnabled()).catch(() => {})
       if (manual && !available) setMessage(latest ? 'You have the latest published version.' : 'No release has been published yet.')
@@ -71,13 +95,13 @@ export default function AndroidUpdate({ authentication = false }) {
     return () => { window.removeEventListener(notificationSettingsChangedEvent, changed); window.removeEventListener('storage', changed) }
   }, [])
   useEffect(() => {
-    if (release && alerts) void notifyAppUpdate(release, () => { setDismissed(false); navigate('/settings') }).catch(() => {})
+    if (release && alerts) void notifyAppUpdate(release, () => { setDismissed(false); setManualOpen(true); navigate('/settings') }).catch(() => {})
   }, [release, alerts, navigate])
   useEffect(() => {
     if (!native) return
     let disposed = false, handle
     void LocalNotifications.addListener('localNotificationActionPerformed', action => {
-      if (action.notification.extra?.budgetlyUpdate) { setDismissed(false); navigate('/settings'); lastCheck.current = 0; void check(true) }
+      if (action.notification.extra?.budgetlyUpdate) { setDismissed(false); setManualOpen(true); navigate('/settings'); lastCheck.current = 0; void check(true) }
     }).then(listener => { if (disposed) void listener.remove(); else handle = listener }).catch(() => {})
     return () => { disposed = true; void handle?.remove() }
     // Listener owns the native update notification, not page-specific data.
@@ -105,19 +129,36 @@ export default function AndroidUpdate({ authentication = false }) {
     if (mounted.current) setMessage(result.permissionRequired ? 'Allow updates from Budgetly in Android settings, then tap Install.' : 'Finish the update in the Android installer.')
   }
 
-  if (!settings && (!alerts || !release || dismissed)) return null
   const downloading = status === 'downloading'
-  return <section className="android-update" aria-label="App updates">
-    <div><strong>{release ? `Budgetly ${release.version} is available` : 'App updates'}</strong>
-      {downloading && <progress aria-label="Update download" value={progress} max="100"/>}
-      {message && <p role="status">{message}</p>}</div>
-    <div className="button-row">
-      {release ? <button className="button primary" disabled={downloading} onClick={() => {
-        if (status === 'ready') void install().catch(error => setMessage(error.message))
+  const availableOpen = native && !!release && !whatsNew && (manualOpen || (alerts && !dismissed))
+  const notes = release ? releaseNotes(release.version, release.notes) : []
+  const renderNotes = items => <ul className="release-change-list">{items.map(item => <li key={item.title}><Check size={17} aria-hidden="true"/><div><strong>{item.title}</strong><p>{item.detail}</p></div></li>)}</ul>
+  return <>
+    {settings && <section className="update-settings-controls" aria-label="App updates">
+      <button className="button ghost" disabled={status === 'checking'} onClick={() => {
+        if (release && native) { setManualOpen(true); setDismissed(false) }
+        else if (release) window.location.reload()
+        else void check(true)
+      }}><RefreshCw size={17}/>{status === 'checking' ? 'Checking...' : release ? native ? 'View update' : 'Refresh to latest version' : 'Check updates'}</button>
+      {!!currentNotes.length && !authentication && <button className="button ghost" onClick={() => setWhatsNew(true)}>What's new</button>}
+      {message && !availableOpen && <p role="status">{message}</p>}
+    </section>}
+    <Modal open={availableOpen} onClose={() => { setDismissed(true); setManualOpen(false) }}
+      title="A fresh update is ready" subtitle={release ? `Budgetly ${release.version}` : ''} layerClass="release-popup" slowEntrance
+      footer={<button className="button primary release-action" disabled={downloading} onClick={() => {
+        if (status === 'ready') void install().catch(error => setMessage(error.message || 'Could not open the installer. Please retry.'))
         else void update()
-      }}><Download size={17}/>{downloading ? `${progress}%` : status === 'ready' ? 'Install' : 'Update'}</button>
-        : <button className="button ghost" disabled={status === 'checking'} onClick={() => void check(true)}><RefreshCw size={17}/>{status === 'checking' ? 'Checking...' : 'Check updates'}</button>}
-      {release && !settings && !downloading && <button className="icon-button" aria-label="Remind me later" title="Remind me later" onClick={() => setDismissed(true)}><X size={17}/></button>}
-    </div>
-  </section>
+      }}><Download size={18}/>{downloading ? `Downloading... ${progress}%` : status === 'ready' ? 'Install update' : 'Update now'}</button>}>
+      <p className="release-intro">A few improvements to make Budgetly more dependable.</p>
+      {notes.length ? renderNotes(notes) : <p className="muted">Release notes aren't available for this version.</p>}
+      {release && <div className="release-meta"><span>Android update</span><span>{Number.isFinite(release.size) ? `${(release.size / 1000000).toFixed(1)} MB` : ''}</span></div>}
+      {downloading && <progress aria-label="Update download" value={progress} max="100"/>}
+      {message && <p className="release-status" role="status">{message}</p>}
+    </Modal>
+    <Modal open={whatsNew} onClose={closeWhatsNew} title="What's new" subtitle={`Budgetly ${version}`} layerClass="release-popup" slowEntrance
+      footer={<button className="button primary release-action" onClick={closeWhatsNew}>Continue to Budgetly</button>}>
+      <p className="release-intro">You're up to date. Here's what changed in this release.</p>
+      {renderNotes(currentNotes)}
+    </Modal>
+  </>
 }

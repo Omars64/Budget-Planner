@@ -1,6 +1,7 @@
 import { Capacitor, registerPlugin } from '@capacitor/core'
 import { publicApiUrl } from './api'
 import { version } from '../../package.json'
+import { validateReleaseNotes } from './releaseNotes'
 
 export function newerVersion(candidate, current = version) {
   if (!/^\d+\.\d+\.\d+$/.test(candidate) || !/^\d+\.\d+\.\d+$/.test(current)) return false
@@ -36,7 +37,8 @@ export function validateRelease(value) {
       /\.\.|%2f/i.test(url.pathname) ||
       url.pathname.slice(prefix.length).split('/').length !== 2) throw new Error('The update is not from the official Budgetly repository.')
   return { schema: 1, packageId: value.packageId, version: value.version, versionCode: value.versionCode,
-    size: value.size, sha256: value.sha256, url: url.href }
+    size: value.size, sha256: value.sha256, url: url.href,
+    ...(value.notes ? { notes: validateReleaseNotes(value.notes) } : {}) }
 }
 
 export async function fetchRelease(signal) {

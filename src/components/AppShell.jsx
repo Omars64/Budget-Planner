@@ -132,7 +132,7 @@ export default function AppShell({ children }) {
         </div>
         <div className="button-row top-actions">{location.pathname === '/' && !isGuest && <button className="button ghost tutorial-button" data-tour="tutorial" title="Tutorial" aria-label="Tutorial" onClick={() => { setMenu(false); setTutorialRequest(value => value + 1) }}><Compass size={18}/><span>Tutorial</span></button>}<button className="button ghost signout-button" title={isGuest ? 'Sign in' : 'Sign out'} aria-label={isGuest ? 'Sign in' : 'Sign out'} onClick={lock}><LogOut size={17}/><span>{isGuest ? 'Sign in' : 'Sign out'}</span></button>{isLedger && !nativeAndroid && <button data-tour="add-transaction" className="button primary add-button" onClick={addTransaction}><Plus size={18}/><span>Add transaction</span></button>}</div>
       </header>
-      <AndroidUpdate/>
+      <AndroidUpdate userId={user?.id} guest={isGuest}/>
       {isGuest && <div className="guest-banner"><span>Guest mode · On this device</span><button className="button ghost small" onClick={() => requestSignIn('cloud storage and more features')}>Sign in</button></div>}
       <motion.div className="page-wrap" data-tour-page={location.pathname} key={location.pathname} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .18, ease: 'easeOut' }}>{children}</motion.div>
       <BrandFooter className="app-footer"/>
