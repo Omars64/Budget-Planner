@@ -2,6 +2,12 @@
 
 ## 5.12.3 Verification (2026-10-06)
 
+Follow-up safety patch: 5.12.4 (Android code 54) preserves completed planned
+entries when their linked transaction is absent from a backup. A real downloaded
+workspace backup was restored in an isolated in-memory SQLite database and
+re-exported; all record groups and fields matched after the correction. No live
+workspace was restored. The public policy is deployed at `/privacy.html`.
+
 Version 5.12.3 uses Android version code 53. Keep the test phone on 5.12.2,
 signed in, with New Budgetly updates saved and Android notifications allowed.
 Close normally, not with Force stop. Publish 5.12.3 before expecting an alert;

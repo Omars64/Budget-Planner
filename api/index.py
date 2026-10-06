@@ -1295,8 +1295,7 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
         payload['posted_transaction_id'] = tx_map.get(payload.get('posted_transaction_id'))
         payload['due_at'] = datetime.fromisoformat(payload['due_at'])
         payload.setdefault('reporting_month', payload['due_at'].strftime('%Y-%m'))
-        if payload['status'] == 'posted' and not payload['posted_transaction_id']:
-            payload['status'] = 'planned'
+        # A deleted linked transaction must not reopen an already completed plan.
         row = PlannedTransaction(owner_id=user.id, created_by_id=user.id, **payload)
         db.add(row); db.flush()
         plan_map[p['id']] = row.id

@@ -269,6 +269,25 @@ def test_backup_restore_remaps_bill_wallet_plan_and_payments(workspace,monkeypat
     assert all(not e['id'].startswith(f"bill:{entry['id']}:2026-10-07") for e in client.get('/api/planner/forecast').json()['events'])
 
 
+@pytest.mark.parametrize('missing_id', [None, 99999])
+def test_restore_keeps_completed_plan_completed_without_link(workspace, monkeypatch, missing_id):
+    client, db, user, _, wallet, _ = workspace
+    plan(db, user, wallet, status='posted', when=AT-timedelta(days=1))
+    exported = jsonable_encoder(export_backup(user, db))
+    exported['planned_transactions'][0]['posted_transaction_id'] = missing_id
+    monkeypatch.setattr('api.account_security.confirmed', lambda *args: None)
+    assert client.post('/api/backup/restore', json=exported).status_code == 200
+    db.expire_all()
+    restored = db.query(PlannedTransaction).filter_by(owner_id=user.id).one()
+    assert restored.status == 'posted'
+    assert restored.posted_transaction_id is None
+    transaction_count = db.query(Transaction).filter_by(user_id=user.id).count()
+    assert client.get('/api/planned-transactions?status=planned').json() == []
+    from api.planned import post_due
+    assert post_due(db) == 0
+    assert db.query(Transaction).filter_by(user_id=user.id).count() == transaction_count
+
+
 def test_invalid_planner_backup_rejected_before_records_change(workspace,monkeypatch):
     client,db,user,_,wallet,_=workspace
     exported=export_backup(user,db)
