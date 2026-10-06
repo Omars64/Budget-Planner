@@ -46,7 +46,8 @@ export function recentEntries(userId, scope) {
 }
 export function rememberEntry(userId, scope, entry) {
   if (!userId || !readWorkspacePreferences(userId).rememberEntry || entry.type === 'transfer') return
-  const item = { type: entry.type, wallet_id: entry.wallet_id, category_id: entry.category_id || '', description: String(entry.description || '').trim().slice(0,160) }
+  const previous=recentEntries(userId,scope).find(item=>item.type===entry.type && item.description===String(entry.description||'').trim() && String(item.wallet_id)===String(entry.wallet_id))
+  const item = { type: entry.type, wallet_id: entry.wallet_id, category_id: entry.category_id || '', description: String(entry.description || '').trim().slice(0,160), uses:Math.min(1000,(Number.isInteger(previous?.uses)?previous.uses:0)+1) }
   const entries = [item, ...recentEntries(userId,scope).filter(previous => !(previous.type === item.type && previous.description === item.description && previous.wallet_id === item.wallet_id))].slice(0,8)
   try { localStorage.setItem(entryKey(userId,scope), JSON.stringify({ savedAt: Date.now(), entries })) } catch { /* Entry still succeeds without preferences storage. */ }
 }

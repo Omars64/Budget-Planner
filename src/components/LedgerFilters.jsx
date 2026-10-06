@@ -1,11 +1,18 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight, ListFilter, X } from 'lucide-react'
 import Modal from './Modal'
 import { dateInput } from '../lib/time'
+import { phraseSearch, savedSearches, saveSearch, removeSearch } from '../lib/phraseSearch'
 
 export const defaultLedgerFilters = { search: '', type: 'all', wallet: '', month: '', sort: 'newest', category: '', date_from:'', date_to:'', reporting_from:'', reporting_to:'', exclude_opening:false }
 
-export default function LedgerFilters({ value, onChange, wallets, categories = [], shared = false, children }) {
+export default function LedgerFilters({ value, onChange, wallets, categories = [], shared = false, userId, children }) {
+  const scope=shared?'shared':'personal'
+  const [phrase,setPhrase]=useState('')
+  const [saved,setSaved]=useState(()=>savedSearches(userId,scope))
+  useEffect(()=>{setSaved(savedSearches(userId,scope));setSaveError('');setSaveName('')},[userId,scope])
+  const [saveName,setSaveName]=useState('')
+  const [saveError,setSaveError]=useState('')
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState(value)
   const update = (key, next) => setDraft(current => ({ ...current, [key]: next, ...(key === 'wallet' || key === 'type' ? { category: '' } : {}), ...(key === 'month' ? {date_from:'',date_to:'',reporting_from:'',reporting_to:''} : {}) }))
@@ -27,6 +34,14 @@ export default function LedgerFilters({ value, onChange, wallets, categories = [
     {active.length > 0 && <div className="active-filters">{active.map(key => <button key={key} onClick={() => onChange({ ...value, [key]: defaultLedgerFilters[key] })} aria-label={'Remove ' + key + ' filter'}><span>{label(key)}</span><X size={13}/></button>)}</div>}
     <Modal open={open} onClose={() => setOpen(false)} title="Filters">
       <form className="stack gap-16" onSubmit={e => { e.preventDefault(); onChange(draft); setOpen(false) }}>
+        <label className="field"><span>Find transactions</span><input value={phrase} onChange={event=>setPhrase(event.target.value)} placeholder="Groceries last month" maxLength={160}/></label>
+        <button type="button" className="button ghost" disabled={!phrase.trim()} onClick={()=>setDraft({...defaultLedgerFilters,...phraseSearch(phrase,categories)})}>Use search</button>
+        <details><summary>Saved searches</summary><div className="stack gap-12">
+          {saved.map(item=><div className="section-row" key={item.name}><button type="button" className="button ghost" onClick={()=>setDraft({...defaultLedgerFilters,...Object.fromEntries(Object.entries(item.filters).filter(([key])=>key in defaultLedgerFilters))})}>{item.name}</button><button type="button" className="icon-button" title={`Remove ${item.name}`} aria-label={`Remove saved search ${item.name}`} onClick={()=>{try{setSaved(removeSearch(userId,scope,item.name))}catch{setSaveError('Device storage is unavailable.')}}}><X size={16}/></button></div>)}
+          <label className="field"><span>Search name</span><input value={saveName} maxLength={60} onChange={event=>setSaveName(event.target.value)}/></label>
+          <button type="button" className="button ghost" disabled={!saveName.trim()} onClick={()=>{try{setSaved(saveSearch(userId,scope,saveName,draft));setSaveName('');setSaveError('')}catch(error){setSaveError(error.message)}}}>Save current filters</button>
+          {saveError&&<p role="alert" className="form-error">{saveError}</p>}
+        </div></details>
         <label className="field"><span>Search</span><input value={draft.search} onChange={e => update('search', e.target.value)} placeholder="Transactions or notes"/></label>
         <label className="field"><span>Wallet</span><select aria-label="Wallet" value={draft.wallet} onChange={e => update('wallet', e.target.value)}><option value="">{shared ? 'All shared wallets' : 'All wallets'}</option>{wallets.map(w => <option key={w.wallet_id ?? w.id} value={w.wallet_id ?? w.id}>{w.name}{shared ? ' (' + (w.is_owner ? 'You' : w.owner_name || w.owner_email) + ')' : w.archived ? ' (Archived)' : ''}</option>)}</select></label>
         <label className="field"><span>Month</span><input type="month" min="1000-01" max="9999-12" value={draft.month} onChange={e => update('month', e.target.value)}/></label>

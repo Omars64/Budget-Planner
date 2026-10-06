@@ -135,7 +135,15 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
 
       <label className="amount-input"><span>Amount ({settings.currency})</span><input required type="number" step="0.001" min="0.001" aria-invalid={Boolean(errors.amount)} aria-describedby={errors.amount ? 'personal-amount-error' : undefined} value={form.amount} onChange={e => {set('amount',e.target.value);setErrors(v=>({...v,amount:''}))}} placeholder="0.000" /></label>
       {errors.amount && <small id="personal-amount-error" className="field-error">{errors.amount}</small>}
-      <RecentDescriptions userId={user.id} scope="personal" type={form.type} value={form.description} onChange={value => set('description',value)} disabled={busy || loading}/>
+      <RecentDescriptions userId={user.id} scope="personal" type={form.type} value={form.description} onChange={value => set('description',value)} onSelect={entry => {
+        if(!entry || !helpers.rememberEntry || editing)return
+        setForm(current => {
+          const next={...current,description:entry.description,
+            wallet_id:wallets.some(wallet=>!wallet.archived && String(wallet.id)===String(entry.wallet_id)) ? entry.wallet_id : current.wallet_id,
+            category_id:categories.some(category=>category.kind===current.type && String(category.id)===String(entry.category_id)) ? entry.category_id : current.category_id}
+          writeDraft(draftKey,next);return next
+        })
+      }} disabled={busy || loading}/>
 
       <DateTimeField value={form.date} onChange={value => set('date',value)} disabled={busy || loading}/>
       {errors.date && <small className="field-error">{errors.date}</small>}

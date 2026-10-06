@@ -2,9 +2,11 @@ import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, Bus, Copy, Pencil, Repeat2
 import { format } from 'date-fns'
 import { dateInput, displayDate } from '../lib/time'
 import Modal from './Modal'
+import ReceiptAttachment from './ReceiptAttachment'
 import { Sparkles } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useSavedTransaction } from '../lib/savedFeedback'
+import { useState } from 'react'
 
 export function LedgerDateHeader({ day }) {
   const today = dateInput().slice(0, 10)
@@ -29,7 +31,8 @@ export default function LedgerRow({ tx, fmt, shared = false, showDate = false, o
 
 export function TransactionDetails({ tx, fmt, onClose, onEdit, onDelete, onDuplicate, shared = false, permission = 'view' }) {
   const navigate = useNavigate()
-  return <Modal open={!!tx} onClose={onClose} title={tx?.description || 'Transaction'}>
+  const [receiptDirty,setReceiptDirty]=useState(false)
+  return <Modal open={!!tx} protectChanges isDirty={receiptDirty} onClose={onClose} title={tx?.description || 'Transaction'}>
     {tx && <div className="stack gap-18">
       <strong className={`detail-amount tx-amount ${tx.type}`}>{tx.type === 'income' ? '+' : tx.type === 'expense' ? '-' : ''}{fmt(tx.amount)}</strong>
       <p className="detail-kind">{tx.is_opening_balance ? 'Opening balance' : tx.type === 'income' ? 'Income' : tx.type === 'transfer' ? 'Transfer' : 'Expense'}</p>
@@ -37,8 +40,9 @@ export function TransactionDetails({ tx, fmt, onClose, onEdit, onDelete, onDupli
       {shared && <div className="shared-access" role="status"><strong>{permission === 'edit' ? 'Can edit' : permission === 'add' ? 'Can add new records' : 'View only'}</strong>{permission !== 'edit' && <span>Only the owner or an editor can change this record.</span>}</div>}
       <dl className="transaction-details"><div><dt>Wallet</dt><dd>{tx.wallet_name || tx.shared_wallet_names?.join(' / ')}</dd></div>{tx.transfer_wallet_name && <div><dt>To wallet</dt><dd>{tx.transfer_wallet_name}</dd></div>}<div><dt>Category</dt><dd>{tx.category_name || (tx.type === 'transfer' ? 'Transfer' : 'Uncategorized')}</dd></div><div><dt>Recorded</dt><dd>{format(displayDate(tx.date), 'dd MMM yyyy, HH:mm')}</dd></div>{tx.reporting_month && <div><dt>Reporting month</dt><dd>{format(new Date(`${tx.reporting_month}-01T12:00:00`), 'MMMM yyyy')}</dd></div>}{tx.owner_name && <div><dt>Wallet owner</dt><dd>{tx.owner_name}</dd></div>}{tx.recurring_frequency !== 'none' && tx.recurring_frequency && <div><dt>Repeat</dt><dd>{tx.recurring_frequency}{tx.recurring_until ? ` until ${tx.recurring_until}` : ' (set an end date when editing)'}</dd></div>}</dl>
       {tx.notes && <p className="transaction-note">{tx.notes}</p>}
-      <button className="button ghost" onClick={() => { onClose(); navigate('/ask-ai', { state: { question: `Explain transaction #${tx.id}: ${tx.description}.`, scope: tx.shared_wallet_names ? 'shared' : 'personal', walletId: tx.shared_wallet_names ? tx.shared_wallet_ids?.[0] || tx.wallet_id : tx.wallet_id, month: tx.date.slice(0, 7) } }) }}><Sparkles size={17}/>Ask Budgetly about this</button>
-      {tx.is_opening_balance ? <p className="form-note">This is the amount held when the wallet was created. The wallet owner can adjust it in Wallets.</p> : <div className="modal-actions">{onDuplicate && <button className="button ghost" onClick={onDuplicate}><Copy size={16}/>Duplicate</button>}{onEdit && <button className="button ghost" onClick={onEdit}><Pencil size={16}/>Edit</button>}{onDelete && <button className="button ghost danger" onClick={onDelete}><Trash2 size={16}/>Delete</button>}</div>}
+      {!shared&&<ReceiptAttachment key={tx.id} transactionId={tx.id} onDirty={setReceiptDirty}/>}
+      <button className="button ghost" disabled={receiptDirty} onClick={() => { onClose(); navigate('/ask-ai', { state: { question: `Explain transaction #${tx.id}: ${tx.description}.`, scope: tx.shared_wallet_names ? 'shared' : 'personal', walletId: tx.shared_wallet_names ? tx.shared_wallet_ids?.[0] || tx.wallet_id : tx.wallet_id, month: tx.date.slice(0, 7) } }) }}><Sparkles size={17}/>Ask Budgetly about this</button>
+      {tx.is_opening_balance ? <p className="form-note">This is the amount held when the wallet was created. The wallet owner can adjust it in Wallets.</p> : <div className="modal-actions">{onDuplicate && <button className="button ghost" disabled={receiptDirty} onClick={onDuplicate}><Copy size={16}/>Duplicate</button>}{onEdit && <button className="button ghost" disabled={receiptDirty} onClick={onEdit}><Pencil size={16}/>Edit</button>}{onDelete && <button className="button ghost danger" disabled={receiptDirty} onClick={onDelete}><Trash2 size={16}/>Delete</button>}</div>}
     </div>}
   </Modal>
 }

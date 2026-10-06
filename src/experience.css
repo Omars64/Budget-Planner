@@ -31,3 +31,4 @@ body.has-wallpaper { --muted: #465964; }
 .signin-method { grid-template-columns:1fr 1fr; margin-bottom:16px; }
 @media(prefers-reduced-motion:reduce) { .budgetly-request-progress::after { animation:none; width:100%; } }
 .toast { top:18px !important; bottom:auto !important; left:50% !important; right:auto !important; transform:translateX(-50%); max-width:min(520px,calc(100vw - 28px)); text-align:center; z-index:300; }
+ .receipt-photo { display:block; max-width:100%; max-height:55dvh; object-fit:contain; margin-inline:auto; }

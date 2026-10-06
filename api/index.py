@@ -30,6 +30,7 @@ from .schemas import (
 )
 from .seed import EXPENSE_CATEGORIES, INCOME_CATEGORIES, demo_seed_enabled, ensure_default_categories, seed_database
 from .models import RecoveryPoint, NoteRevision, utc_now
+from .models import TransactionReceipt
 from .data_safety import save_recovery, clear_budget, clear_notes
 from .idempotency import reserve, create_once
 from .models import RequestReceipt
@@ -59,6 +60,7 @@ BACKUP_COLLECTION_LIMITS = {
     "wallet_shares": 2_000, "note_folders": 500, "notes": 2_000,
     "planned_transactions": 20_000,
     "balance_checks": 20_000,
+    "receipts": 2_000,
 }
 
 
@@ -1089,6 +1091,8 @@ def dashboard(month: Optional[str] = None, user: User = Depends(current_user), d
             item = week_categories.setdefault(row.category_id or 0, {"id": row.category_id or 0, "name": row.category.name if row.category else "Uncategorized", "amount": 0})
             item['amount'] += float(row.amount)
     weekly = {"start": weekly_start.isoformat(), "end": today.isoformat(), "income": round(sum(float(row.amount) for row in current_week if row.type == 'income'), 3), "expense": round(sum(float(row.amount) for row in current_week if row.type == 'expense'), 3), "previous_expense": round(sum(float(row.amount) for row in previous_week if row.type == 'expense'), 3), "count": sum(row.type != 'transfer' for row in current_week), "top_category": max(week_categories.values(), key=lambda item: item['amount'], default=None)}
+    future=db.query(PlannedTransaction).filter(PlannedTransaction.owner_id==user.id,PlannedTransaction.wallet_id.in_(personal_wallet_ids(db,user.id)),PlannedTransaction.type=='expense',PlannedTransaction.status.in_(('planned','scheduled')),PlannedTransaction.due_at>=datetime.combine(today,datetime.min.time()),PlannedTransaction.due_at<datetime.combine(today+timedelta(days=7),datetime.min.time())).order_by(PlannedTransaction.due_at,PlannedTransaction.id).all()
+    weekly['upcoming']={'count':len(future),'amount':round(sum(float(item.amount) for item in future),3),'next':{'description':future[0].description,'due_at':future[0].due_at.isoformat()} if future else None}
     return {
         "weekly": weekly,
         "month": current.strftime("%Y-%m"), "total_balance": round(total_balance, 3), "income": round(income, 3), "expense": round(expense, 3), "net": round(income - expense - opening_debt, 3),
@@ -1149,6 +1153,7 @@ def export_backup(user: User = Depends(current_user), db: Session = Depends(get_
         "transactions": [{**{c.name: getattr(t, c.name) for c in Transaction.__table__.columns if c.name not in {"created_at", "user_id"}}, "date": t.date.isoformat(), "recurring_until": t.recurring_until.isoformat() if t.recurring_until else None} for t in db.query(Transaction).filter(Transaction.user_id == user.id).all()],
         "balance_checks": [{"wallet_id": c.wallet_id, "expected_balance": float(c.expected_balance), "observed_balance": float(c.observed_balance), "currency": c.currency, "note": c.note, "checked_by_name": c.checked_by_name, "checked_at": c.checked_at.isoformat()} for c in db.query(WalletBalanceCheck).join(Wallet, Wallet.id == WalletBalanceCheck.wallet_id).filter(Wallet.user_id == user.id).all()],
         "planned_transactions": [{"id": p.id, "wallet_id": p.wallet_id, "transfer_wallet_id": p.transfer_wallet_id, "category_id": p.category_id, "type": p.type, "amount": float(p.amount), "description": p.description, "notes": p.notes, "due_at": p.due_at.isoformat(), "reporting_month": p.reporting_month, "status": p.status, "reminder_enabled": p.reminder_enabled, "posted_transaction_id": p.posted_transaction_id} for p in db.query(PlannedTransaction).filter(PlannedTransaction.owner_id == user.id).all()],
+        "receipts": [{'transaction_id':r.transaction_id,'name':r.name,'image':r.image} for r in db.query(TransactionReceipt).join(Transaction,Transaction.id==TransactionReceipt.transaction_id).filter(Transaction.user_id==user.id).all()],
         "budgets": [{**{c.name: getattr(b, c.name) for c in Budget.__table__.columns if c.name not in {"created_at", "user_id"}}, "start_date": b.start_date.isoformat()} for b in db.query(Budget).filter(Budget.user_id == user.id).all()],
         "goals": [{**{c.name: getattr(g, c.name) for c in Goal.__table__.columns if c.name not in {"created_at", "user_id"}}, "deadline": g.deadline.isoformat() if g.deadline else None} for g in db.query(Goal).filter(Goal.user_id == user.id).all()],
         "debts": [{**{c.name: getattr(d, c.name) for c in Debt.__table__.columns if c.name not in {"created_at", "user_id"}}, "due_date": d.due_date.isoformat() if d.due_date else None} for d in db.query(Debt).filter(Debt.user_id == user.id).all()],
@@ -1214,6 +1219,15 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
         for tx in data.get("transactions", []):
             if tx["wallet_id"] not in wallet_ids or (tx.get("transfer_wallet_id") and tx["transfer_wallet_id"] not in wallet_ids) or (tx.get("category_id") and tx["category_id"] not in category_ids):
                 raise ValueError("Invalid transaction reference")
+        from .receipts import ReceiptIn, validate_image
+        receipt_ids=set()
+        receipt_transaction_ids={t['id'] for t in data.get('transactions',[])}
+        for receipt in data.get('receipts',[]):
+            ReceiptIn.model_validate(receipt)
+            if receipt['transaction_id'] not in receipt_transaction_ids or receipt['transaction_id'] in receipt_ids:
+                raise ValueError('Invalid receipt transaction')
+            validate_image(receipt['image'])
+            receipt_ids.add(receipt['transaction_id'])
         for plan in data.get('planned_transactions', []):
             if plan['wallet_id'] not in wallet_ids or (plan.get('transfer_wallet_id') and plan['transfer_wallet_id'] not in wallet_ids) or (plan.get('category_id') and plan['category_id'] not in category_ids):
                 raise ValueError('Invalid planned transaction reference')
@@ -1287,6 +1301,8 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
             tx_created[old_id] = row.created_at.isoformat()
     for row, parent_id in restored_parents:
         row.recurring_parent_id = tx_map.get(parent_id)
+    for receipt in data.get('receipts',[]):
+        db.add(TransactionReceipt(transaction_id=tx_map[receipt['transaction_id']],name=receipt['name'],image=receipt['image']))
     for p in data.get('planned_transactions', []):
         payload = {k: v for k, v in p.items() if k not in {'id', 'owner_id', 'created_by_id', 'error', 'created_at'}}
         payload['wallet_id'] = wallet_map[payload['wallet_id']]

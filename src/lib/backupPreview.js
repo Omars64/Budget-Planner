@@ -3,6 +3,7 @@ const collections = {
   planned_transactions: 'Scheduled transactions', budgets: 'Budgets', goals: 'Goals',
   debts: 'Debts', notes: 'Notes', note_folders: 'Note folders', wallet_shares: 'Wallet shares',
   balance_checks: 'Balance checks',
+  receipts: 'Receipts',
 }
 
 export function backupPreview(data) {

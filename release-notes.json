@@ -1,4 +1,11 @@
 {
+  "5.13.0": [
+    { "title": "Smarter daily entry", "detail": "Common descriptions can prepare a wallet and category draft for your review." },
+    { "title": "Keep receipt photos", "detail": "Capture or attach a receipt inside transaction details. Receipts are included in backup and recovery." },
+    { "title": "Review bank matches", "detail": "Compare similar statement rows with existing records before importing." },
+    { "title": "Search and weekly review", "detail": "Turn phrases into filters, save searches, and review upcoming payments alongside weekly spending." },
+    { "title": "Safer recovery and forms", "detail": "Preview restores and protect unsaved edits when closing dialogs." }
+  ],
   "5.12.7": [
     { "title": "Review before restoring", "detail": "Preview backup record counts and confirm before replacing your workspace." },
     { "title": "Safer forms", "detail": "Unsaved edits are protected when cancelling dialog footers, with improved keyboard focus handling." }

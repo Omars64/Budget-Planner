@@ -153,6 +153,7 @@ export default function GoogleDriveBackup() {
             <button type="button" className="button ghost" disabled={Boolean(busy)} onClick={disconnect}><Unplug size={18}/>{busy === 'disconnect' ? 'Disconnecting...' : 'Disconnect'}</button>
           </div>
           <h4>Drive backups</h4>
+          {files[0]&&<p className="muted">Latest saved backup: {timestamp(files[0].createdTime||files[0].created_at||files[0].modifiedTime)||'Date unavailable'}</p>}
           {!files.length ? <p className="muted">No backups in Google Drive yet.</p> : <div>{files.map(file => <div className="google-backup-row" key={file.id}>
             <div style={{ minWidth: 0, overflowWrap: 'anywhere' }}><strong>{file.name || 'JSON backup'}</strong><small>{timestamp(file.createdTime || file.created_at || file.modifiedTime)}</small></div>
             <button type="button" className="icon-button" style={{ flexShrink: 0 }} title="Download JSON backup" aria-label={`Download ${file.name || 'JSON backup'}`} disabled={Boolean(busy)} onClick={() => download(file)}><Download size={18}/></button>

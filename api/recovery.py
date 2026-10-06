@@ -6,6 +6,7 @@ from fastapi.encoders import jsonable_encoder
 from sqlalchemy import or_
 from .database import get_db
 from .models import Wallet, Category, Transaction, Budget, Goal, Debt, Note, NoteFolder, utc_now
+from .models import TransactionReceipt
 from .reliability_models import TrashItem
 from .index import current_user
 from .account_security import audit
@@ -24,6 +25,9 @@ def trash(db, row, actor, kind):
         payload['transactions'] = [snapshot(t) for t in db.query(Transaction).filter(Transaction.user_id==row.user_id, or_(Transaction.wallet_id==row.id,Transaction.transfer_wallet_id==row.id)).all()]
     if kind == 'transaction':
         payload['transactions'] = [snapshot(t) for t in db.query(Transaction).filter_by(user_id=row.user_id,recurring_parent_id=row.id).all()]
+    if kind in {'wallet','transaction'}:
+        ids=[t['id'] for t in payload.get('transactions',[])] + ([row.id] if kind=='transaction' else [])
+        payload['receipts']=[{'transaction_id':r.transaction_id,'name':r.name,'image':r.image} for r in db.query(TransactionReceipt).filter(TransactionReceipt.transaction_id.in_(ids)).all()]
     if kind == 'category':
         payload['transaction_ids'] = [r[0] for r in db.query(Transaction.id).filter_by(user_id=row.user_id,category_id=row.id)]
         payload['budget_ids'] = [r[0] for r in db.query(Budget.id).filter_by(user_id=row.user_id,category_id=row.id)]
@@ -92,6 +96,9 @@ def restore(item_id:int,user=Depends(current_user),db=Depends(get_db)):
         tx_map[tx['id']]=new.id; restored.append((new,tx.get('recurring_parent_id')))
     for new,parent in restored:
         new.recurring_parent_id=tx_map.get(parent)
+    for receipt in data.get('receipts',[]):
+        if receipt['transaction_id'] in tx_map:
+            db.add(TransactionReceipt(transaction_id=tx_map[receipt['transaction_id']],name=receipt['name'],image=receipt['image']))
     if item.kind=='category':
         for model,key in [(Transaction,'transaction_ids'),(Budget,'budget_ids')]:
             db.query(model).filter(model.user_id==user.id,model.id.in_(data.get(key,[])),model.category_id.is_(None)).update({'category_id':row.id},synchronize_session=False)

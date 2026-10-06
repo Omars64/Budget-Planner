@@ -49,7 +49,7 @@ export default function Transactions() {
 
   return <div className="ledger-page stack">
     {!isGuest && <OfflinePending scope="personal"/>}
-    <LedgerFilters value={filters} onChange={setFilters} wallets={wallets} categories={categories}>{!isGuest && <StatementImport wallets={wallets} compact/>}</LedgerFilters>
+    <LedgerFilters userId={user?.id} value={filters} onChange={setFilters} wallets={wallets} categories={categories}>{!isGuest && <StatementImport wallets={wallets} compact/>}</LedgerFilters>
     {ledger.error && <div className="form-error" role="alert">{ledger.error}<button className="button ghost small" onClick={ledger.retry}>Retry</button></div>}
     {ledger.error && ledger.updatedAt && <small className="muted">Showing records last updated at {new Date(ledger.updatedAt).toLocaleTimeString()}.</small>}
 

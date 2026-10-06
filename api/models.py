@@ -86,6 +86,14 @@ class Transaction(Base):
     category = relationship("Category")
 
 
+class TransactionReceipt(Base):
+    __tablename__ = 'transaction_receipts'
+    transaction_id = Column(Integer, ForeignKey('transactions.id', ondelete='CASCADE'), primary_key=True)
+    name = Column(String(180), nullable=False)
+    image = Column(Text, nullable=False)
+    saved_at = Column(DateTime, default=utc_now, nullable=False)
+
+
 class PlannedTransaction(Base):
     __tablename__ = "planned_transactions"
     __table_args__ = (

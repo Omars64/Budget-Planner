@@ -13,3 +13,4 @@ cryptography>=43,<48
 alembic>=1.13,<2.0
 pywebpush>=2.0,<3.0
 google-auth>=2.0,<3.0
+Pillow>=11.0,<13.0

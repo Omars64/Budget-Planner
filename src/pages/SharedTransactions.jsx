@@ -272,7 +272,7 @@ export default function SharedTransactions() {
 
   return <div className="ledger-page stack">
     <OfflinePending scope="shared"/>
-    <LedgerFilters value={filters} onChange={setFilters} wallets={sharedWallets} categories={filterCategories} shared><button className="button ghost small" data-tour="manage-sharing" onClick={() => setManageOpen(true)}><Users size={18}/>Manage</button></LedgerFilters>
+    <LedgerFilters userId={user?.id} value={filters} onChange={setFilters} wallets={sharedWallets} categories={filterCategories} shared><button className="button ghost small" data-tour="manage-sharing" onClick={() => setManageOpen(true)}><Users size={18}/>Manage</button></LedgerFilters>
     {(syncError || ledger.error) && <div className="form-error" role="alert">{syncError || ledger.error}<button className="button ghost small" onClick={refresh}>Retry</button></div>}
     {ledger.error && ledger.updatedAt && <small className="muted">Showing records last updated at {new Date(ledger.updatedAt).toLocaleTimeString()}.</small>}
 
@@ -341,7 +341,13 @@ export default function SharedTransactions() {
         }}/>}
         <label className="amount-input"><span>Amount ({settings.currency})</span><input aria-label="Amount" aria-invalid={Boolean(errors.amount)} aria-describedby={errors.amount ? 'shared-amount-error' : undefined} required min="0.001" step="0.001" type="number" placeholder="0.000" value={draft.amount} onChange={e => {setDraft({ ...draft, amount: e.target.value });setErrors(v=>({...v,amount:''}))}}/></label>
         {errors.amount && <small id="shared-amount-error" className="field-error">{errors.amount}</small>}
-        <RecentDescriptions userId={user?.id} scope="shared" type={draft.type} value={draft.description} onChange={description => setDraft(current => ({...current,description}))} disabled={saving}/>
+        <RecentDescriptions userId={user?.id} scope="shared" type={draft.type} value={draft.description} onChange={description => setDraft(current => ({...current,description}))} onSelect={item=>{
+          if(editing || !helpers.rememberEntry)return
+          const wallet=editableWallets.find(w=>String(w.wallet_id)===String(item.wallet_id))
+          if(!wallet)return
+          const category=filterCategories.find(c=>String(c.wallet_id)===String(wallet.wallet_id) && String(c.id)===String(item.category_id) && c.kind===draft.type)
+          setDraft(current=>({...current,description:item.description,wallet_id:wallet.wallet_id,category_id:category?.id || ''}))
+        }} disabled={saving}/>
         <DateTimeField value={draft.date} onChange={date => setDraft(current => ({ ...current, date }))} disabled={saving}/>
         {errors.date && <small className="field-error">{errors.date}</small>}
         {draft.type !== 'transfer' && <ReportingMonthField value={draft.reporting_month} type={draft.type} error={errors.reporting_month} disabled={saving} onChange={value => {setDraft(current => ({...current, reporting_month:value}));setErrors(current => ({...current, reporting_month:''}))}}/>}

@@ -13,7 +13,7 @@ test('preferences are isolated by account and sanitize corrupt values', () => {
 })
 test('entry history never remembers money, dates, recurrence or reporting month', () => {
   rememberEntry(1,'personal',{type:'income',wallet_id:2,category_id:3,description:'Salary',amount:500,date:'2026-10-01',reporting_month:'2026-10',recurring_frequency:'monthly'})
-  expect(recentEntries(1,'personal')).toEqual([{type:'income',wallet_id:2,category_id:3,description:'Salary'}])
+  expect(recentEntries(1,'personal')).toEqual([{type:'income',wallet_id:2,category_id:3,description:'Salary',uses:1}])
   expect(recentEntries(2,'personal')).toEqual([])
   expect(recentEntries(1,'shared')).toEqual([])
   saveWorkspacePreferences(1,{rememberEntry:false})

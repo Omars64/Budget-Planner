@@ -39,3 +39,11 @@ it('honors persisted suggestion preferences without deleting history', () => {
   render(<Harness/>); fireEvent.focus(screen.getByLabelText('Description'))
   expect(screen.getByRole('button',{name:'Use description Coffee'})).toBeVisible()
 })
+it('provides the remembered draft only after the user selects a suggestion',()=>{
+  const select=vi.fn()
+  render(<RecentDescriptions userId={9} scope="personal" type="expense" value="" onChange={vi.fn()} onSelect={select}/>)
+  fireEvent.focus(screen.getByLabelText('Description'))
+  expect(select).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button',{name:'Use description Coffee'}))
+  expect(select).toHaveBeenCalledWith(expect.objectContaining({description:'Coffee',wallet_id:1}))
+})
