@@ -1,4 +1,7 @@
 {
+  "6.0.1": [
+    {"title":"Properly sized wallet cards","detail":"Wallets keep their bank-card proportions instead of expanding across the screen, in both Personal and Spaces."}
+  ],
   "6.0.0": [
     {"title":"Your spaces","detail":"Keep Personal private and create separate shared spaces for home, trips or projects."},
     {"title":"Safe shared-record migration","detail":"Existing shared wallets and records move into Home Expense without changing their IDs or member permissions."},

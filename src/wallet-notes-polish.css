@@ -1,7 +1,8 @@
 /* Keep colored wallet surfaces independent of the global glass theme. */
-.budgetly-v2 .wallet-grid { grid-template-columns:repeat(auto-fit,minmax(290px,1fr)); gap:24px; }
+.budgetly-v2 .wallet-grid { grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),1fr)); gap:24px; align-items:start; }
 .budgetly-v2 .wallet-card { min-width:0; padding:22px; min-height:200px; aspect-ratio:1.586; border-radius:8px; display:flex; flex-direction:column; justify-content:space-between; gap:14px; position:relative; border:1px solid var(--line); background:var(--surface); }
-.wallet-tile { min-width:0; }
+.wallet-tile { min-width:0; width:100%; max-width:400px; }
+.budgetly-v2 .wallet-tile .wallet-card { width:100%; max-width:100%; }
 .wallet-tile-actions { display:flex; align-items:center; gap:8px; padding-top:10px; }
 .wallet-tile-actions .icon-button { width:44px; height:44px; }
 .budgetly-v2 .wallet-card .card-network-mark { position:absolute; right:20px; bottom:20px; color:var(--wallet-card-ink,#fff); }
@@ -43,6 +44,7 @@
 .notes-workspace .note-tools-popover { max-width:calc(100vw - 32px); border-radius:8px; }
 @media(max-width:620px) {
  .budgetly-v2 .wallet-grid { grid-template-columns:minmax(0,1fr); gap:20px; }
+ .wallet-tile { justify-self:center; }
  .budgetly-v2 .wallet-card { width:100%; min-height:200px; padding:20px; }
  .budgetly-v2 .wallet-card.payment-card h2 { font-size:28px; }
  .notes-workspace:not(.has-selection) { grid-template-columns:minmax(0,1fr); }

@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 
 export default function ResizablePanels() {
   useEffect(() => {
-    const selector = '.page-wrap .panel, .page-wrap .wallet-card, .page-wrap .metric-card, .page-wrap .goal-card, .page-wrap .debt-card, .page-wrap .budget-card'
+    const selector = '.page-wrap .panel, .page-wrap .metric-card, .page-wrap .goal-card, .page-wrap .debt-card, .page-wrap .budget-card'
     const handles = new Map()
     const attach = () => {
       if (window.matchMedia('(max-width: 820px), (pointer: coarse)').matches) {
