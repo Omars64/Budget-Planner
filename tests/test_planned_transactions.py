@@ -71,6 +71,21 @@ def test_scheduled_plan_posts_once_and_not_before_due(workspace):
     assert export_backup(owner, db)['planned_transactions'][0]['status'] == 'posted'
 
 
+def test_independent_runner_requires_secret_and_posts_once(workspace, monkeypatch):
+    client, db, _, _, _, wallet = workspace
+    monkeypatch.setenv('SCHEDULE_RUNNER_SECRET', 'test-only-runner-secret')
+    plan_id = client.post('/api/planned-transactions', json=payload(wallet.id)).json()['id']
+    db.get(PlannedTransaction, plan_id).due_at = ledger_now() - timedelta(minutes=1)
+    db.commit()
+    path = '/api/maintenance/scheduled-transactions'
+    assert client.post(path).status_code == 401
+    assert db.query(Transaction).count() == 0
+    headers = {'Authorization': 'Bearer test-only-runner-secret'}
+    assert client.post(path, headers=headers).json()['scheduled_transactions_posted'] == 1
+    assert client.post(path, headers=headers).json()['scheduled_transactions_posted'] == 0
+    assert db.query(Transaction).count() == 1
+
+
 def test_viewer_can_read_but_not_schedule_or_edit(workspace):
     client, _, actor, _, member, wallet = workspace
     owner_response = client.post('/api/planned-transactions', json=payload(wallet.id, 'planned'))

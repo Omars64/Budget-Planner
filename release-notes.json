@@ -1,4 +1,8 @@
 {
+  "5.14.1": [
+    {"title":"Currency configuration","detail":"Currency has its own Settings section and save action, preserving your selection across the workspace."},
+    {"title":"Background scheduling support","detail":"A protected scheduled-entry runner supports independent server execution when configured by the administrator."}
+  ],
   "5.14.0": [
     {"title":"Reference photos while recording","detail":"Attach a photo under More options in personal and shared transaction forms. Shared images follow wallet permissions."},
     {"title":"Safer amount fields","detail":"Scrolling over number inputs no longer changes your entered amounts."},

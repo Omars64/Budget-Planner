@@ -100,6 +100,27 @@ def maintenance(request:Request,db=Depends(get_db)):
     return result
 
 
+@router.post('/api/maintenance/scheduled-transactions')
+def scheduled_transactions(request: Request, db=Depends(get_db)):
+    secret = os.getenv('SCHEDULE_RUNNER_SECRET', '')
+    if not secret or not hmac.compare_digest(request.headers.get('Authorization', ''), 'Bearer ' + secret):
+        raise HTTPException(401, 'Unauthorized')
+    from .planned import post_due
+    from .models import PlannedTransaction
+    from .timekeeping import now as ledger_now
+    # Keep frequent execution separate from backups and push dispatch.
+    posted = 0
+    for _ in range(10):
+        batch = post_due(db)
+        posted += batch
+        if not db.query(PlannedTransaction.id).filter(PlannedTransaction.status == 'scheduled', PlannedTransaction.due_at <= ledger_now()).first():
+            break
+    if posted:
+        db.add(ServiceEvent(area='scheduled-transactions', status=200))
+        db.commit()
+    return {'ok': True, 'scheduled_transactions_posted': posted}
+
+
 @router.post('/api/maintenance/updates')
 @router.get('/api/maintenance/update-check')
 def push_updates_now(request: Request, db=Depends(get_db)):
