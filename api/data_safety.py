@@ -6,8 +6,12 @@ from .models import NoteRevision
 
 def save_recovery(db, owner, actor, reason):
     from .index import export_backup
-    point = RecoveryPoint(user_id=owner.id, actor_id=actor.id, reason=reason[:200],
-                          payload=json.dumps(jsonable_encoder(export_backup(owner, db))))
+    from .spaces import unscoped
+    with unscoped(db):
+        payload = export_backup(owner, db)
+    actor_id = db.info['space'].actor_id if db.info.get('space') else actor.id
+    point = RecoveryPoint(user_id=owner.id, actor_id=actor_id, reason=reason[:200],
+                          payload=json.dumps(jsonable_encoder(payload)))
     db.add(point)
     db.flush()
     return point

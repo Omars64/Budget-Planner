@@ -6,6 +6,7 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
 from .database import get_db
+from .spaces import workspace_actor
 from .index import current_user
 from .models import Category, PlannedTransaction, Transaction, User, Wallet, WalletShare
 from .extensions import can_edit_wallet, share_for_wallet, shared_wallet_ids
@@ -108,7 +109,7 @@ def post_due(db: Session, limit=100):
 
 
 @router.get('/api/planned-transactions')
-def list_plans(status: str = Query('all', pattern='^(all|planned|scheduled|posted|failed)$'), user: User = Depends(current_user), db: Session = Depends(get_db)):
+def list_plans(status: str = Query('all', pattern='^(all|planned|scheduled|posted|failed)$'), user: User = Depends(workspace_actor), db: Session = Depends(get_db)):
     post_due(db)
     ids = shared_wallet_ids(db, user) | {w.id for w in db.query(Wallet).filter_by(user_id=user.id).all()}
     if not ids:
@@ -120,7 +121,7 @@ def list_plans(status: str = Query('all', pattern='^(all|planned|scheduled|poste
 
 
 @router.post('/api/planned-transactions', status_code=201)
-def create_plan(payload: PlanIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def create_plan(payload: PlanIn, user: User = Depends(workspace_actor), db: Session = Depends(get_db)):
     wallet = validate_plan(db, user, payload)
     tx = payload.transaction
     row = PlannedTransaction(owner_id=wallet.user_id, created_by_id=user.id, wallet_id=tx.wallet_id,
@@ -133,7 +134,7 @@ def create_plan(payload: PlanIn, user: User = Depends(current_user), db: Session
 
 
 @router.put('/api/planned-transactions/{plan_id}')
-def update_plan(plan_id: int, payload: PlanIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def update_plan(plan_id: int, payload: PlanIn, user: User = Depends(workspace_actor), db: Session = Depends(get_db)):
     row = db.query(PlannedTransaction).filter_by(id=plan_id).with_for_update().first()
     if not row: raise HTTPException(404, 'Planned entry not found')
     if row.status == 'posted': raise HTTPException(409, 'This entry has already been recorded. Edit the transaction instead.')
@@ -155,7 +156,7 @@ def update_plan(plan_id: int, payload: PlanIn, user: User = Depends(current_user
 
 
 @router.delete('/api/planned-transactions/{plan_id}', status_code=204)
-def delete_plan(plan_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def delete_plan(plan_id: int, user: User = Depends(workspace_actor), db: Session = Depends(get_db)):
     row = db.query(PlannedTransaction).filter_by(id=plan_id).with_for_update().first()
     if not row: raise HTTPException(404, 'Planned entry not found')
     access(db, user, row.wallet_id)

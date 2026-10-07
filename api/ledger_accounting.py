@@ -8,6 +8,9 @@ from .timekeeping import now
 
 
 def personal_wallet_ids(db, user_id):
+    context = db.info.get('space')
+    if context:
+        return db.query(Wallet.id).filter(Wallet.id.in_(context.wallet_ids))
     shared = db.query(WalletShare.wallet_id).filter(WalletShare.owner_id == user_id)
     return db.query(Wallet.id).filter(Wallet.user_id == user_id, ~Wallet.id.in_(shared))
 

@@ -19,10 +19,10 @@ import LedgerRow, { LedgerDateHeader, TransactionDetails } from '../components/L
 
 export default function Transactions() {
   const location = useLocation()
-  const { user, settings, refreshKey, refresh, notify ,confirm, isGuest } = useApp()
-  const [filters, setFilters] = useViewState(`personal:${user?.id}:filters`, defaultLedgerFilters, location.state?.aiFilters ? {...defaultLedgerFilters,...location.state.aiFilters} : undefined)
+  const { user, settings, refreshKey, refresh, notify ,confirm, isGuest, activeSpace, spaceKey = 'personal', canManage = true, canAdd = true } = useApp()
+  const [filters, setFilters] = useViewState(`${spaceKey}:${user?.id}:filters`, defaultLedgerFilters, location.state?.aiFilters ? {...defaultLedgerFilters,...location.state.aiFilters} : undefined)
   useEffect(() => { if (location.state?.aiFilters) setFilters({...defaultLedgerFilters,...location.state.aiFilters}) }, [location.key])
-  const ledger = useLedger('/api/transactions', { ...filters, scope: 'personal' }, refreshKey, false, `personal:${user?.id}`)
+  const ledger = useLedger('/api/transactions', { ...filters, scope: 'personal' }, refreshKey, false, `${spaceKey}:${user?.id}`)
   const { rows, loading } = ledger
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState(null)
@@ -37,19 +37,19 @@ export default function Transactions() {
     }
   }, [location.key])
 
-  useEffect(() => { api('/api/wallets').then(rows => setWallets(rows.filter(w => !w.is_shared))).catch(() => setWallets([])); api('/api/categories').then(setCategories).catch(() => setCategories([])) }, [refreshKey])
+  useEffect(() => { const controller = new AbortController(); api('/api/wallets', {signal:controller.signal}).then(rows => setWallets(rows.filter(w => activeSpace || !w.is_shared))).catch(() => {}); api('/api/categories', {signal:controller.signal}).then(setCategories).catch(() => {}); return () => controller.abort() }, [refreshKey, activeSpace?.id])
 
   const fmt = v => money(v, settings.currency, settings.compact_numbers)
   const grouped = useMemo(() => rows.reduce((acc, tx) => { const key = format(displayDate(tx.date), 'yyyy-MM-dd'); (acc[key] ||= []).push(tx); return acc }, {}), [rows])
   const remove = async tx => { if (!await confirm(`Delete “${tx.description}”?`)) return; try {
     const result = await api(`/api/transactions/${tx.id}?undo=true`, {method:'DELETE'})
     setSelected(null); refresh()
-    notify(isGuest ? 'Transaction deleted from this device' : 'Transaction moved to Trash', 'success', result?.trash_id ? {label:'Undo',run:async()=>{await api(`/api/trash/${result.trash_id}/restore`,{method:'POST'});refresh();notify('Transaction restored')}} : null)
+    notify(isGuest ? 'Transaction deleted from this device' : 'Transaction moved to Trash', 'success', result?.trash_id && (!activeSpace || activeSpace.role === 'owner') ? {label:'Undo',run:async()=>{await api(`/api/trash/${result.trash_id}/restore`,{method:'POST'});refresh();notify('Transaction restored')}} : null)
   } catch (err) { notify(err.message, 'error') } }
 
   return <div className="ledger-page stack">
-    {!isGuest && <OfflinePending scope="personal"/>}
-    <LedgerFilters userId={user?.id} value={filters} onChange={setFilters} wallets={wallets} categories={categories}>{!isGuest && <StatementImport wallets={wallets} compact/>}</LedgerFilters>
+    {!isGuest && <OfflinePending scope={spaceKey}/>}
+    <LedgerFilters userId={`${user?.id}:${spaceKey}`} value={filters} onChange={setFilters} wallets={wallets} categories={categories}>{!isGuest && !activeSpace && <StatementImport wallets={wallets} compact/>}</LedgerFilters>
     {ledger.error && <div className="form-error" role="alert">{ledger.error}<button className="button ghost small" onClick={ledger.retry}>Retry</button></div>}
     {ledger.error && ledger.updatedAt && <small className="muted">Showing records last updated at {new Date(ledger.updatedAt).toLocaleTimeString()}.</small>}
 
@@ -60,7 +60,7 @@ export default function Transactions() {
 
     <section className="ledger-list">
       <div className="ledger-count">{rows.length}{ledger.hasMore ? '+' : ''} transaction{rows.length === 1 ? '' : 's'}</div>
-      {loading && !rows.length ? <div className="list-skeleton"><i/><i/><i/><i/></div> : !rows.length ? <EmptyState title="No matching transactions" text="Try another filter or add a transaction." action={<div className="button-row"><button className="button ghost" onClick={() => setFilters({...defaultLedgerFilters})}>Clear filters</button><button className="button primary" onClick={() => {setEditing(null);setModal(true)}}>Add transaction</button></div>}/> : <div className="date-groups">
+      {loading && !rows.length ? <div className="list-skeleton"><i/><i/><i/><i/></div> : !rows.length ? <EmptyState title="No matching transactions" text="Try another filter or add a transaction." action={<div className="button-row"><button className="button ghost" onClick={() => setFilters({...defaultLedgerFilters})}>Clear filters</button><button className="button primary" disabled={!canAdd} onClick={() => {setEditing(null);setModal(true)}}>Add transaction</button></div>}/> : <div className="date-groups">
         {Object.entries(grouped).map(([day, txs]) => <div className="date-group" key={day}>
           <LedgerDateHeader day={day}/>
           {txs.map(tx => <LedgerRow key={tx.id} tx={tx} fmt={fmt} onOpen={() => setSelected(tx)}/> )}
@@ -68,7 +68,7 @@ export default function Transactions() {
       </div>}
       <LedgerPagination ledger={ledger}/>
     </section>
-    <TransactionDetails tx={selected} fmt={fmt} onClose={() => setSelected(null)} onEdit={() => {setEditing(selected);setSelected(null);setModal(true)}} onDelete={() => remove(selected)} onDuplicate={() => {writeDraft(`flowbudget_tx_draft_${user.id}`,duplicateDraft(selected,dateInput()));setSelected(null);setEditing(null);setModal(true)}}/>
+    <TransactionDetails tx={selected} fmt={fmt} shared={Boolean(activeSpace)} permission={activeSpace?.role === 'owner' ? 'edit' : activeSpace?.role || 'edit'} onClose={() => setSelected(null)} onEdit={canManage ? () => {setEditing(selected);setSelected(null);setModal(true)} : null} onDelete={canManage ? () => remove(selected) : null} onDuplicate={canAdd ? () => {writeDraft(`flowbudget_tx_draft_${user.id}${activeSpace ? `_space_${activeSpace.id}` : ''}`,duplicateDraft(selected,dateInput()));setSelected(null);setEditing(null);setModal(true)} : null}/>
     <TransactionModal open={modal} editing={editing} onClose={() => setModal(false)} onSaved={saved => {setModal(false);refresh();notify(saved.queued ? 'Saved on this device. Will sync when connected.' : editing?'Transaction updated':'Transaction added')}} />
   </div>
 }

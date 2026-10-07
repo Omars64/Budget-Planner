@@ -40,6 +40,8 @@ from .timekeeping import ledger_iso, now as ledger_now, today as ledger_today
 from .ledger_filters import ledger_options, filter_ledger
 from ._version import VERSION
 from .ledger_accounting import personal_wallet_ids, personal_records, opening_amount, set_opening_balance, migrate_opening_balances, require_regular_transaction
+from .spaces import workspace_user, router as spaces_router, attach_wallet_members
+from .auth_dependency import current_user
 
 APP_SECRET = os.getenv("APP_SECRET", "flowbudget-dev-secret-change-me")
 serializer = URLSafeTimedSerializer(APP_SECRET, salt="flowbudget-lock")
@@ -55,6 +57,7 @@ def env_int(name, default, minimum, maximum):
 
 MAX_BACKUP_BYTES = env_int("BUDGETLY_MAX_BACKUP_BYTES", 25_000_000, 1_000_000, 100_000_000)
 BACKUP_COLLECTION_LIMITS = {
+    "spaces": 50,
     "wallets": 200, "categories": 500, "transactions": 20_000,
     "budgets": 2_000, "goals": 2_000, "debts": 2_000,
     "wallet_shares": 2_000, "note_folders": 500, "notes": 2_000,
@@ -72,13 +75,18 @@ def ensure_note_columns(connection):
             "recorded_by_id": "INTEGER",
             "reporting_month": "VARCHAR(7)",
         },
-        "wallets": {"card_network": "VARCHAR(12)"},
+        "wallets": {"card_network": "VARCHAR(12)", "space_id": "INTEGER"},
         "planned_transactions": {"reporting_month": "VARCHAR(7)"},
-        "budgets": {"reporting_month": "VARCHAR(7)"},
+        "budgets": {"reporting_month": "VARCHAR(7)", "space_id": "INTEGER"},
+        "categories": {"space_id": "INTEGER"},
+        "goals": {"space_id": "INTEGER"},
+        "debts": {"space_id": "INTEGER"},
         "note_folders": {
+            "space_id": "INTEGER",
             "color": "VARCHAR(20) NOT NULL DEFAULT '#0a4173'",
         },
         "notes": {
+            "space_id": "INTEGER",
             "note_type": "VARCHAR(20) NOT NULL DEFAULT 'text'",
             "color": "VARCHAR(20) NOT NULL DEFAULT '#ffffff'",
             "page_style": "VARCHAR(20) NOT NULL DEFAULT 'plain'",
@@ -149,6 +157,7 @@ async def lifespan(application: FastAPI):
 
 
 app = FastAPI(title="Budgetly API", version=VERSION, lifespan=lifespan)
+app.include_router(spaces_router)
 
 
 @app.middleware("http")
@@ -233,31 +242,6 @@ def issue_token(user: User) -> str:
     return auth_serializer.dumps({"user_id": user.id, "sid": sid, "role": user.role, "credential": hashlib.sha256(user.password_hash.encode()).hexdigest()})
 
 
-def current_user(request: Request, db: Session = Depends(get_db)) -> User:
-    header = request.headers.get("Authorization", "")
-    token = header[7:] if header.lower().startswith("bearer ") else request.headers.get("X-App-Token")
-    if not token:
-        raise HTTPException(status_code=401, detail="Sign in to continue")
-    try:
-        data = auth_serializer.loads(token, max_age=86400)
-    except (BadSignature, SignatureExpired):
-        raise HTTPException(status_code=401, detail="Session expired")
-    user = db.get(User, data.get("user_id"))
-    if not user or not user.active:
-        raise HTTPException(status_code=401, detail="Account is inactive")
-    if not hmac.compare_digest(data.get("credential", ""), hashlib.sha256(user.password_hash.encode()).hexdigest()):
-        raise HTTPException(status_code=401, detail="Please sign in again")
-    session = db.get(AccountSession, data.get('sid', ''))
-    if not session or session.revoked or session.user_id != user.id:
-        raise HTTPException(401, 'Please sign in again. This session has ended.')
-    request.state.session_id = session.id
-    from .models import utc_now
-    if session.label == 'Browser session' or session.last_seen < utc_now()-timedelta(minutes=5):
-        session.label = request.headers.get('user-agent', 'Browser session')[:200]
-        session.last_seen = utc_now(); db.commit()
-    return user
-
-
 def admin_user(user: User = Depends(current_user)) -> User:
     if user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
@@ -265,6 +249,9 @@ def admin_user(user: User = Depends(current_user)) -> User:
 
 
 def setting(db: Session, user_id: int, key: str, default: str = "") -> str:
+    context = db.info.get('space')
+    if context and context.id is not None and key == 'currency':
+        return context.currency
     row = db.get(AppSetting, {"user_id": user_id, "key": key})
     return row.value if row else default
 
@@ -525,6 +512,8 @@ def delete_account(request: Request, user: User = Depends(current_user), db: Ses
     db.query(Transaction).filter_by(user_id=user.id).update({Transaction.recurring_parent_id: None})
     db.query(PlannedTransaction).filter(or_(PlannedTransaction.owner_id == user.id, PlannedTransaction.created_by_id == user.id)).delete(synchronize_session=False)
     email = normalize_email(user.email)
+    from .models import SpaceMember
+    db.query(SpaceMember).filter(or_(SpaceMember.email == email, SpaceMember.member_user_id == user.id)).delete(synchronize_session=False)
     db.query(WalletShare).filter(or_(WalletShare.owner_id == user.id, WalletShare.member_user_id == user.id, WalletShare.invitee_email == email)).delete(synchronize_session=False)
     note_ids = db.query(Note.id).filter(Note.user_id == user.id)
     db.query(NoteRevision).filter(NoteRevision.note_id.in_(note_ids)).delete(synchronize_session=False)
@@ -615,6 +604,8 @@ def admin_delete_user(user_id: int, admin: User = Depends(admin_user), db: Sessi
     db.query(WalletShare).filter(WalletShare.owner_id == user_id).delete(synchronize_session=False)
     db.query(WalletShare).filter(WalletShare.member_user_id == user_id).delete(synchronize_session=False)
     db.query(WalletShare).filter(WalletShare.invitee_email == normalize_email(row.email)).delete(synchronize_session=False)
+    from .models import SpaceMember
+    db.query(SpaceMember).filter(or_(SpaceMember.email == normalize_email(row.email), SpaceMember.member_user_id == user_id)).delete(synchronize_session=False)
     db.query(PendingSignup).filter(PendingSignup.email == normalize_email(row.email)).delete(synchronize_session=False)
     note_ids = db.query(Note.id).filter(Note.user_id == user_id)
     db.query(NoteRevision).filter(NoteRevision.note_id.in_(note_ids)).delete(synchronize_session=False)
@@ -753,19 +744,20 @@ def update_settings(payload: SettingsPayload, user: User = Depends(current_user)
 
 
 @app.get("/api/wallets")
-def wallets(user: User = Depends(current_user), db: Session = Depends(get_db)):
+def wallets(user: User = Depends(workspace_user), db: Session = Depends(get_db)):
     materialize_recurring_for_user(db, user.id)
     rows = db.query(Wallet).filter(Wallet.user_id == user.id).order_by(Wallet.archived, Wallet.created_at).all()
     shared = {r[0] for r in db.query(WalletShare.wallet_id).filter_by(owner_id=user.id).all()}
-    return [{"id": w.id, "name": w.name, "type": w.type, "initial_balance": float(opening_amount(db, w)), "icon": w.icon, "color": w.color, "card_network": w.card_network or ("visa" if w.type in {"bank", "card"} else None), "archived": w.archived, "balance": wallet_balance(db, w), "is_shared": w.id in shared} for w in rows]
+    return [{"id": w.id, "name": w.name, "type": w.type, "initial_balance": float(opening_amount(db, w)), "icon": w.icon, "color": w.color, "card_network": w.card_network or ("visa" if w.type in {"bank", "card"} else None), "archived": w.archived, "balance": wallet_balance(db, w), "is_shared": w.id in shared, "space_id": w.space_id} for w in rows]
 
 
 @app.post("/api/wallets", status_code=201)
-def create_wallet(payload: WalletIn, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def create_wallet(payload: WalletIn, request: Request, user: User = Depends(workspace_user), db: Session = Depends(get_db)):
     receipt, previous = reserve(db, user.id, 'wallet', request.headers.get('Idempotency-Key'), payload)
     if previous is not None: return previous
     row = Wallet(user_id=user.id, **{**payload.model_dump(), 'initial_balance': 0, 'created_at': ledger_now()})
     db.add(row); db.flush()
+    attach_wallet_members(db, row)
     set_opening_balance(db, row, payload.initial_balance, user.id)
     result = {**json.loads(payload.model_dump_json()), 'initial_balance': float(payload.initial_balance), 'id': row.id, 'balance': wallet_balance(db, row)}
     if receipt: receipt.response = json.dumps(result)
@@ -776,7 +768,7 @@ def create_wallet(payload: WalletIn, request: Request, user: User = Depends(curr
 
 
 @app.put("/api/wallets/{item_id}")
-def update_wallet(item_id: int, payload: WalletIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def update_wallet(item_id: int, payload: WalletIn, user: User = Depends(workspace_user), db: Session = Depends(get_db)):
     row = db.query(Wallet).filter(Wallet.id == item_id, Wallet.user_id == user.id).with_for_update().first()
     if not row: raise HTTPException(404, "Wallet not found")
     for k, v in payload.model_dump(exclude={'initial_balance'}).items(): setattr(row, k, v)
@@ -788,7 +780,7 @@ def update_wallet(item_id: int, payload: WalletIn, user: User = Depends(current_
 
 
 @app.delete("/api/wallets/{item_id}", status_code=204)
-def delete_wallet(item_id: int, delete_transactions: bool = False, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def delete_wallet(item_id: int, delete_transactions: bool = False, user: User = Depends(workspace_user), db: Session = Depends(get_db)):
     row = db.query(Wallet).filter(Wallet.id == item_id, Wallet.user_id == user.id).first()
     if not row: raise HTTPException(404, "Wallet not found")
     used = db.query(Transaction).filter(Transaction.user_id == user.id, or_(Transaction.wallet_id == item_id, Transaction.transfer_wallet_id == item_id)).first()
@@ -807,19 +799,19 @@ def delete_wallet(item_id: int, delete_transactions: bool = False, user: User = 
 
 
 @app.get("/api/categories")
-def categories(kind: Optional[str] = None, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def categories(kind: Optional[str] = None, user: User = Depends(workspace_user), db: Session = Depends(get_db)):
     q = db.query(Category).filter(Category.user_id == user.id)
     if kind: q = q.filter(Category.kind == kind)
     return q.order_by(Category.kind, Category.name).all()
 
 
 @app.post("/api/categories", status_code=201)
-def create_category(payload: CategoryIn, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def create_category(payload: CategoryIn, request: Request, user: User = Depends(workspace_user), db: Session = Depends(get_db)):
     return create_once(db, user, request, 'category', payload, Category)
 
 
 @app.put("/api/categories/{item_id}")
-def update_category(item_id: int, payload: CategoryIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def update_category(item_id: int, payload: CategoryIn, user: User = Depends(workspace_user), db: Session = Depends(get_db)):
     row = db.query(Category).filter(Category.id == item_id, Category.user_id == user.id).first()
     if not row: raise HTTPException(404, "Category not found")
     for key, value in payload.model_dump().items(): setattr(row, key, value)
@@ -827,7 +819,7 @@ def update_category(item_id: int, payload: CategoryIn, user: User = Depends(curr
 
 
 @app.delete("/api/categories/{item_id}", status_code=204)
-def delete_category(item_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def delete_category(item_id: int, user: User = Depends(workspace_user), db: Session = Depends(get_db)):
     row = db.query(Category).filter(Category.id == item_id, Category.user_id == user.id).first()
     if not row: raise HTTPException(404, "Category not found")
     from .recovery import trash
@@ -844,7 +836,7 @@ def transactions(
     category_id: Optional[int] = None, date_from: Optional[datetime] = None,
     date_to: Optional[datetime] = None, limit: int = Query(200, ge=1, le=1000),
     options: tuple = Depends(ledger_options), scope: str = Query('all', pattern='^(all|personal)$'),
-    user: User = Depends(current_user), db: Session = Depends(get_db),
+    user: User = Depends(workspace_user), db: Session = Depends(get_db),
 ):
     materialize_recurring_for_user(db, user.id)
     q = personal_records(db, user.id) if scope == 'personal' else db.query(Transaction).filter(Transaction.user_id == user.id)
@@ -876,11 +868,12 @@ def validate_transaction_references(db: Session, user_id: int, payload: Transact
 
 
 @app.post("/api/transactions", status_code=201)
-def create_transaction(payload: TransactionWriteIn, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def create_transaction(payload: TransactionWriteIn, request: Request, user: User = Depends(workspace_user), db: Session = Depends(get_db)):
     receipt, previous = reserve(db, user.id, 'transaction', request.headers.get('Idempotency-Key'), payload)
     if previous is not None: return previous
     validate_transaction_references(db, user.id, payload)
-    row = Transaction(user_id=user.id, recorded_by_id=user.id, **payload.model_dump(exclude={'receipt'})); db.add(row); db.flush(); db.refresh(row)
+    actor_id = db.info['space'].actor_id if db.info.get('space') else user.id
+    row = Transaction(user_id=user.id, recorded_by_id=actor_id, **payload.model_dump(exclude={'receipt'})); db.add(row); db.flush(); db.refresh(row)
     if payload.receipt:
         from .receipts import store_receipt
         store_receipt(db, row.id, payload.receipt)
@@ -893,7 +886,7 @@ def create_transaction(payload: TransactionWriteIn, request: Request, user: User
 
 
 @app.put("/api/transactions/{item_id}")
-def update_transaction(item_id: int, payload: TransactionWriteIn, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def update_transaction(item_id: int, payload: TransactionWriteIn, request: Request, user: User = Depends(workspace_user), db: Session = Depends(get_db)):
     row = db.query(Transaction).filter(Transaction.id == item_id, Transaction.user_id == user.id).with_for_update().first()
     if not row: raise HTTPException(404, "Transaction not found")
     check_revision(request, row)
@@ -909,7 +902,7 @@ def update_transaction(item_id: int, payload: TransactionWriteIn, request: Reque
 
 
 @app.delete("/api/transactions/{item_id}", status_code=204)
-def delete_transaction(item_id: int, undo: bool = False, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def delete_transaction(item_id: int, undo: bool = False, user: User = Depends(workspace_user), db: Session = Depends(get_db)):
     row = db.query(Transaction).filter(Transaction.id == item_id, Transaction.user_id == user.id).first()
     if not row: raise HTTPException(404, "Transaction not found")
     require_regular_transaction(row)
@@ -924,7 +917,7 @@ def delete_transaction(item_id: int, undo: bool = False, user: User = Depends(cu
 
 
 @app.get("/api/budgets")
-def budgets(user: User = Depends(current_user), db: Session = Depends(get_db)):
+def budgets(user: User = Depends(workspace_user), db: Session = Depends(get_db)):
     materialize_recurring_for_user(db, user.id)
     result = []
     for b in db.query(Budget).filter(Budget.user_id == user.id).order_by(Budget.created_at).all():
@@ -934,14 +927,14 @@ def budgets(user: User = Depends(current_user), db: Session = Depends(get_db)):
 
 
 @app.post("/api/budgets", status_code=201)
-def create_budget(payload: BudgetIn, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def create_budget(payload: BudgetIn, request: Request, user: User = Depends(workspace_user), db: Session = Depends(get_db)):
     if payload.category_id and not db.query(Category).filter(Category.id == payload.category_id, Category.user_id == user.id).first():
         raise HTTPException(400, "Category not found")
     return create_once(db, user, request, 'budget', payload, Budget)
 
 
 @app.put("/api/budgets/{item_id}")
-def update_budget(item_id: int, payload: BudgetIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def update_budget(item_id: int, payload: BudgetIn, user: User = Depends(workspace_user), db: Session = Depends(get_db)):
     row = db.query(Budget).filter(Budget.id == item_id, Budget.user_id == user.id).first()
     if not row: raise HTTPException(404, "Budget not found")
     if payload.category_id and not db.query(Category).filter(Category.id == payload.category_id, Category.user_id == user.id).first():
@@ -951,7 +944,7 @@ def update_budget(item_id: int, payload: BudgetIn, user: User = Depends(current_
 
 
 @app.delete("/api/budgets/{item_id}", status_code=204)
-def delete_budget(item_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def delete_budget(item_id: int, user: User = Depends(workspace_user), db: Session = Depends(get_db)):
     row = db.query(Budget).filter(Budget.id == item_id, Budget.user_id == user.id).first()
     if not row: raise HTTPException(404, "Budget not found")
     from .recovery import trash
@@ -960,18 +953,18 @@ def delete_budget(item_id: int, user: User = Depends(current_user), db: Session 
 
 
 @app.get("/api/goals")
-def goals(user: User = Depends(current_user), db: Session = Depends(get_db)):
+def goals(user: User = Depends(workspace_user), db: Session = Depends(get_db)):
     rows = db.query(Goal).filter(Goal.user_id == user.id).order_by(Goal.created_at).all()
     return [{"id": g.id, "name": g.name, "target_amount": float(g.target_amount), "current_amount": float(g.current_amount), "deadline": g.deadline.isoformat() if g.deadline else None, "icon": g.icon, "color": g.color, "progress": round(min(float(g.current_amount) / float(g.target_amount) * 100, 100), 1)} for g in rows]
 
 
 @app.post("/api/goals", status_code=201)
-def create_goal(payload: GoalIn, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def create_goal(payload: GoalIn, request: Request, user: User = Depends(workspace_user), db: Session = Depends(get_db)):
     return create_once(db, user, request, 'goal', payload, Goal)
 
 
 @app.post("/api/goals/{item_id}/contribute")
-def contribute_goal(item_id: int, payload: ContributionIn, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def contribute_goal(item_id: int, payload: ContributionIn, request: Request, user: User = Depends(workspace_user), db: Session = Depends(get_db)):
     receipt, previous = reserve(db, user.id, f'contribute_goal:{item_id}', request.headers.get('Idempotency-Key'), payload)
     if previous is not None: return previous
     row = db.query(Goal).filter(Goal.id == item_id, Goal.user_id == user.id).with_for_update().first()
@@ -982,7 +975,7 @@ def contribute_goal(item_id: int, payload: ContributionIn, request: Request, use
     db.commit(); return result
 
 @app.put("/api/goals/{item_id}")
-def update_goal(item_id: int, payload: GoalIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def update_goal(item_id: int, payload: GoalIn, user: User = Depends(workspace_user), db: Session = Depends(get_db)):
     row = db.query(Goal).filter(Goal.id == item_id, Goal.user_id == user.id).first()
     if not row: raise HTTPException(404, "Goal not found")
     for key, value in payload.model_dump().items(): setattr(row, key, value)
@@ -990,7 +983,7 @@ def update_goal(item_id: int, payload: GoalIn, user: User = Depends(current_user
 
 
 @app.delete("/api/goals/{item_id}", status_code=204)
-def delete_goal(item_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def delete_goal(item_id: int, user: User = Depends(workspace_user), db: Session = Depends(get_db)):
     row = db.query(Goal).filter(Goal.id == item_id, Goal.user_id == user.id).first()
     if not row: raise HTTPException(404, "Goal not found")
     from .recovery import trash
@@ -999,18 +992,18 @@ def delete_goal(item_id: int, user: User = Depends(current_user), db: Session = 
 
 
 @app.get("/api/debts")
-def debts(user: User = Depends(current_user), db: Session = Depends(get_db)):
+def debts(user: User = Depends(workspace_user), db: Session = Depends(get_db)):
     rows = db.query(Debt).filter(Debt.user_id == user.id).order_by(Debt.created_at).all()
     return [{"id": d.id, "name": d.name, "kind": d.kind, "principal": float(d.principal), "remaining": float(d.remaining), "interest_rate": float(d.interest_rate), "due_date": d.due_date.isoformat() if d.due_date else None, "minimum_payment": float(d.minimum_payment), "notes": d.notes or "", "progress": round((1 - float(d.remaining) / float(d.principal)) * 100, 1) if d.principal else 100} for d in rows]
 
 
 @app.post("/api/debts", status_code=201)
-def create_debt(payload: DebtIn, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def create_debt(payload: DebtIn, request: Request, user: User = Depends(workspace_user), db: Session = Depends(get_db)):
     return create_once(db, user, request, 'debt', payload, Debt)
 
 
 @app.post("/api/debts/{item_id}/pay")
-def pay_debt(item_id: int, payload: ContributionIn, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def pay_debt(item_id: int, payload: ContributionIn, request: Request, user: User = Depends(workspace_user), db: Session = Depends(get_db)):
     receipt, previous = reserve(db, user.id, f'pay_debt:{item_id}', request.headers.get('Idempotency-Key'), payload)
     if previous is not None: return previous
     row = db.query(Debt).filter(Debt.id == item_id, Debt.user_id == user.id).with_for_update().first()
@@ -1021,7 +1014,7 @@ def pay_debt(item_id: int, payload: ContributionIn, request: Request, user: User
     db.commit(); return result
 
 @app.put("/api/debts/{item_id}")
-def update_debt(item_id: int, payload: DebtIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def update_debt(item_id: int, payload: DebtIn, user: User = Depends(workspace_user), db: Session = Depends(get_db)):
     row = db.query(Debt).filter(Debt.id == item_id, Debt.user_id == user.id).first()
     if not row: raise HTTPException(404, "Debt not found")
     for key, value in payload.model_dump().items(): setattr(row, key, value)
@@ -1029,7 +1022,7 @@ def update_debt(item_id: int, payload: DebtIn, user: User = Depends(current_user
 
 
 @app.delete("/api/debts/{item_id}", status_code=204)
-def delete_debt(item_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def delete_debt(item_id: int, user: User = Depends(workspace_user), db: Session = Depends(get_db)):
     row = db.query(Debt).filter(Debt.id == item_id, Debt.user_id == user.id).first()
     if not row: raise HTTPException(404, "Debt not found")
     from .recovery import trash
@@ -1038,7 +1031,7 @@ def delete_debt(item_id: int, user: User = Depends(current_user), db: Session = 
 
 
 @app.get("/api/dashboard")
-def dashboard(month: Optional[str] = None, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def dashboard(month: Optional[str] = None, user: User = Depends(workspace_user), db: Session = Depends(get_db)):
     materialize_recurring_for_user(db, user.id)
     try:
         current = datetime.strptime(month, "%Y-%m") if month else ledger_now()
@@ -1111,7 +1104,7 @@ def dashboard(month: Optional[str] = None, user: User = Depends(current_user), d
 
 
 @app.get("/api/analytics")
-def analytics(months: int = Query(6, ge=1, le=24), user: User = Depends(current_user), db: Session = Depends(get_db)):
+def analytics(months: int = Query(6, ge=1, le=24), user: User = Depends(workspace_user), db: Session = Depends(get_db)):
     materialize_recurring_for_user(db, user.id)
     now = ledger_now()
     personal = personal_records(db, user.id)
@@ -1136,7 +1129,7 @@ def analytics(months: int = Query(6, ge=1, le=24), user: User = Depends(current_
 
 
 @app.get("/api/calendar")
-def calendar(year: int = Query(..., ge=1, le=9998), month: int = Query(..., ge=1, le=12), user: User = Depends(current_user), db: Session = Depends(get_db)):
+def calendar(year: int = Query(..., ge=1, le=9998), month: int = Query(..., ge=1, le=12), user: User = Depends(workspace_user), db: Session = Depends(get_db)):
     materialize_recurring_for_user(db, user.id)
     if not 1 <= month <= 12: raise HTTPException(400, "Invalid month")
     start = datetime(year, month, 1); end = datetime(year + (month == 12), 1 if month == 12 else month + 1, 1)
@@ -1152,8 +1145,12 @@ def calendar(year: int = Query(..., ge=1, le=9998), month: int = Query(..., ge=1
 
 @app.get("/api/backup")
 def export_backup(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    from .models import Space, SpaceMember
     payload = {
         "version": 1, "exported_at": datetime.now().astimezone().isoformat(),
+        "spaces": [{"id": space.id, "name": space.name, "color": space.color, "currency": space.currency,
+                    "members": [{"email": member.email, "role": member.role} for member in db.query(SpaceMember).filter_by(space_id=space.id).all()]}
+                   for space in db.query(Space).filter_by(owner_id=user.id).all()],
         "wallets": [{c.name: getattr(w, c.name) for c in Wallet.__table__.columns if c.name not in {"created_at", "user_id"}} for w in db.query(Wallet).filter(Wallet.user_id == user.id).all()],
         "categories": [{c.name: getattr(x, c.name) for c in Category.__table__.columns if c.name not in {"created_at", "user_id"}} for x in db.query(Category).filter(Category.user_id == user.id).all()],
         "transactions": [{**{c.name: getattr(t, c.name) for c in Transaction.__table__.columns if c.name not in {"created_at", "user_id"}}, "date": t.date.isoformat(), "recurring_until": t.recurring_until.isoformat() if t.recurring_until else None} for t in db.query(Transaction).filter(Transaction.user_id == user.id).all()],
@@ -1165,19 +1162,21 @@ def export_backup(user: User = Depends(current_user), db: Session = Depends(get_
         "debts": [{**{c.name: getattr(d, c.name) for c in Debt.__table__.columns if c.name not in {"created_at", "user_id"}}, "due_date": d.due_date.isoformat() if d.due_date else None} for d in db.query(Debt).filter(Debt.user_id == user.id).all()],
         "settings": {s.key: s.value for s in db.query(AppSetting).filter(AppSetting.user_id == user.id).all() if s.key not in {"pin_hash", "passkey"}},
         "wallet_shares": [{"wallet_id": s.wallet_id, "email": s.invitee_email, "permission": s.permission} for s in db.query(WalletShare).filter_by(owner_id=user.id).all()],
-        "note_folders": [{"id": f.id, "name": f.name, "color": getattr(f, "color", "#0a4173")} for f in db.query(NoteFolder).filter_by(user_id=user.id).all()],
-        "notes": [{"id": n.id, "title": n.title, "content": n.content, "folder_id": n.folder_id, "pinned": n.pinned,
+        "note_folders": [{"id": f.id, "name": f.name, "space_id": f.space_id, "color": getattr(f, "color", "#0a4173")} for f in db.query(NoteFolder).filter_by(user_id=user.id).all()],
+        "notes": [{"id": n.id, "title": n.title, "content": n.content, "space_id": n.space_id, "folder_id": n.folder_id, "pinned": n.pinned,
                    "note_type": getattr(n, "note_type", "text"), "color": getattr(n, "color", "#ffffff"),
                    "page_style": getattr(n, "page_style", "plain"), "checklist": getattr(n, "checklist", "[]"),
                    "attachment_name": getattr(n, "attachment_name", None), "attachment_type": getattr(n, "attachment_type", None),
                    "attachment_data": getattr(n, "attachment_data", None)} for n in db.query(Note).filter_by(user_id=user.id).all()],
     }
     from .planner import KEY as planner_key, archive_snapshot, validate_archive
-    if planner_key in payload['settings']:
-        saved_planner = validate_archive(payload['settings'][planner_key])
+    for key in list(payload['settings']):
+        if key != planner_key and not (key.startswith('cash_flow_space_') and key.endswith('_v1')):
+            continue
+        saved_planner = validate_archive(payload['settings'][key])
         payment_ids = [p['transaction_id'] for b in saved_planner['bills'] for p in b['payments']]
         payment_records = {t.id: t for t in db.query(Transaction).filter(Transaction.user_id == user.id, Transaction.id.in_(payment_ids)).all()}
-        payload['settings'][planner_key] = json.dumps(archive_snapshot(saved_planner,
+        payload['settings'][key] = json.dumps(archive_snapshot(saved_planner,
             {w['id'] for w in payload['wallets']}, {t['id'] for t in payload['transactions']}, {p['id'] for p in payload['planned_transactions']}, payment_records, user.id))
     return payload
 
@@ -1213,7 +1212,22 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
         if attachment is not None and (not isinstance(attachment, str) or len(attachment) > 6_000_000):
             raise HTTPException(400, "Backup contains an attachment that is too large")
     # Reject foreign IDs before replacing any account data.
+    from pydantic import ValidationError
     try:
+        from .spaces import SpaceIn, MemberIn
+        archived_spaces = {}
+        for space in data.get('spaces', []):
+            validated = SpaceIn.model_validate({key: space[key] for key in ('name', 'color', 'currency')})
+            if not isinstance(space['id'], int) or space['id'] <= 0 or space['id'] in archived_spaces or not isinstance(space.get('members', []), list) or len(space.get('members', [])) > 50:
+                raise ValueError('Invalid space archive')
+            members = [MemberIn.model_validate(m) for m in space.get('members', [])]
+            if len({m.email for m in members}) != len(members) or any(m.email == user.email.lower() for m in members):
+                raise ValueError('Invalid members')
+            archived_spaces[space['id']] = (validated, members)
+        for collection in ('wallets', 'categories', 'budgets', 'goals', 'debts', 'notes', 'note_folders'):
+            for item in data.get(collection, []):
+                if item.get('space_id') is not None and item['space_id'] not in archived_spaces:
+                    raise ValueError('Invalid space reference')
         wallet_ids = {w["id"] for w in data.get("wallets", [])}
         category_ids = {c["id"] for c in data.get("categories", [])}
         from .financial_ledger import BalanceCheckArchive
@@ -1241,11 +1255,17 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
             BudgetIn.model_validate(budget)
             if budget.get("category_id") and budget["category_id"] not in category_ids: raise ValueError("Invalid category reference")
         for share in data.get("wallet_shares", []):
-            if share["wallet_id"] not in wallet_ids or share["permission"] not in {"view", "edit"}: raise ValueError("Invalid share")
+            if share["wallet_id"] not in wallet_ids or share["permission"] not in {"view", "add", "edit"}: raise ValueError("Invalid share")
         from .planner import KEY as planner_key, validate_archive
-        planner_archive = None
-        if planner_key in data.get('settings', {}):
-            planner_archive = validate_archive(data['settings'][planner_key], wallet_ids,
+        planner_archives = {}
+        for key, value in data.get('settings', {}).items():
+            if key != planner_key and not (key.startswith('cash_flow_space_') and key.endswith('_v1')):
+                continue
+            scoped_id = int(key[len('cash_flow_space_'):-len('_v1')]) if key != planner_key else None
+            if scoped_id is not None and scoped_id not in archived_spaces:
+                raise ValueError('Invalid Planner space')
+            scoped_wallets = {w['id'] for w in data.get('wallets', []) if w.get('space_id') == scoped_id}
+            planner_archives[key] = validate_archive(value, scoped_wallets,
                 {t['id'] for t in data.get('transactions', [])}, {p['id'] for p in data.get('planned_transactions', [])})
     except (KeyError, TypeError, ValueError, ValidationError):
         raise HTTPException(400, "Backup contains invalid references")
@@ -1261,6 +1281,20 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
     clear_budget(db, user.id)
     for s in db.query(AppSetting).filter(AppSetting.user_id == user.id).all(): db.delete(s)
     db.flush()
+    from .models import Space, SpaceMember
+    space_map = {}
+    for original_id, (space_data, members) in archived_spaces.items():
+        space = db.query(Space).filter_by(id=original_id, owner_id=user.id).first()
+        if not space:
+            space = Space(owner_id=user.id, **space_data.model_dump())
+            db.add(space); db.flush()
+            for member in members:
+                account = db.query(User).filter_by(email=member.email).first()
+                db.add(SpaceMember(space_id=space.id, member_user_id=account.id if account else None, **member.model_dump()))
+        space_map[original_id] = space.id
+    for collection in ('wallets', 'categories', 'budgets', 'goals', 'debts', 'notes', 'note_folders'):
+        for item in data.get(collection, []):
+            item['space_id'] = space_map.get(item.get('space_id'))
     wallet_map = {}
     category_map = {}
     tx_map = {}
@@ -1334,7 +1368,8 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
         d = {k: v for k, v in dict(d).items() if k not in {"id", "user_id"}}
         d["due_date"] = date.fromisoformat(d["due_date"]) if d.get("due_date") else None; db.add(Debt(user_id=user.id, **d))
     for k, v in data.get("settings", {}).items():
-        if k == planner_key and planner_archive is not None:
+        if k in planner_archives:
+            planner_archive = planner_archives[k]
             planner_archive['revision'] = max(planner_revision, planner_archive['revision']) + 1
             for bill in planner_archive['bills']:
                 bill['wallet_id'] = wallet_map.get(bill['wallet_id'], 0)
@@ -1343,9 +1378,14 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
                     payment['transaction_created_at'] = tx_created[payment['transaction_id']]
                     payment['transaction_id'] = tx_map[payment['transaction_id']]
             v = json.dumps(planner_archive)
+            if k != planner_key:
+                original_space = int(k[len('cash_flow_space_'):-len('_v1')])
+                k = f'cash_flow_space_{space_map[original_space]}_v1'
         if k not in {"pin_hash", "passkey", "workspace_initialized"}: db.add(AppSetting(user_id=user.id, key=k, value=str(v)))
     db.add(AppSetting(user_id=user.id, key="workspace_initialized", value="true"))
     for share in data.get("wallet_shares", []):
+        if next(w for w in data['wallets'] if w['id'] == share['wallet_id']).get('space_id'):
+            continue
         email = normalize_email(share["email"])
         member = db.query(User).filter_by(email=email, active=True).first()
         db.add(WalletShare(wallet_id=wallet_map[share["wallet_id"]], owner_id=user.id, invitee_email=email, member_user_id=member.id if member else None, permission=share["permission"]))
@@ -1353,14 +1393,18 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
         clear_notes(db, user.id)
         folder_map = {}
         for folder in data.get("note_folders", []):
-            row = NoteFolder(user_id=user.id, name=folder["name"], color=folder.get("color", "#0a4173")); db.add(row); db.flush(); folder_map[folder["id"]] = row.id
+            row = NoteFolder(user_id=user.id, space_id=folder.get('space_id'), name=folder["name"], color=folder.get("color", "#0a4173")); db.add(row); db.flush(); folder_map[folder["id"]] = row.id
         for note in data["notes"]:
-            db.add(Note(user_id=user.id, title=note["title"], content=note.get("content", ""), folder_id=folder_map.get(note.get("folder_id")), pinned=bool(note.get("pinned")),
+            db.add(Note(user_id=user.id, space_id=note.get('space_id'), title=note["title"], content=note.get("content", ""), folder_id=folder_map.get(note.get("folder_id")), pinned=bool(note.get("pinned")),
                        note_type=note.get("note_type", "text"), color=note.get("color", "#ffffff"), page_style=note.get("page_style", "plain"),
                        checklist=note.get("checklist", "[]") if isinstance(note.get("checklist", "[]"), str) else json.dumps(note.get("checklist", [])),
                        attachment_name=note.get("attachment_name"), attachment_type=note.get("attachment_type"), attachment_data=note.get("attachment_data")))
     if pin_hash: db.add(AppSetting(user_id=user.id, key="pin_hash", value=pin_hash))
     db.flush()
+    for wallet in db.query(Wallet).filter(Wallet.user_id == user.id, Wallet.space_id.is_not(None)).all():
+        attach_wallet_members(db, wallet)
+    from .spaces import migrate_shared_wallets
+    migrate_shared_wallets(db.connection())
     migrate_opening_balances(db, user.id)
     db.commit()
     return {"ok": True}

@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from .schemas import ReceiptIn
 from PIL import Image, UnidentifiedImageError
 from .database import get_db
+from .spaces import workspace_actor
 from .index import current_user
 from .models import Transaction, TransactionReceipt, utc_now
 from .account_security import limit
@@ -52,14 +53,14 @@ def store_receipt(db,transaction_id,payload):
 
 @router.get('/api/transactions/{transaction_id}/receipt')
 @router.get('/api/shared/transactions/{transaction_id}/receipt')
-def receipt(transaction_id:int,request:Request,user=Depends(current_user),db=Depends(get_db)):
+def receipt(transaction_id:int,request:Request,user=Depends(workspace_actor),db=Depends(get_db)):
     owned(db,user,transaction_id,shared=request.url.path.startswith('/api/shared/'))
     row=db.get(TransactionReceipt,transaction_id)
     return {'name':row.name,'image':row.image,'saved_at':row.saved_at.isoformat()} if row else None
 
 @router.put('/api/transactions/{transaction_id}/receipt')
 @router.put('/api/shared/transactions/{transaction_id}/receipt')
-def save_receipt(transaction_id:int,payload:ReceiptIn,request:Request,user=Depends(current_user),db=Depends(get_db)):
+def save_receipt(transaction_id:int,payload:ReceiptIn,request:Request,user=Depends(workspace_actor),db=Depends(get_db)):
     owned(db,user,transaction_id,shared=request.url.path.startswith('/api/shared/'),write=True)
     limit(db,f'receipt:{user.id}',30,3600)
     row=store_receipt(db,transaction_id,payload)
@@ -68,7 +69,7 @@ def save_receipt(transaction_id:int,payload:ReceiptIn,request:Request,user=Depen
 
 @router.delete('/api/transactions/{transaction_id}/receipt',status_code=204)
 @router.delete('/api/shared/transactions/{transaction_id}/receipt',status_code=204)
-def remove_receipt(transaction_id:int,request:Request,user=Depends(current_user),db=Depends(get_db)):
+def remove_receipt(transaction_id:int,request:Request,user=Depends(workspace_actor),db=Depends(get_db)):
     owned(db,user,transaction_id,shared=request.url.path.startswith('/api/shared/'),write=True)
     db.query(TransactionReceipt).filter_by(transaction_id=transaction_id).delete()
     db.commit()

@@ -8,7 +8,12 @@ export default function OfflinePending({ scope }) {
   const { user, settings, confirm, notify } = useApp()
   const [rows, setRows] = useState([])
   const [busy, setBusy] = useState(false)
-  const load = useCallback(() => listOfflineQueue(user?.id).then(items => setRows(items.filter(row => scope === 'shared' ? row.path === '/api/shared/transactions' : row.path === '/api/transactions'))).catch(() => setRows([])), [user?.id, scope])
+  const load = useCallback(() => listOfflineQueue(user?.id).then(items => setRows(items.filter(row => {
+    const url = new URL(row.path, 'https://budgetly.local')
+    if (scope === 'shared') return url.pathname === '/api/shared/transactions'
+    const space = url.searchParams.get('space_id') || 'personal'
+    return url.pathname === '/api/transactions' && (scope?.startsWith('space:') ? space === scope.slice(6) : space === 'personal')
+  }))).catch(() => setRows([])), [user?.id, scope])
   useEffect(() => {
     void load()
     window.addEventListener('budgetly:offline-queue-changed', load)

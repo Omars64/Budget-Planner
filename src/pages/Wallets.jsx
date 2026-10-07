@@ -13,7 +13,7 @@ import { useWorkspacePreferences } from '../lib/workspacePreferences'
 const CARD_COLORS = [['#3158aa','Blue'],['#267d75','Teal'],['#75465f','Berry'],['#454f59','Graphite'],['#183d36','Emerald'],['#20283e','Midnight'],['#622e40','Burgundy'],['#584071','Amethyst'],['#596575','Titanium'],['#32647a','Ocean'],['#763d51','Rose'],['#35393c','Onyx']]
 const fresh=()=>({name:'',type:'cash',initial_balance:0,icon:'wallet',color:'#3158aa',card_network:null,archived:false})
 export default function Wallets(){
-  const {user,settings,refreshKey,refresh,notify,confirm,isGuest,requestSignIn}=useApp(); const [rows,setRows]=useState([]); const [open,setOpen]=useState(false); const [editing,setEditing]=useState(null); const [form,setForm]=useState(fresh()); const [error,setError]=useState('')
+  const {user,settings,refreshKey,refresh,notify,confirm,isGuest,requestSignIn,canManage=true}=useApp(); const [rows,setRows]=useState([]); const [open,setOpen]=useState(false); const [editing,setEditing]=useState(null); const [form,setForm]=useState(fresh()); const [error,setError]=useState('')
   const [saving,setSaving]=useState(false)
   const [ledgerWallet,setLedgerWallet]=useState(null)
   const [preferences,savePreferences]=useWorkspacePreferences(user?.id)
@@ -42,19 +42,19 @@ export default function Wallets(){
   return <div className="stack gap-22">
     {error && <div className="form-error" role="alert">{error}<button className="button ghost small" onClick={()=>refresh()}>Retry</button></div>}
     <section className="wallet-hero glass"><div><p className="eyebrow">Available money</p><h1>{fmt(total)}</h1><p className="muted">Across {rows.filter(w=>!w.archived).length} active wallets</p></div><span className="wallet-orbit"><Landmark/></span></section>
-    <div className="section-row"><div><p className="eyebrow">Accounts & cash</p><h3>Your wallets</h3></div><button className="button primary" onClick={()=>show()}><Plus/>Add wallet</button></div>
+    <div className="section-row"><div><p className="eyebrow">Accounts & cash</p><h3>Your wallets</h3></div>{canManage && <button className="button primary" onClick={()=>show()}><Plus/>Add wallet</button>}</div>
     <section className="wallet-grid">{rows.length ? orderedRows.map(w => {
       const card = ['bank','card'].includes(w.type)
       return <article className={'wallet-tile ' + (w.archived ? 'archived' : '')} key={w.id}>
-        <div className={'wallet-card ' + (card ? 'payment-card' : '')} style={walletCardStyle(w.color)} onDoubleClick={() => show(w)}>
+        <div className={'wallet-card ' + (card ? 'payment-card' : '')} style={walletCardStyle(w.color)} onDoubleClick={() => canManage && show(w)}>
           <div className="card-top"><span className="round-icon" style={{color:w.color}}><DynamicIcon name={w.icon} size={21}/></span><span className="wallet-type">{w.type}{w.is_shared ? ' · Shared' : ''}</span></div>
           <div className="wallet-card-balance"><p className="muted">{w.archived ? 'Archived' : 'Available balance'}</p><h2>{fmt(w.balance)}</h2><strong>{w.name}</strong></div>
           {card && <CardNetworkMark network={w.card_network || 'visa'}/>}
         </div>
         <div className="wallet-tile-actions"><button className="icon-button wallet-favorite" aria-label={`Favorite ${w.name}`} title="Favorite wallet" aria-pressed={preferences.favoriteWallets.includes(w.id)} onClick={() => { const ids=preferences.favoriteWallets.includes(w.id) ? preferences.favoriteWallets.filter(id=>id!==w.id) : [...preferences.favoriteWallets,w.id]; if(!savePreferences({favoriteWallets:ids})) notify('Favorites could not be saved on this device.','error') }}><Star size={18}/></button>
           <button className="button ghost small" onClick={() => isGuest ? requestSignIn('financial ledger tools') : setLedgerWallet(w)}><BookOpen size={16}/>Ledger</button>
-          <button className="icon-button" aria-label={`Edit ${w.name}`} title="Edit wallet" onClick={() => show(w)}><Pencil size={18}/></button>
-          <button className="icon-button danger" aria-label={`Delete ${w.name}`} title="Delete wallet" onClick={() => remove(w)}><Trash2 size={18}/></button>
+          {canManage && <button className="icon-button" aria-label={`Edit ${w.name}`} title="Edit wallet" onClick={() => show(w)}><Pencil size={18}/></button>}
+          {canManage && <button className="icon-button danger" aria-label={`Delete ${w.name}`} title="Delete wallet" onClick={() => remove(w)}><Trash2 size={18}/></button>}
         </div>
       </article>
     }) : <div className="panel glass full-span"><EmptyState/></div>}</section>

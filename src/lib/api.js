@@ -1,5 +1,6 @@
 import { Capacitor } from '@capacitor/core'
 import {currencyDigits} from './currency'
+import { scopedPath, setApiSpace } from './spaces'
 import { guestActive, guestApi, requestGuestSignIn } from './guest'
 import { clearOfflineCache } from './offlineStore'
 import { cacheOfflineResponse, canQueueOffline, offlineUser, queueOfflineTransaction, readOfflineResponse, setOfflineUser, syncOfflineQueue } from './offlineSync'
@@ -11,6 +12,7 @@ const apiBase = import.meta.env.VITE_API_BASE_URL || (Capacitor.isNativePlatform
 export const publicApiUrl = path => apiBase + path
 const responseCache = new Map()
 export const readCached = path => {
+  path = scopedPath(path)
   const value = responseCache.get(path)
   return value?.token === auth.token && Date.now() - value.time < 60000 ? value.data : undefined
 }
@@ -41,6 +43,7 @@ export const auth = {
     } catch { throw new Error('Allow site storage to complete sign-in.') }
   },
   clear() {
+    setApiSpace(null)
     responseCache.clear()
     const userId = offlineUser()
     setOfflineUser(null)
@@ -58,8 +61,10 @@ export const auth = {
 const pending = new Map()
 const transactionKeys = new Map()
 let writes = 0
+export const hasPendingWrites = () => writes > 0
 export function api(path, options = {}) {
   if (guestActive() && !auth.token && !path.startsWith('/api/auth/') && !path.startsWith('/api/passkeys/login/')) return guestApi(path, options)
+  path = scopedPath(path)
   if (options.method === 'PUT' && options.body) {
     try { const data = JSON.parse(options.body); if (data.revision) { const headers = new Headers(options.headers); headers.set('If-Match', data.revision); options = {...options, headers} } } catch { /* Non-JSON requests do not carry revisions. */ }
   }
@@ -142,7 +147,7 @@ async function send(path, options = {}) {
     throw error
   }
   if (!options.method || options.method === 'GET') {
-    if (path.startsWith('/api/shared/') || path === '/api/wallets') responseCache.set(path, { token: auth.token, time: Date.now(), data })
+    if (path.startsWith('/api/shared/') || path.split('?')[0] === '/api/wallets') responseCache.set(path, { token: auth.token, time: Date.now(), data })
     await cacheOfflineResponse(path, data)
   } else responseCache.clear()
   window.dispatchEvent(new Event('budgetly:service-available'))
@@ -168,6 +173,7 @@ export const money = (value, currency = 'KWD', compact = false) => {
 export const jsonBody = value => ({ body: JSON.stringify(value) })
 
 export async function apiFile(path) {
+  path = scopedPath(path)
   if (guestActive() && !auth.token) {
     requestGuestSignIn('account exports')
     throw Object.assign(new Error('Sign in for account exports. Guest CSV and JSON exports are available in Settings.'), { status: 403 })

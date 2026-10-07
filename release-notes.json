@@ -1,4 +1,10 @@
 {
+  "6.0.0": [
+    {"title":"Your spaces","detail":"Keep Personal private and create separate shared spaces for home, trips or projects."},
+    {"title":"Safe shared-record migration","detail":"Existing shared wallets and records move into Home Expense without changing their IDs or member permissions."},
+    {"title":"A complete workspace per space","detail":"Switch between independent transactions, wallets, budgets, goals, analytics, planning and notes using familiar controls."},
+    {"title":"Owner-selected themes and roles","detail":"Choose from six space colors and manage Viewer, Contributor and Manager access. Fresh sign-in starts in Personal."}
+  ],
   "5.15.0": [
     {"title":"Scheduled entry alerts","detail":"Opt in to a short notification when your scheduled entry is recorded, even with Budgetly closed."},
     {"title":"Clearer currencies","detail":"Search currency names and codes, or enter a supported currency code manually."},

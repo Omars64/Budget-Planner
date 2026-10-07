@@ -30,7 +30,7 @@ it('never puts a same-day reminder after the expense', () => {
 it('combines Bills and Upcoming with stable native IDs and the earliest reminders first',async()=>{
   const tomorrow=new Date(Date.now()+2*86400000).toISOString().slice(0,10)
   const later=new Date(Date.now()+3*86400000).toISOString().slice(0,10)
-  api.mockImplementation(path=>Promise.resolve(path==='/api/planned-transactions' ? [{id:12,date:`${later}T12:00:00+03:00`,description:'Rent',wallet_name:'Main',status:'scheduled',type:'expense',reminder_enabled:true}] : {items:[{id:'bill:example:cycle',notification_id:400123456,date:`${tomorrow}T12:00:00+03:00`,description:'Subscription',wallet_name:'Main',status:'planned',type:'expense',reminder_enabled:true}]}))
+  api.mockImplementation(path=>Promise.resolve(path.startsWith('/api/planned-transactions') ? [{id:12,date:`${later}T12:00:00+03:00`,description:'Rent',wallet_name:'Main',status:'scheduled',type:'expense',reminder_enabled:true}] : {items:[{id:'bill:example:cycle',notification_id:400123456,date:`${tomorrow}T12:00:00+03:00`,description:'Subscription',wallet_name:'Main',status:'planned',type:'expense',reminder_enabled:true}]}))
   await syncPlannedNotifications(1)
   const notifications=LocalNotifications.schedule.mock.calls[0][0].notifications
   expect(notifications.map(row=>row.id)).toEqual([400123456,200012])

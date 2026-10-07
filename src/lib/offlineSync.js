@@ -2,14 +2,14 @@ import { deleteOffline, listOffline, readOffline, writeOffline } from './offline
 
 let activeUserId = null
 let currentSync = null
-const queuePath = path => path === '/api/transactions' || path === '/api/shared/transactions'
+const queuePath = path => path.split('?')[0] === '/api/transactions' || path.split('?')[0] === '/api/shared/transactions'
 const cachedPath = path => /^\/api\/(wallets(?:\?|$)|categories(?:\?|$)|transactions(?:\?|$)|shared\/(?:wallets(?:\/\d+\/categories)?|transactions)(?:\?|$)|dashboard(?:\?|$)|attention(?:\?|$)|budgets(?:\?|$)|goals(?:\?|$)|debts(?:\?|$)|planned-transactions(?:\?|$))/.test(path)
 const notify = () => window.dispatchEvent(new Event('budgetly:offline-queue-changed'))
 
 export function setOfflineUser(userId) { activeUserId = userId == null ? null : String(userId); notify() }
 export function offlineUser() { return activeUserId }
 export function canQueueOffline(path, options) { return Boolean(activeUserId && options.method === 'POST' && queuePath(path) && typeof options.body === 'string') }
-export function canCacheOffline(path) { return Boolean(activeUserId && cachedPath(path)) }
+export function canCacheOffline(path) { return Boolean(activeUserId && (path === '/api/spaces' || cachedPath(path))) }
 
 export async function cacheOfflineResponse(path, data) {
   if (!canCacheOffline(path)) return

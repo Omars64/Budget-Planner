@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from .database import get_db
 from .currency import currency_amount
 from .extensions import shared_wallet_ids
+from .spaces import workspace_user
 from .index import budget_spent, current_user, setting
 from .models import Budget, Debt, Goal, PlannedTransaction, User, Wallet
 from .timekeeping import ledger_iso, now as ledger_now
@@ -103,7 +104,7 @@ def goal_debt_items(db: Session, user: User, current, currency: str) -> list[dic
 
 
 @router.get("/api/attention")
-def attention(user: User = Depends(current_user), db: Session = Depends(get_db)):
+def attention(user: User = Depends(workspace_user), db: Session = Depends(get_db)):
     current = ledger_now()
     currency = setting(db, user.id, "currency", "KWD") or "KWD"
     rows = plan_items(db, user, current)

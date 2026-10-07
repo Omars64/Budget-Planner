@@ -22,6 +22,7 @@ class Wallet(Base):
     __tablename__ = "wallets"
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    space_id = Column(Integer, ForeignKey("spaces.id"), nullable=True, index=True)
     name = Column(String(100), nullable=False)
     type = Column(String(40), default="cash", nullable=False)
     initial_balance = Column(Numeric(16, 3), default=0, nullable=False)
@@ -49,6 +50,7 @@ class Category(Base):
     __tablename__ = "categories"
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    space_id = Column(Integer, ForeignKey("spaces.id"), nullable=True, index=True)
     name = Column(String(100), nullable=False)
     kind = Column(String(20), nullable=False)  # income | expense
     icon = Column(String(40), default="circle")
@@ -124,6 +126,7 @@ class Budget(Base):
     __tablename__ = "budgets"
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    space_id = Column(Integer, ForeignKey("spaces.id"), nullable=True, index=True)
     name = Column(String(120), nullable=False)
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     limit_amount = Column(Numeric(16, 3), nullable=False)
@@ -139,6 +142,7 @@ class Goal(Base):
     __tablename__ = "goals"
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    space_id = Column(Integer, ForeignKey("spaces.id"), nullable=True, index=True)
     name = Column(String(120), nullable=False)
     target_amount = Column(Numeric(16, 3), nullable=False)
     current_amount = Column(Numeric(16, 3), default=0)
@@ -152,6 +156,7 @@ class Debt(Base):
     __tablename__ = "debts"
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    space_id = Column(Integer, ForeignKey("spaces.id"), nullable=True, index=True)
     name = Column(String(120), nullable=False)
     kind = Column(String(20), default="owed")  # owed | receivable
     principal = Column(Numeric(16, 3), nullable=False)
@@ -179,6 +184,27 @@ class User(Base):
     role = Column(String(20), default="user", nullable=False)  # admin | user
     active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.now)
+
+
+class Space(Base):
+    __tablename__ = 'spaces'
+    id = Column(Integer, primary_key=True)
+    owner_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    name = Column(String(80), nullable=False)
+    color = Column(String(12), nullable=False, default='green')
+    currency = Column(String(8), nullable=False, default='KWD')
+    migration_key = Column(String(64), unique=True, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utc_now)
+
+
+class SpaceMember(Base):
+    __tablename__ = 'space_members'
+    __table_args__ = (UniqueConstraint('space_id', 'email', name='uq_space_member_email'),)
+    id = Column(Integer, primary_key=True)
+    space_id = Column(Integer, ForeignKey('spaces.id', ondelete='CASCADE'), nullable=False, index=True)
+    email = Column(String(160), nullable=False)
+    member_user_id = Column(Integer, ForeignKey('users.id', ondelete='SET NULL'), nullable=True, index=True)
+    role = Column(String(12), nullable=False, default='view')
 
 
 class PendingSignup(Base):
@@ -212,6 +238,7 @@ class NoteFolder(Base):
     __tablename__ = "note_folders"
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    space_id = Column(Integer, ForeignKey("spaces.id"), nullable=True, index=True)
     name = Column(String(80), nullable=False)
     color = Column(String(20), nullable=False, default="#0a4173")
 
@@ -220,6 +247,7 @@ class Note(Base):
     __tablename__ = "notes"
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    space_id = Column(Integer, ForeignKey("spaces.id"), nullable=True, index=True)
     folder_id = Column(Integer, ForeignKey("note_folders.id"), nullable=True)
     title = Column(String(160), nullable=False)
     content = Column(Text, nullable=False, default="")

@@ -11,6 +11,7 @@ from .currency import currency_digits, currency_number
 from sqlalchemy import or_
 
 from .database import get_db
+from .spaces import workspace_user
 from .index import current_user, materialize_recurring_for_user, normalize_email, setting
 from .models import Category, Transaction, User, Wallet, WalletShare
 from .account_security import audit, limit
@@ -30,7 +31,7 @@ def allowed_wallets(db, user):
 
 
 @router.get('/api/backup/statement/wallets')
-def statement_wallets(user: User = Depends(current_user), db=Depends(get_db)):
+def statement_wallets(user: User = Depends(workspace_user), db=Depends(get_db)):
     wallets = allowed_wallets(db, user)
     owner_ids = {wallet.user_id for wallet in wallets}
     owners = {row.id: row.username for row in db.query(User).filter(User.id.in_(owner_ids)).all()} if owner_ids else {}
@@ -206,7 +207,7 @@ def as_docx(rows, title):
 def download_statement(format: str = Query('csv', pattern='^(csv|xlsx|pdf|docx)$'),
                        from_date: date = Query(...), to_date: date = Query(...),
                        wallet_id: int | None = Query(None, ge=1),
-                       user: User = Depends(current_user), db=Depends(get_db)):
+                       user: User = Depends(workspace_user), db=Depends(get_db)):
     if from_date > to_date:
         raise HTTPException(422, 'From date must be on or before To date')
     if (to_date - from_date).days > 3650:

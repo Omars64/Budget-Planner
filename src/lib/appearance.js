@@ -36,15 +36,15 @@ export function applyAppearance(value, systemDark = window.matchMedia?.('(prefer
   root.style.setProperty('--accent-soft',`rgba(${bytes.join(', ')}, .10)`)
 }
 
-export function useAppearance(settings) {
+export function useAppearance(settings, spaceAccent = null) {
   useLayoutEffect(()=>{
     const prefs = preferences(settings)
     const media = window.matchMedia('(prefers-color-scheme: dark)')
-    const update = () => applyAppearance(prefs,media.matches)
+    const update = () => applyAppearance(spaceAccent ? {...prefs, accent_color: spaceAccent} : prefs,media.matches)
     update()
     // Persist only visual preferences, so signed-out screens can use them too.
     try { localStorage.setItem(storageKey,JSON.stringify(prefs)) } catch { /* Storage is optional. */ }
     media.addEventListener('change',update)
     return () => media.removeEventListener('change',update)
-  },[settings.theme,settings.font_family,settings.text_color,settings.accent_color])
+  },[settings.theme,settings.font_family,settings.text_color,settings.accent_color,spaceAccent])
 }

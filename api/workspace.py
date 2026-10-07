@@ -8,6 +8,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from .database import get_db
+from .spaces import workspace_user
 from .index import current_user, admin_user, normalize_email, set_setting, setting
 from .models import Note, NoteFolder, NoteShare, Feedback, User, utc_now
 from .models import RecoveryPoint, NoteRevision
@@ -196,23 +197,28 @@ def note_payload(db, user, note, include_attachment=False):
                         "permission": s.permission} for s in shares] if mine else []}
     if include_attachment:
         payload["attachment_data"] = getattr(note, "attachment_data", None)
+    context = db.info.get('space')
+    if context and context.id is not None:
+        payload['is_owner'] = context.role == 'owner'
+        payload['can_edit'] = context.role in {'owner', 'edit'}
+        payload['shares'] = []
     return payload
 
 
 @router.get("/api/note-folders")
-def folders(user=Depends(current_user), db: Session = Depends(get_db)):
+def folders(user=Depends(workspace_user), db: Session = Depends(get_db)):
     return db.query(NoteFolder).filter_by(user_id=user.id).order_by(NoteFolder.name).all()
 
 
 @router.post("/api/note-folders", status_code=201)
-def create_folder(payload: FolderIn, user=Depends(current_user), db: Session = Depends(get_db)):
+def create_folder(payload: FolderIn, user=Depends(workspace_user), db: Session = Depends(get_db)):
     row = NoteFolder(user_id=user.id, name=nonblank(payload.name), color=clean_color(payload.color, "#0a4173"))
     db.add(row); db.commit(); db.refresh(row)
     return row
 
 
 @router.put("/api/note-folders/{folder_id}")
-def rename_folder(folder_id: int, payload: FolderIn, user=Depends(current_user), db: Session = Depends(get_db)):
+def rename_folder(folder_id: int, payload: FolderIn, user=Depends(workspace_user), db: Session = Depends(get_db)):
     row = db.query(NoteFolder).filter_by(id=folder_id, user_id=user.id).first()
     if not row: raise HTTPException(404, "Folder not found")
     row.name = nonblank(payload.name); row.color = clean_color(payload.color, row.color); db.commit(); db.refresh(row)
@@ -220,7 +226,7 @@ def rename_folder(folder_id: int, payload: FolderIn, user=Depends(current_user),
 
 
 @router.delete("/api/note-folders/{folder_id}", status_code=204)
-def delete_folder(folder_id: int, user=Depends(current_user), db: Session = Depends(get_db)):
+def delete_folder(folder_id: int, user=Depends(workspace_user), db: Session = Depends(get_db)):
     row = db.query(NoteFolder).filter_by(id=folder_id, user_id=user.id).first()
     if not row: raise HTTPException(404, "Folder not found")
     db.query(Note).filter_by(folder_id=folder_id, user_id=user.id).update({Note.folder_id: None, Note.version: Note.version + 1})
@@ -228,14 +234,14 @@ def delete_folder(folder_id: int, user=Depends(current_user), db: Session = Depe
 
 
 @router.get("/api/notes")
-def notes(user=Depends(current_user), db: Session = Depends(get_db)):
+def notes(user=Depends(workspace_user), db: Session = Depends(get_db)):
     shared = db.query(NoteShare.note_id).filter_by(member_id=user.id)
     rows = db.query(Note).filter(or_(Note.user_id == user.id, Note.id.in_(shared))).order_by(Note.pinned.desc(), Note.updated_at.desc()).all()
     return [note_payload(db, user, note) for note in rows]
 
 
 @router.post("/api/notes", status_code=201)
-def create_note(payload: NoteIn, user=Depends(current_user), db: Session = Depends(get_db)):
+def create_note(payload: NoteIn, user=Depends(workspace_user), db: Session = Depends(get_db)):
     if payload.folder_id and not db.query(NoteFolder).filter_by(id=payload.folder_id, user_id=user.id).first():
         raise HTTPException(404, "Folder not found")
     if payload.attachment_data and not payload.attachment_type:
@@ -250,13 +256,13 @@ def create_note(payload: NoteIn, user=Depends(current_user), db: Session = Depen
 
 
 @router.get("/api/notes/{note_id}")
-def get_note(note_id: int, user=Depends(current_user), db: Session = Depends(get_db)):
+def get_note(note_id: int, user=Depends(workspace_user), db: Session = Depends(get_db)):
     row = note_access(db, user, note_id)
     return note_payload(db, user, row, include_attachment=True)
 
 
 @router.put("/api/notes/{note_id}")
-def update_note(note_id: int, payload: NoteIn, user=Depends(current_user), db: Session = Depends(get_db)):
+def update_note(note_id: int, payload: NoteIn, user=Depends(workspace_user), db: Session = Depends(get_db)):
     row = note_access(db, user, note_id, edit=True)
     if row.version != payload.version:
         raise HTTPException(409, "This note changed since you opened it. Copy your draft, then reload the latest version.")
@@ -278,7 +284,7 @@ def update_note(note_id: int, payload: NoteIn, user=Depends(current_user), db: S
 
 
 @router.delete("/api/notes/{note_id}", status_code=204)
-def delete_note(note_id: int, user=Depends(current_user), db: Session = Depends(get_db)):
+def delete_note(note_id: int, user=Depends(workspace_user), db: Session = Depends(get_db)):
     row = note_access(db, user, note_id, owner=True)
     save_recovery(db, user, user, f"Deleted note: {row.title}")
     from .recovery import trash
@@ -289,14 +295,14 @@ def delete_note(note_id: int, user=Depends(current_user), db: Session = Depends(
 
 
 @router.get("/api/notes/{note_id}/history")
-def note_history(note_id: int, user=Depends(current_user), db: Session = Depends(get_db)):
+def note_history(note_id: int, user=Depends(workspace_user), db: Session = Depends(get_db)):
     note_access(db, user, note_id, owner=True)
     rows = db.query(NoteRevision).filter_by(note_id=note_id).order_by(NoteRevision.id.desc()).limit(200).all()
     return [{"id": r.id, "title": r.title, "content": r.content, "version": r.version, "created_at": r.created_at.isoformat() + "Z"} for r in rows]
 
 
 @router.post("/api/notes/{note_id}/shares", status_code=201)
-def share_note(note_id: int, payload: ShareIn, user=Depends(current_user), db: Session = Depends(get_db)):
+def share_note(note_id: int, payload: ShareIn, user=Depends(workspace_user), db: Session = Depends(get_db)):
     note_access(db, user, note_id, owner=True)
     member = db.query(User).filter_by(email=normalize_email(payload.email), active=True).first()
     if not member: raise HTTPException(404, "Ask this person to create a Budgetly account first")
@@ -309,7 +315,7 @@ def share_note(note_id: int, payload: ShareIn, user=Depends(current_user), db: S
 
 
 @router.delete("/api/notes/{note_id}/shares/{share_id}", status_code=204)
-def unshare_note(note_id: int, share_id: int, user=Depends(current_user), db: Session = Depends(get_db)):
+def unshare_note(note_id: int, share_id: int, user=Depends(workspace_user), db: Session = Depends(get_db)):
     note_access(db, user, note_id, owner=True)
     row = db.query(NoteShare).filter_by(id=share_id, note_id=note_id).first()
     if not row: raise HTTPException(404, "Share not found")

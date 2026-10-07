@@ -4,6 +4,7 @@ import { BarChart3, BellDot, CalendarClock, CalendarDays, Gauge, LayoutDashboard
 import { useEffect, useRef, useState } from 'react'
 import { useApp } from '../App'
 import TransactionModal from './TransactionModal'
+import SpaceSwitcher from './SpaceSwitcher'
 import BrandLogo from './BrandLogo'
 import { Capacitor } from '@capacitor/core'
 import { CircleHelp, MessageSquare, NotebookPen } from 'lucide-react'
@@ -24,7 +25,6 @@ import { recordPageVisit } from '../lib/pageUsage'
 const nav = [
   ['/', 'Overview', LayoutDashboard, 'Money'],
   ['/transactions', 'Transactions', ReceiptText, 'Money'],
-  ['/shared-transactions', 'Shared Transactions', Share2, 'Money'],
   ['/wallets', 'Wallets', WalletCards, 'Money'],
   ['/upcoming', 'Upcoming', CalendarClock, 'Planning'],
   ['/planner', 'Planner', BarChart3, 'Planning'],
@@ -39,7 +39,7 @@ const nav = [
   ['/feedback', 'Feedback', MessageSquare, 'Workspace'],
   ['/settings', 'Settings', Settings, 'Account'],
 ]
-const primaryRoutes = new Set(['/', '/transactions', '/shared-transactions', '/wallets'])
+const primaryRoutes = new Set(['/', '/transactions', '/wallets', '/budgets'])
 const groups = ['Money', 'Planning', 'Workspace', 'Account']
 
 export default function AppShell({ children }) {
@@ -76,7 +76,7 @@ export default function AppShell({ children }) {
   }, [menu])
   useScrollLock(menu)
   useContainedScroll(sidebar)
-  const { user, settings, appearance, refresh, notify, lock, isGuest, requestSignIn } = useApp()
+  const { user, settings, appearance, refresh, notify, lock, isGuest, requestSignIn, activeSpace, spaceKey, canAdd } = useApp()
   const [preferences] = useWorkspacePreferences(user?.id)
   const keyboardOpen = useKeyboardViewport()
   const location = useLocation()
@@ -87,7 +87,8 @@ export default function AppShell({ children }) {
     lastVisit.current = visit
     recordPageVisit(user?.id, location.pathname)
   }, [user?.id, location.pathname, preferences.personalizedShortcuts])
-  const visibleNav = user?.role === 'admin' ? [...nav, ['/admin', 'Admin', ShieldCheck, 'Account']] : nav
+  const pages = activeSpace ? nav.filter(([path]) => !['/ask-ai', '/bank-messages'].includes(path)) : nav
+  const visibleNav = user?.role === 'admin' ? [...pages, ['/admin', 'Admin', ShieldCheck, 'Account']] : pages
   const orderedNav = [...visibleNav].sort((a,b) => { const ia=preferences.navOrder.indexOf(a[0]), ib=preferences.navOrder.indexOf(b[0]); return ia < 0 || ib < 0 ? 0 : ia-ib })
   const matchingNav = orderedNav.filter(([, label]) => label.toLowerCase().includes(navSearch.trim().toLowerCase()))
   const title = visibleNav.find(([path]) => path === location.pathname)?.[1] || 'Budgetly'
@@ -98,7 +99,7 @@ export default function AppShell({ children }) {
     : setTxModal(true)
 
   return <div className={`app-shell budgetly-v2 ${nativeAndroid ? 'native-android' : 'browser-app'} ${isLedger ? 'has-ledger' : ''} ${keyboardOpen ? 'keyboard-open' : ''} ${location.pathname === '/ask-ai' ? 'has-ai' : ''}`}>
-    <ScrollMemory userId={user?.id}/>
+    <ScrollMemory userId={`${user?.id}:${spaceKey}`}/>
     <aside ref={sidebar} className={`sidebar glass ${menu ? 'open' : ''}`}>
       <div className="sidebar-head">
         <div className="brand">
@@ -108,6 +109,7 @@ export default function AppShell({ children }) {
         <button className="icon-button mobile-only" onClick={() => setMenu(false)} aria-label="Close menu"><X size={19}/></button>
       </div>
       <label className="nav-finder"><Search size={17}/><input ref={navSearchInput} type="search" aria-label="Find a page" placeholder="Find a page" value={navSearch} onChange={event => setNavSearch(event.target.value)}/><kbd>Ctrl K</kbd></label>
+      <div className="sidebar-space"><SpaceSwitcher/></div>
       <nav className="nav-list">
         {groups.map(group => {
           const pages = matchingNav.filter(([, , , section]) => section === group)
@@ -128,16 +130,17 @@ export default function AppShell({ children }) {
         <div className="topbar-left">
           <button className="icon-button mobile-only" onClick={() => setMenu(true)} aria-label="Open menu"><Menu size={20}/></button>
           {location.pathname === '/ask-ai' && <button className="icon-button mobile-only" title="Open conversations" aria-label="Open conversations" onClick={() => window.dispatchEvent(new window.Event('budgetly:toggle-ai-history'))}><PanelLeftOpen size={20}/></button>}
-          <div><p className="eyebrow">{settings.display_name}</p><h2>{title}</h2></div>
+          <div><p className="eyebrow">{activeSpace?.name || settings.display_name}</p><h2>{title}</h2></div>
         </div>
-        <div className="button-row top-actions">{location.pathname === '/' && !isGuest && <button className="button ghost tutorial-button" data-tour="tutorial" title="Tutorial" aria-label="Tutorial" onClick={() => { setMenu(false); setTutorialRequest(value => value + 1) }}><Compass size={18}/><span>Tutorial</span></button>}<button className="button ghost signout-button" title={isGuest ? 'Sign in' : 'Sign out'} aria-label={isGuest ? 'Sign in' : 'Sign out'} onClick={lock}><LogOut size={17}/><span>{isGuest ? 'Sign in' : 'Sign out'}</span></button>{isLedger && !nativeAndroid && <button data-tour="add-transaction" className="button primary add-button" onClick={addTransaction}><Plus size={18}/><span>Add transaction</span></button>}</div>
+        <div className="button-row top-actions">{location.pathname === '/' && !isGuest && <button className="button ghost tutorial-button" data-tour="tutorial" title="Tutorial" aria-label="Tutorial" onClick={() => { setMenu(false); setTutorialRequest(value => value + 1) }}><Compass size={18}/><span>Tutorial</span></button>}<button className="button ghost signout-button" title={isGuest ? 'Sign in' : 'Sign out'} aria-label={isGuest ? 'Sign in' : 'Sign out'} onClick={lock}><LogOut size={17}/><span>{isGuest ? 'Sign in' : 'Sign out'}</span></button>{isLedger && canAdd !== false && !nativeAndroid && <button data-tour="add-transaction" className="button primary add-button" onClick={addTransaction}><Plus size={18}/><span>Add transaction</span></button>}</div>
       </header>
+      <div className="mobile-space"><SpaceSwitcher/></div>
       <AndroidUpdate userId={user?.id} guest={isGuest}/>
       {isGuest && <div className="guest-banner"><span>Guest mode · On this device</span><button className="button ghost small" onClick={() => requestSignIn('cloud storage and more features')}>Sign in</button></div>}
       <motion.div className="page-wrap" data-tour-page={location.pathname} key={location.pathname} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .18, ease: 'easeOut' }}>{children}</motion.div>
       <BrandFooter className="app-footer"/>
     </main>
-    {isLedger && nativeAndroid && <button data-tour="add-transaction" className="transaction-fab" aria-label="Add transaction" title="Add transaction" onClick={addTransaction}><Plus size={28}/></button>}
+    {isLedger && canAdd !== false && nativeAndroid && <button data-tour="add-transaction" className="transaction-fab" aria-label="Add transaction" title="Add transaction" onClick={addTransaction}><Plus size={28}/></button>}
 
     <nav className="mobile-nav glass">
       {visibleNav.filter(([to]) => primaryRoutes.has(to)).map(([to, label, Icon]) => <NavLink key={to} to={to} end={to === '/'} onClick={event => {if(isGuest && !guestRoutes.has(to)){event.preventDefault();requestSignIn(label)}}} className={({isActive}) => isActive ? 'active' : ''}><Icon size={19}/><span>{label === 'Shared Transactions' ? 'Shared' : label}</span></NavLink>)}

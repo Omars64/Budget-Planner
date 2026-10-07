@@ -14,6 +14,11 @@ router = APIRouter()
 
 
 def audit(db, user_id, actor_id, action, resource='account'):
+    context = db.info.get('space')
+    if context:
+        actor_id = context.actor_id
+        if context.id is not None:
+            resource = f'space:{context.id}/{resource}'
     db.add(Activity(user_id=user_id, actor_id=actor_id, action=action[:160], resource=resource[:80]))
 
 

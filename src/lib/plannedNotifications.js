@@ -40,8 +40,8 @@ export async function syncPlannedNotifications(userId) {
   if (!userId) return
   const runGeneration = generation
   const settings = readNotificationSettings({},userId)
-  const rows = await api('/api/planned-transactions')
-  const planner = await api('/api/planner/reminders').catch(() => ({items:[]}))
+  const rows = await api('/api/planned-transactions?space_id=')
+  const planner = await api('/api/planner/reminders?space_id=').catch(() => ({items:[]}))
   if (runGeneration !== generation) return
   const current = [...rows,...(Array.isArray(planner?.items) ? planner.items : [])].filter(row => ['planned','scheduled'].includes(row.status) && row.type==='expense' && row.reminder_enabled)
   const now = Date.now()

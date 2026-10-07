@@ -7,19 +7,25 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from .database import get_db
 from .index import current_user
+from .spaces import workspace_user
 from .ledger_accounting import personal_wallet_ids
 from .models import AppSetting, PlannedTransaction, Transaction, User, Wallet
 from .timekeeping import ledger_iso, ledger_time, now
 
 router = APIRouter(prefix='/api/planner', tags=['Planner'])
 KEY = 'cash_flow_planner_v1'
+
+
+def config_key(db):
+    context = db.info.get('space')
+    return f'cash_flow_space_{context.id}_v1' if context and context.id is not None else KEY
 Money = Field(default=Decimal(0), ge=0, le=999999999, max_digits=12, decimal_places=3)
 
 
@@ -135,7 +141,7 @@ def archive_snapshot(saved, wallet_ids, tx_ids, plan_ids, payment_records=None, 
 
 
 def load_config(db, user_id):
-    row = db.get(AppSetting, {'user_id': user_id, 'key': KEY}, populate_existing=True)
+    row = db.get(AppSetting, {'user_id': user_id, 'key': config_key(db)}, populate_existing=True)
     if not row:
         return {'revision': 0, 'goal_reserve': '0.000', 'buffer': '0.000', 'bills': []}
     try:
@@ -155,12 +161,12 @@ def lock_config(db, user_id, revision):
 
 def persist(db, user_id, saved):
     saved['revision'] += 1
-    row = db.get(AppSetting, {'user_id': user_id, 'key': KEY})
+    row = db.get(AppSetting, {'user_id': user_id, 'key': config_key(db)})
     value = json.dumps(saved, separators=(',', ':'))
     if row:
         row.value = value
     else:
-        db.add(AppSetting(user_id=user_id, key=KEY, value=value))
+        db.add(AppSetting(user_id=user_id, key=config_key(db), value=value))
     db.commit()
     return saved
 
@@ -170,12 +176,12 @@ def owned_wallets(db, user_id):
 
 
 @router.get('/config')
-def get_config(user=Depends(current_user), db: Session = Depends(get_db)):
+def get_config(user=Depends(workspace_user), db: Session = Depends(get_db)):
     return load_config(db, user.id)
 
 
 @router.put('/config')
-def save_config(payload: Config, user=Depends(current_user), db: Session = Depends(get_db)):
+def save_config(payload: Config, user=Depends(workspace_user), db: Session = Depends(get_db)):
     old = lock_config(db, user.id, payload.revision)
     previous = {b['id']: b for b in old['bills']}
     wallet_ids = {w.id for w in owned_wallets(db, user.id)}
@@ -356,28 +362,41 @@ def forecast(db, user_id, days=30, include_assumptions=True, scenario=None, at=N
 
 
 @router.get('/forecast')
-def get_forecast(days: int = Query(30, ge=30, le=90), assumptions: bool = True, user=Depends(current_user), db: Session = Depends(get_db)):
+def get_forecast(days: int = Query(30, ge=30, le=90), assumptions: bool = True, user=Depends(workspace_user), db: Session = Depends(get_db)):
     return forecast(db, user.id, days, assumptions)
 
 
 @router.get('/summary')
-def summary(user=Depends(current_user), db: Session = Depends(get_db)):
+def summary(user=Depends(workspace_user), db: Session = Depends(get_db)):
     result = forecast(db, user.id)
     return {k: v for k, v in result.items() if k not in {'events', 'points', 'reminders', 'wallets'}}
 
 
 @router.get('/reminders')
-def reminders(user=Depends(current_user), db: Session = Depends(get_db)):
-    return {'items': forecast(db, user.id, 90)['reminders']}
+def reminders(request: Request, user=Depends(workspace_user), db: Session = Depends(get_db)):
+    items = forecast(db, user.id, 90)['reminders']
+    if request.query_params.get('space_id') == '':
+        from .spaces import list_spaces, establish_scope
+        for space in list_spaces(user, db):
+            scoped_request = Request({**request.scope, 'query_string': f"space_id={space['id']}".encode()})
+            try:
+                context = establish_scope(scoped_request, db, user)
+                items.extend(forecast(db, context.owner_id, 90)['reminders'])
+            except HTTPException:
+                # Revoked legacy wallet grants must not disclose reminder details.
+                continue
+            finally:
+                db.info.pop('space', None)
+    return {'items': items}
 
 
 @router.post('/preview')
-def preview(payload: Scenario, days: int = Query(30, ge=30, le=90), assumptions: bool = True, user=Depends(current_user), db: Session = Depends(get_db)):
+def preview(payload: Scenario, days: int = Query(30, ge=30, le=90), assumptions: bool = True, user=Depends(workspace_user), db: Session = Depends(get_db)):
     return forecast(db, user.id, days, assumptions, payload)
 
 
 @router.get('/payment-options')
-def payment_options(wallet_id: int = Query(gt=0), user=Depends(current_user), db: Session = Depends(get_db)):
+def payment_options(wallet_id: int = Query(gt=0), user=Depends(workspace_user), db: Session = Depends(get_db)):
     if wallet_id not in {w.id for w in owned_wallets(db, user.id)}:
         raise HTTPException(403, 'Choose a personal wallet')
     rows = db.query(Transaction).filter(Transaction.user_id == user.id, Transaction.wallet_id == wallet_id, Transaction.type == 'expense', Transaction.is_opening_balance.is_(False), Transaction.date <= now(), Transaction.date >= now() - timedelta(days=180)).order_by(Transaction.date.desc()).limit(100).all()
@@ -385,14 +404,14 @@ def payment_options(wallet_id: int = Query(gt=0), user=Depends(current_user), db
 
 
 @router.get('/link-options')
-def link_options(user=Depends(current_user), db: Session = Depends(get_db)):
+def link_options(user=Depends(workspace_user), db: Session = Depends(get_db)):
     ids = [w.id for w in owned_wallets(db, user.id)]
     rows = db.query(PlannedTransaction).filter(PlannedTransaction.owner_id == user.id, PlannedTransaction.wallet_id.in_(ids), PlannedTransaction.type == 'expense', PlannedTransaction.status.in_(['planned', 'scheduled']), PlannedTransaction.due_at >= now() - timedelta(days=365)).order_by(PlannedTransaction.due_at).limit(1000).all()
     return [{'id': p.id, 'wallet_id': p.wallet_id, 'date': ledger_iso(p.due_at), 'description': p.description, 'amount': cash(p.amount)} for p in rows]
 
 
 @router.post('/bills/{bill_id}/payment')
-def link_payment(bill_id: UUID, payload: Payment, user=Depends(current_user), db: Session = Depends(get_db)):
+def link_payment(bill_id: UUID, payload: Payment, user=Depends(workspace_user), db: Session = Depends(get_db)):
     config = lock_config(db, user.id, payload.revision)
     bill = next((b for b in config['bills'] if b['id'] == str(bill_id)), None)
     if not bill:

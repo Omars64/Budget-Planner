@@ -6,10 +6,12 @@ import { api, auth, flushOfflineTransactions, jsonBody } from './lib/api'
 import {installMoneyInputDefaults} from './lib/moneyInputs'
 import { rememberOfflineSession, restoreOfflineSession, setOfflineUser } from './lib/offlineSync'
 import AppShell from './components/AppShell'
+import './spaces.css'
+import useSpaces from './lib/useSpaces'
+import { rememberSpaceSelection, setApiSpace } from './lib/spaces'
 const Overview = lazy(() => import('./pages/Overview'))
 const AskAI = lazy(() => import('./pages/AskAI'))
 const Transactions = lazy(() => import('./pages/Transactions'))
-const SharedTransactions = lazy(() => import('./pages/SharedTransactions'))
 const CalendarPage = lazy(() => import('./pages/CalendarPage'))
 const Analytics = lazy(() => import('./pages/Analytics'))
 const Budgets = lazy(() => import('./pages/Budgets'))
@@ -209,8 +211,6 @@ export default function App() {
   const { confirm, confirmation } = useConfirmation()
   const [session, setSession] = useState({ loading: true, user: null })
   const [settings, setSettings] = useState(() => ({ ...readDeviceAppearance(), currency: 'KWD', display_name: 'Budgetly', week_starts_on: 'sunday', compact_numbers: false }))
-  useEffect(()=>installMoneyInputDefaults(document,settings.currency),[settings.currency])
-  useAppearance(settings)
   const [appearance, setAppearance] = useState({ profile_image: '', wallpaper_image: '' })
   const [refreshKey, setRefreshKey] = useState(0)
   const [toast, setToast] = useState(null)
@@ -235,6 +235,12 @@ export default function App() {
   const notify = useCallback((message, type = 'success', action = null) => {
     setToast({ id: Date.now(), message, type, action })
   }, [])
+  const spaceState = useSpaces(session.user, notify, confirm)
+  const { activeSpace } = spaceState
+  useAppearance(settings, activeSpace?.accent)
+  const accountPage = ['/settings', '/admin', '/feedback', '/ask-ai', '/bank-messages'].includes(currentLocation.pathname)
+  const viewSettings = activeSpace && !accountPage ? {...settings, currency: activeSpace.currency, accent_color: activeSpace.accent} : settings
+  useEffect(()=>installMoneyInputDefaults(document,viewSettings.currency),[viewSettings.currency])
   useEffect(() => {
     if (!toast) return undefined
     const timer = window.setTimeout(() => setToast(null), toast.action ? 15000 : 5000)
@@ -334,13 +340,15 @@ export default function App() {
     void cancelReminder().catch(console.error)
     void cancelPlannedNotifications().catch(console.error)
     auth.clear()
+    rememberSpaceSelection(session.user?.id, null)
     setAppearance({ profile_image: '', wallpaper_image: '' })
     setSession({ loading: false, user: null })
     setSignoutRequested(false)
-  }, [])
+  }, [session.user?.id])
   const signOut = useCallback(() => setSignoutRequested(true), [])
 
   const completeLogin = useCallback(async user => {
+    setApiSpace(null); rememberSpaceSelection(user.id, null)
     setGuestActive(false); setGuestSigningIn(false)
     setOfflineUser(user.id)
     await loadSettings()
@@ -355,26 +363,29 @@ export default function App() {
   }, [])
 
   const value = useMemo(() => ({
-    user: session.user, settings, setSettings, appearance, setAppearance,
+    user: session.user, settings: viewSettings, accountSettings: settings, setSettings, appearance, setAppearance, ...spaceState,
+    spaceKey: activeSpace ? `space:${activeSpace.id}` : 'personal',
+    canAdd: !activeSpace || activeSpace.role !== 'view', canManage: !activeSpace || ['owner', 'edit'].includes(activeSpace.role),
     refreshKey, refresh, notify, confirm, reloadSettings: loadSettings, reloadAppearance: loadAppearance, reloadUser, isGuest, requestSignIn, lock: isGuest ? () => setGuestSigningIn(true) : signOut,
-  }), [session.user, settings, appearance, refreshKey, refresh, notify, confirm, loadSettings, loadAppearance, reloadUser, signOut, isGuest, requestSignIn])
+  }), [session.user, settings, viewSettings, spaceState, activeSpace, appearance, refreshKey, refresh, notify, confirm, loadSettings, loadAppearance, reloadUser, signOut, isGuest, requestSignIn])
 
   if (session.loading) return <div className="app-loading"><BrandLogo className="pulse" /></div>
   if (!session.user || guestSigningIn) return <><LoginScreen onLogin={completeLogin} onGuest={enterGuest} returningGuest={isGuest}/><AndroidUpdate authentication/></>
+  if (!spaceState.spacesReady) return <div className="app-loading" role="status"><BrandLogo className="pulse" /><span>Opening workspace...</span></div>
 
   return <AppContext.Provider value={value}>
     {!isGuest && <Experience />}
     <div className="ambient" aria-hidden="true"><i/><i/><i/></div>
-    <AppShell>
+    <AppShell key={`${session.user.id}:${activeSpace?.id || 'personal'}:${activeSpace?.role || 'owner'}`}>
       <Suspense fallback={<div role="status">Loading page...</div>}>
       {isGuest && !guestRoutes.has(currentLocation.pathname) ? <GuestGate/> : <Routes>
         <Route path="/" element={<Overview />} />
-        <Route path="/ask-ai" element={<AskAI />} />
+        <Route path="/ask-ai" element={activeSpace ? <Navigate to="/" replace /> : <AskAI />} />
         <Route path="/transactions" element={<Transactions />} />
         <Route path="/upcoming" element={<Upcoming />} />
         <Route path="/planner" element={<Planner />} />
         <Route path="/attention" element={<Attention />} />
-        <Route path="/shared-transactions" element={<SharedTransactions />} />
+        <Route path="/shared-transactions" element={<Navigate to="/" replace />} />
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/budgets" element={<Budgets />} />
@@ -383,7 +394,7 @@ export default function App() {
         <Route path="/notes" element={<Notes />} />
         <Route path="/feedback" element={<Feedback />} />
         <Route path="/settings" element={isGuest ? <GuestSettings /> : <Settings />} />
-        <Route path="/bank-messages" element={<BankMessages />} />
+        <Route path="/bank-messages" element={activeSpace ? <Navigate to="/" replace /> : <BankMessages />} />
         <Route path="/admin" element={session.user?.role === 'admin' ? <Admin /> : <Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>}

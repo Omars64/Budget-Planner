@@ -16,7 +16,7 @@ import WeeklySummary from '../components/WeeklySummary'
 import PlannerSummary from '../components/PlannerSummary'
 
 export default function Overview() {
-  const { user, settings, refreshKey, isGuest } = useApp()
+  const { user, settings, refreshKey, isGuest, activeSpace } = useApp()
   const [data, setData] = useState(null)
   const [preferences] = useWorkspacePreferences(user?.id)
   const [attention, setAttention] = useState(null)
@@ -40,7 +40,7 @@ export default function Overview() {
 
   return <div className="overview-page">
     <section className="overview-balance">
-      <div><p className="muted">Personal balance now</p><h1>{data ? <AnimatedMoney value={data.total_balance} currency={settings.currency} compact={settings.compact_numbers}/> : '-'}</h1></div>
+      <div><p className="muted">{activeSpace ? 'Space balance now' : 'Personal balance now'}</p><h1>{data ? <AnimatedMoney value={data.total_balance} currency={settings.currency} compact={settings.compact_numbers}/> : '-'}</h1></div>
       <div className="overview-controls"><label className="field"><span>Month</span><input type="month" min="1000-01" max="9999-12" value={month} onChange={e => e.target.value && setMonth(e.target.value)}/></label></div>
     </section>
     {error && <div className="form-error" role="alert">{error}<button className="button ghost small" onClick={()=>setRetry(v=>v+1)}>Retry</button>{data && <small>Showing the last loaded summary for {data.month}.</small>}</div>}
@@ -57,7 +57,7 @@ export default function Overview() {
       {data.shared?.wallet_count > 0 && <section className="overview-shared" aria-label="Shared wallets summary"><div><span>Shared balance</span><strong>{fmt(data.shared.balance)}</strong><small>{data.shared.wallet_count} shared wallets, separate from personal</small></div><Link to="/shared-transactions">View shared <ArrowRight size={16}/></Link></section>}
       <section className="overview-wallets" aria-label="Personal wallets">
         {[...(data.wallets || [])].sort((a,b) => Number(preferences.favoriteWallets.includes(b.id))-Number(preferences.favoriteWallets.includes(a.id))).map(w => <Link key={w.id} to="/transactions" state={{ aiFilters: { wallet: String(w.id), month: '' } }}><span><Wallet size={16}/>{w.name}</span><strong>{fmt(w.balance)}</strong></Link>)}
-        {!data.wallets?.length && <Link to="/wallets">Add a personal wallet <ArrowRight size={16}/></Link>}
+        {!data.wallets?.length && <Link to="/wallets">Add {activeSpace ? 'a space' : 'a personal'} wallet <ArrowRight size={16}/></Link>}
       </section>
       <details className="overview-disclosure"><summary>Spending details</summary><div className="overview-columns">
         <section className="overview-section">

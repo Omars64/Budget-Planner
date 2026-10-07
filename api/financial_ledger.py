@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from .database import get_db
 from .idempotency import reserve
+from .spaces import workspace_actor
 from .index import current_user, materialize_recurring_for_user, setting, wallet_balance
 from .models import Transaction, User, WalletBalanceCheck
 from .timekeeping import ledger_iso, now as ledger_now
@@ -66,7 +67,7 @@ def wallet_ledger(
     before_date: Optional[str] = None,
     before_id: Optional[int] = Query(None, gt=0),
     limit: int = Query(40, ge=1, le=100),
-    user: User = Depends(current_user),
+    user: User = Depends(workspace_actor),
     db: Session = Depends(get_db),
 ):
     wallet, can_check = accessible_wallet(db, user, wallet_id)
@@ -148,7 +149,7 @@ def balance_checks(
     wallet_id: int,
     before_id: Optional[int] = Query(None, gt=0),
     limit: int = Query(20, ge=1, le=100),
-    user: User = Depends(current_user),
+    user: User = Depends(workspace_actor),
     db: Session = Depends(get_db),
 ):
     accessible_wallet(db, user, wallet_id)
@@ -167,7 +168,7 @@ def create_balance_check(
     wallet_id: int,
     payload: BalanceCheckIn,
     request: Request,
-    user: User = Depends(current_user),
+    user: User = Depends(workspace_actor),
     db: Session = Depends(get_db),
 ):
     wallet, can_check = accessible_wallet(db, user, wallet_id)

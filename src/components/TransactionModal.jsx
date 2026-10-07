@@ -21,10 +21,10 @@ import { recentEntries, rememberEntry, useWorkspacePreferences } from '../lib/wo
 const blank = () => ({ type: 'expense', amount: '', description: '', notes: '', date: dateInput(), reporting_month: '', wallet_id: '', transfer_wallet_id: '', category_id: '', recurring_frequency: 'none', recurring_until: '' })
 
 export default function TransactionModal({ open, onClose, onSaved, editing = null }) {
-  const {user, settings, notify, isGuest, requestSignIn} = useApp()
+  const {user, settings, notify, isGuest, requestSignIn, activeSpace, spaceKey = 'personal', canAdd = true} = useApp()
   const [helpers] = useWorkspacePreferences(user.id)
   const formId = useId()
-  const draftKey = `flowbudget_tx_draft_${user.id}`
+  const draftKey = `flowbudget_tx_draft_${user.id}${activeSpace ? `_space_${activeSpace.id}` : ''}`
   const [form, setForm] = useState(blank())
   const [wallets, setWallets] = useState([])
   const [categories, setCategories] = useState([])
@@ -50,7 +50,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
     const controller = new window.AbortController()
     Promise.all([api('/api/wallets', {signal: controller.signal}), api('/api/categories', {signal: controller.signal})]).then(([w,c]) => {
       if (controller.signal.aborted) return
-      w = w.filter(x => !x.is_shared || x.id === editing?.wallet_id || x.id === editing?.transfer_wallet_id)
+      w = w.filter(x => activeSpace || !x.is_shared || x.id === editing?.wallet_id || x.id === editing?.transfer_wallet_id)
       setWallets(w.filter(x => !x.archived || x.id === editing?.wallet_id || x.id === editing?.transfer_wallet_id)); setCategories(c)
       const base = editing ? {
         ...editing,
@@ -58,7 +58,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
         reporting_month: editing.reporting_month || String(editing.date || '').slice(0, 7),
         transfer_wallet_id: editing.transfer_wallet_id || '', category_id: editing.category_id || '', recurring_until: editing.recurring_until || ''
       } : (readDraft(draftKey) || (() => {
-        const base = blank(), recent = recentEntries(user.id,'personal').find(item => item.type === base.type && w.some(wallet => !wallet.archived && String(wallet.id) === String(item.wallet_id)))
+        const base = blank(), recent = recentEntries(user.id,spaceKey).find(item => item.type === base.type && w.some(wallet => !wallet.archived && String(wallet.id) === String(item.wallet_id)))
         return recent ? {...base,wallet_id:recent.wallet_id,category_id:c.some(category => category.id === Number(recent.category_id) && category.kind === base.type) ? recent.category_id : ''} : base
       })())
       if (!base.wallet_id || !w.some(wallet => String(wallet.id) === String(base.wallet_id) && (!wallet.archived || editing))) base.wallet_id = w.find(wallet => !wallet.archived)?.id || ''
@@ -85,6 +85,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
 
   const submit = async e => {
     e.preventDefault()
+    if (!canAdd) { setError('This space is read-only for your account.'); return }
     if (submitting.current || loading || voiceActive || photoBusy) return
     if(schedule && form.receipt){setError('Record now to save this reference image. Scheduled entries do not support images yet.');return}
     const invalid = transactionErrors(form)
@@ -109,7 +110,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
       date: saveDate(form.date), recurring_until: form.recurring_frequency === 'none' ? null : form.recurring_until,
     }
       const saved = await api(schedule ? '/api/planned-transactions' : editing ? `/api/transactions/${editing.id}` : '/api/transactions', { method: editing ? 'PUT' : 'POST', ...jsonBody(schedule ? {transaction: payload, status: 'scheduled', reminder_enabled: true} : payload) })
-      if (!editing) { rememberEntry(user.id,'personal',payload); clearDraft(draftKey) }
+      if (!editing) { rememberEntry(user.id,spaceKey,payload); clearDraft(draftKey) }
       if (!schedule && !saved.queued) transactionSaved(saved)
       onSaved?.(saved, schedule)
     } catch (err) { setError(err.status === 409 ? 'This transaction changed elsewhere. Your edits are still here. Close and reopen the record to review the latest version before applying them.' : err.message) }
@@ -128,7 +129,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
       {schedule && <p className="form-note">Recorded automatically after the selected time, usually within a minute. Save online first. Your balance stays unchanged until recorded.</p>}
 
       <VoiceInputButton disabled={busy || loading || !open} onActiveChange={setVoiceActive} onTranscript={applyVoice} onError={message => setError(message)}/>
-      {!editing && !isGuest && helpers.entryTemplates && <TransactionTemplates userId={user.id} scope="personal" draft={form} disabled={busy || loading} onApply={item => {
+      {!editing && !isGuest && helpers.entryTemplates && <TransactionTemplates userId={user.id} scope={spaceKey || 'personal'} draft={form} disabled={busy || loading} onApply={item => {
         const wallet = wallets.find(w => String(w.id) === String(item.wallet_id))
         if (!wallet) { setError('This template wallet is no longer available. Choose another template or enter the fields.'); return }
         const next = {...form, type:item.type, amount:item.amount, description:item.description, wallet_id:wallet.id, transfer_wallet_id:wallets.some(w => String(w.id) === String(item.transfer_wallet_id)) ? item.transfer_wallet_id : '', category_id:categories.some(c => String(c.id) === String(item.category_id) && c.kind === item.type) ? item.category_id : '', reporting_month:item.type === 'income' ? '' : form.reporting_month}
@@ -138,7 +139,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
 
       <label className="amount-input"><span>Amount ({settings.currency})</span><input required type="number" step="0.001" min="0.001" aria-invalid={Boolean(errors.amount)} aria-describedby={errors.amount ? 'personal-amount-error' : undefined} value={form.amount} onChange={e => {set('amount',e.target.value);setErrors(v=>({...v,amount:''}))}} placeholder="0.000" /></label>
       {errors.amount && <small id="personal-amount-error" className="field-error">{errors.amount}</small>}
-      <RecentDescriptions userId={user.id} scope="personal" type={form.type} value={form.description} onChange={value => set('description',value)} onSelect={entry => {
+      <RecentDescriptions userId={user.id} scope={spaceKey || 'personal'} type={form.type} value={form.description} onChange={value => set('description',value)} onSelect={entry => {
         if(!entry || !helpers.rememberEntry || editing)return
         setForm(current => {
           const next={...current,description:entry.description,
@@ -152,8 +153,8 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
       {errors.date && <small className="field-error">{errors.date}</small>}
       {form.type !== 'transfer' && <ReportingMonthField value={form.reporting_month} type={form.type} error={errors.reporting_month} disabled={busy || loading} onChange={value => set('reporting_month',value)}/>}
       <div className="form-grid two transaction-wallet-fields">
-        <SearchableSelect rememberRecent={helpers.recentChoiceOrder && helpers.rememberEntry} label={form.type === 'transfer' ? 'From wallet' : 'Wallet'} value={form.wallet_id} onChange={v => set('wallet_id',v)} disabled={busy || loading} error={errors.wallet_id} recentKey={`budgetly:recent:${user.id}:wallets`} options={wallets.map(w => ({value:w.id,label:`${w.name} · ${money(w.balance,settings.currency)}`}))}/>
-        {form.type === 'transfer' ? <SearchableSelect rememberRecent={helpers.recentChoiceOrder && helpers.rememberEntry} label="To wallet" value={form.transfer_wallet_id} onChange={v => set('transfer_wallet_id',v)} disabled={busy || loading} error={errors.transfer_wallet_id} options={wallets.filter(w => String(w.id) !== String(form.wallet_id)).map(w => ({value:w.id,label:w.name}))}/> : <SearchableSelect rememberRecent={helpers.recentChoiceOrder && helpers.rememberEntry} label="Category" placeholder="Uncategorized" value={form.category_id} onChange={v => set('category_id',v)} disabled={busy || loading} recentKey={`budgetly:recent:${user.id}:categories`} options={visibleCategories.map(c => ({value:c.id,label:c.name}))}/>}
+        <SearchableSelect rememberRecent={helpers.recentChoiceOrder && helpers.rememberEntry} label={form.type === 'transfer' ? 'From wallet' : 'Wallet'} value={form.wallet_id} onChange={v => set('wallet_id',v)} disabled={busy || loading} error={errors.wallet_id} recentKey={`budgetly:recent:${user.id}:${spaceKey}:wallets`} options={wallets.map(w => ({value:w.id,label:`${w.name} · ${money(w.balance,settings.currency)}`}))}/>
+        {form.type === 'transfer' ? <SearchableSelect rememberRecent={helpers.recentChoiceOrder && helpers.rememberEntry} label="To wallet" value={form.transfer_wallet_id} onChange={v => set('transfer_wallet_id',v)} disabled={busy || loading} error={errors.transfer_wallet_id} options={wallets.filter(w => String(w.id) !== String(form.wallet_id)).map(w => ({value:w.id,label:w.name}))}/> : <SearchableSelect rememberRecent={helpers.recentChoiceOrder && helpers.rememberEntry} label="Category" placeholder="Uncategorized" value={form.category_id} onChange={v => set('category_id',v)} disabled={busy || loading} recentKey={`budgetly:recent:${user.id}:${spaceKey}:categories`} options={visibleCategories.map(c => ({value:c.id,label:c.name}))}/>}
       </div>
       {!schedule && helpers.balancePreview && <BalancePreview wallet={wallets.find(w=>String(w.id)===String(form.wallet_id))} draft={form} editing={editing} currency={settings.currency}/>}
       <details className="form-options" open={advanced} onToggle={e => setAdvanced(e.currentTarget.open)}><summary>More options</summary><div className="stack gap-16">

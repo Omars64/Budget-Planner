@@ -8,6 +8,9 @@ from fastapi.encoders import jsonable_encoder
 
 
 def reserve(db, user_id, scope, key, payload):
+    context = db.info.get('space')
+    if context and context.id is not None:
+        scope = f'space:{context.id}:actor:{context.actor_id}:{scope}'
     if not key:
         return None, None
     if len(key) > 80:

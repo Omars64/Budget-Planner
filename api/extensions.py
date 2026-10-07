@@ -1,4 +1,5 @@
 from __future__ import annotations
+from .spaces import workspace_actor
 
 import base64
 import hashlib
@@ -259,7 +260,7 @@ def update_appearance(payload: AppearanceIn, user: User = Depends(current_user),
 
 
 @router.get("/api/shared/wallets")
-def shared_wallets(user: User = Depends(current_user), db: Session = Depends(get_db)):
+def shared_wallets(user: User = Depends(workspace_actor), db: Session = Depends(get_db)):
     email = normalize_email(user.email)
     incoming = db.query(WalletShare).filter(or_(WalletShare.member_user_id == user.id, WalletShare.invitee_email == email)).all()
     incoming_map = {s.wallet_id: s for s in incoming}
@@ -278,7 +279,7 @@ def shared_wallets(user: User = Depends(current_user), db: Session = Depends(get
 
 
 @router.post("/api/shared/wallets/{wallet_id}/shares", status_code=201)
-def share_wallet(wallet_id: int, payload: ShareIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def share_wallet(wallet_id: int, payload: ShareIn, user: User = Depends(workspace_actor), db: Session = Depends(get_db)):
     wallet = db.query(Wallet).filter(Wallet.id == wallet_id, Wallet.user_id == user.id).first()
     if not wallet: raise HTTPException(404, "Wallet not found")
     email = clean_email(payload.email)
@@ -296,7 +297,7 @@ def share_wallet(wallet_id: int, payload: ShareIn, user: User = Depends(current_
 
 
 @router.delete("/api/shared/shares/{share_id}", status_code=204)
-def remove_share(share_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def remove_share(share_id: int, user: User = Depends(workspace_actor), db: Session = Depends(get_db)):
     share = db.query(WalletShare).filter(WalletShare.id == share_id, WalletShare.owner_id == user.id).first()
     if not share: raise HTTPException(404, "Share not found")
     from .account_security import audit
@@ -305,13 +306,13 @@ def remove_share(share_id: int, user: User = Depends(current_user), db: Session 
 
 
 @router.get("/api/shared/wallets/{wallet_id}/categories")
-def shared_categories(wallet_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def shared_categories(wallet_id: int, user: User = Depends(workspace_actor), db: Session = Depends(get_db)):
     wallet, _, _ = share_for_wallet(db, user, wallet_id)
     return db.query(Category).filter(Category.user_id == wallet.user_id).order_by(Category.kind, Category.name).all()
 
 
 @router.get('/api/shared/wallets/{wallet_id}/activity')
-def wallet_activity(wallet_id:int,user=Depends(current_user),db=Depends(get_db)):
+def wallet_activity(wallet_id:int,user=Depends(workspace_actor),db=Depends(get_db)):
     wallet,_,_=share_for_wallet(db,user,wallet_id)
     from .reliability_models import Activity
     rows=db.query(Activity).filter_by(user_id=wallet.user_id,resource=f'wallet:{wallet_id}').order_by(Activity.id.desc()).limit(100).all()
@@ -320,7 +321,7 @@ def wallet_activity(wallet_id:int,user=Depends(current_user),db=Depends(get_db))
 
 
 @router.get("/api/shared/transactions")
-def shared_transactions(search: str = "", tx_type: str = "all", wallet_id: Optional[int] = None, category_id: Optional[int] = None, limit: int = Query(300, ge=1, le=1000), options: tuple = Depends(ledger_options), user: User = Depends(current_user), db: Session = Depends(get_db)):
+def shared_transactions(search: str = "", tx_type: str = "all", wallet_id: Optional[int] = None, category_id: Optional[int] = None, limit: int = Query(300, ge=1, le=1000), options: tuple = Depends(ledger_options), user: User = Depends(workspace_actor), db: Session = Depends(get_db)):
     ids = shared_wallet_ids(db, user)
     visible_ids = set(ids)
     if not ids: return []
@@ -342,7 +343,7 @@ def shared_transactions(search: str = "", tx_type: str = "all", wallet_id: Optio
 
 
 @router.post("/api/shared/transactions", status_code=201)
-def create_shared_transaction(payload: SharedTransactionIn, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def create_shared_transaction(payload: SharedTransactionIn, request: Request, user: User = Depends(workspace_actor), db: Session = Depends(get_db)):
     source = validate_shared_tx(db, user, payload)
     receipt, previous = reserve(db, user.id, 'shared-transaction', request.headers.get('Idempotency-Key'), payload)
     if previous is not None: return previous
@@ -359,7 +360,7 @@ def create_shared_transaction(payload: SharedTransactionIn, request: Request, us
 
 
 @router.put("/api/shared/transactions/{transaction_id}")
-def update_shared_transaction(transaction_id: int, payload: SharedTransactionIn, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def update_shared_transaction(transaction_id: int, payload: SharedTransactionIn, request: Request, user: User = Depends(workspace_actor), db: Session = Depends(get_db)):
     row = db.query(Transaction).filter_by(id=transaction_id).with_for_update().first()
     if not row: raise HTTPException(404, "Transaction not found")
     if not can_edit_wallet(db, user, row.wallet_id) or (row.type == "transfer" and not can_edit_wallet(db, user, row.transfer_wallet_id)): raise HTTPException(403, "You do not have edit access to this transaction")
@@ -382,7 +383,7 @@ def update_shared_transaction(transaction_id: int, payload: SharedTransactionIn,
 
 
 @router.delete("/api/shared/transactions/{transaction_id}", status_code=204)
-def delete_shared_transaction(transaction_id: int, undo: bool = False, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def delete_shared_transaction(transaction_id: int, undo: bool = False, user: User = Depends(workspace_actor), db: Session = Depends(get_db)):
     row = db.get(Transaction, transaction_id)
     if not row: raise HTTPException(404, "Transaction not found")
     if not can_edit_wallet(db, user, row.wallet_id) or (row.type == "transfer" and not can_edit_wallet(db, user, row.transfer_wallet_id)): raise HTTPException(403, "You do not have edit access to this transaction")

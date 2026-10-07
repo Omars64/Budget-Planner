@@ -37,7 +37,7 @@ function StatusFilter({ value, onChange }) {
 }
 
 export default function Upcoming() {
-  const { user, settings, notify, confirm } = useApp()
+  const { user, settings, notify, confirm, activeSpace, canAdd = true } = useApp()
   const [rows, setRows] = useState([])
   const [wallets, setWallets] = useState([])
   const [categories, setCategories] = useState([])
@@ -50,11 +50,10 @@ export default function Upcoming() {
   const editor = useRef(null)
 
   const load = async () => {
-    const [plans, owned, shared, ownCategories] = await Promise.all([api('/api/planned-transactions'), api('/api/wallets'), api('/api/shared/wallets'), api('/api/categories')])
+    const [plans, owned, ownCategories] = await Promise.all([api('/api/planned-transactions'), api('/api/wallets'), api('/api/categories')])
     setRows(plans)
-    const own = owned.filter(w => !w.archived && !w.is_shared).map(w => ({ id: w.id, name: w.name, owner_id: user.id, shared: false, editable: true }))
-    const others = shared.filter(w => !w.archived).map(w => ({ id: w.wallet_id, name: w.name, owner_id: w.owner_id, shared: true, editable: w.can_add }))
-    setWallets([...own, ...others.filter(w => !own.some(item => item.id === w.id))])
+    const own = owned.filter(w => !w.archived && (activeSpace || !w.is_shared)).map(w => ({ id: w.id, name: w.name, owner_id: user.id, shared: Boolean(activeSpace), editable: canAdd }))
+    setWallets(own)
     setCategories(ownCategories)
     setLoading(false)
   }
@@ -99,7 +98,7 @@ export default function Upcoming() {
   }
 
   return <section className="upcoming-page">
-    <header className="upcoming-toolbar"><div><h3>Upcoming records</h3><p className="muted">Plan ahead without changing your balance.</p></div><button type="button" className="button primary" data-tour="new-plan" onClick={() => start(null)}><Plus size={17}/>Add plan</button></header>
+    <header className="upcoming-toolbar"><div><h3>Upcoming records</h3><p className="muted">Plan ahead without changing your balance.</p></div><button type="button" className="button primary" data-tour="new-plan" disabled={!canAdd} onClick={() => start(null)}><Plus size={17}/>Add plan</button></header>
     <div className="upcoming-controls">
       <div className="segment-control three" role="group" aria-label="Wallet context">{[['all', 'All'], ['personal', 'Personal'], ['shared', 'Shared']].map(([value, label]) => <button key={value} type="button" className={scope === value ? 'active' : ''} aria-pressed={scope === value} onClick={() => setScope(value)}>{label}</button>)}</div>
       <StatusFilter value={filter} onChange={setFilter}/>
