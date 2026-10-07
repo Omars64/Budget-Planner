@@ -21,12 +21,12 @@ export default function UpdateDelivery() {
     try {
       if (register) {
         const result = await syncUpdatePush(updateNotificationsEnabled())
-        if (!result.enabled) throw new Error(result.configured === false ? 'Closed-app sender is not configured.' : 'Allow device notifications, enable updates, and save notifications first.')
+        if (!result.enabled) throw new Error(result.configured === false ? 'Closed-app sender is not configured.' : 'Allow device notifications, enable update or scheduled-entry alerts, and save notifications first.')
       }
       const result = await api('/api/app-updates/push-devices')
       setDevices(result.devices)
       setSelected(previous => result.devices.some(device => device.id === previous) ? previous : result.devices[0]?.id || '')
-      if (!result.devices.length) setMessage('No registered devices. Enable updates and save notifications on the device you want to use.')
+      if (!result.devices.length) setMessage('No registered devices. Enable update or scheduled-entry alerts and save notifications on this device.')
     } catch (error) { setMessage(error.message) }
     finally { setBusy(false) }
   }

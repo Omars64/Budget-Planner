@@ -1,9 +1,19 @@
 import { beforeEach, expect, it, vi } from 'vitest'
-import { notificationStorageKey, readNotificationSettings, saveNotificationSettings, stripNotificationSettings } from './notificationSettings'
+import { notificationStorageKey, readNotificationSettings, saveNotificationSettings, stripNotificationSettings, scheduledNotificationsEnabled } from './notificationSettings'
 
 vi.mock('@capacitor/core', () => ({ Capacitor: { getPlatform: () => 'browser' } }))
 
 beforeEach(() => window.localStorage.clear())
+
+it('keeps scheduled alerts independent and resets their opt-in when accounts change', () => {
+  expect(scheduledNotificationsEnabled()).toBe(false)
+  saveNotificationSettings({ scheduled_notifications_enabled: true, update_notifications_enabled: false }, 42)
+  expect(scheduledNotificationsEnabled()).toBe(true)
+  expect(readNotificationSettings({}, 42).scheduled_notifications_enabled).toBe(true)
+  expect(stripNotificationSettings({ currency: 'EUR', scheduled_notifications_enabled: true })).toEqual({ currency: 'EUR' })
+  readNotificationSettings({}, 43)
+  expect(scheduledNotificationsEnabled()).toBe(false)
+})
 
 it('keeps a saved browser profile when account settings change', () => {
   const userId = 42

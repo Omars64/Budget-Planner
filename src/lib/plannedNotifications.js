@@ -56,7 +56,7 @@ export async function syncPlannedNotifications(userId) {
       if (settings.upcoming_reminders_enabled) {
         const permission = await LocalNotifications.checkPermissions()
         if (permission.display==='granted') {
-          const notifications = current.map(row=>({row,at:reminderAt(row,settings)})).filter(item=>item.at.getTime()>now).sort((a,b)=>a.at-b.at).slice(0,60).map(({row,at})=>({id:row.notification_id || 200000+row.id,title:'Upcoming expense',body:`${row.description} · ${row.wallet_name}`,smallIcon:'flowbudget_notification',largeIcon:'flowbudget_logo',iconColor:'#0a4173',schedule:{at,allowWhileIdle:true},isExactNotification:false}))
+          const notifications = current.map(row=>({row,at:reminderAt(row,settings)})).filter(item=>item.at.getTime()>now).sort((a,b)=>a.at-b.at).slice(0,60).map(({row,at})=>({id:row.notification_id || 200000+row.id,title:'Upcoming expense',body:`${row.description} · ${row.wallet_name}`,smallIcon:'flowbudget_notification',iconColor:'#0a4173',schedule:{at,allowWhileIdle:true},isExactNotification:false}))
           if (notifications.length) await LocalNotifications.schedule({notifications})
         }
       }
@@ -70,7 +70,7 @@ export async function syncPlannedNotifications(userId) {
     const when = reminderAt(row,settings).getTime()
     const receipt = `${row.id}:${when}`
     if (when<=now && when>now-6*3600000 && !delivered[receipt]) {
-      new window.Notification('Upcoming expense',{body:`${row.description} · ${row.wallet_name}`,icon:'/flowbudget-logo.png',tag:`budgetly-upcoming-${row.id}`})
+      new window.Notification('Upcoming expense',{body:`${row.description} · ${row.wallet_name}`,icon:'/notification-wallet.svg',tag:`budgetly-upcoming-${row.id}`})
       delivered[receipt]=now
     }
   }

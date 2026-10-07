@@ -118,7 +118,13 @@ def scheduled_transactions(request: Request, db=Depends(get_db)):
     if posted:
         db.add(ServiceEvent(area='scheduled-transactions', status=200))
         db.commit()
-    return {'ok': True, 'scheduled_transactions_posted': posted}
+    from .update_push import dispatch_scheduled
+    try:
+        delivery = dispatch_scheduled(db)
+    except Exception:
+        db.rollback()
+        delivery = {'failed': True}
+    return {'ok': True, 'scheduled_transactions_posted': posted, 'notifications': delivery}
 
 
 @router.post('/api/maintenance/updates')

@@ -7,7 +7,6 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.os.Build;
 
@@ -48,7 +47,6 @@ public class BudgetlyReminderReceiver extends BroadcastReceiver {
 
         NotificationCompat.Builder builder = new NotificationCompat.Builder(context, BudgetlyRemindersPlugin.CHANNEL_ID)
                 .setSmallIcon(com.flowbudget.app.R.drawable.flowbudget_notification)
-                .setLargeIcon(BitmapFactory.decodeResource(context.getResources(), com.flowbudget.app.R.drawable.flowbudget_logo))
                 .setColor(Color.rgb(10, 65, 115))
                 .setContentTitle("Budgetly")
                 .setContentText(prefs.getString("body", "Take a moment to review your budget activity."))

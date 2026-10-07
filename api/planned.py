@@ -100,6 +100,8 @@ def post_due(db: Session, limit=100):
         db.add(tx); db.flush()
         row.posted_transaction_id = tx.id
         row.status = 'posted'; row.error = None
+        from .update_push import queue_scheduled
+        queue_scheduled(db, row)
         posted += 1
     db.commit()
     return posted

@@ -16,7 +16,7 @@ export function reminderBody(settings){
 export const isNativeApp = () => Capacitor.isNativePlatform()
 const reminderIds = [{id:1001}, ...Array.from({length:30},(_,i)=>({id:1100+i}))]
 let reminderQueue = Promise.resolve()
-const androidNotificationBranding = {smallIcon:'flowbudget_notification',largeIcon:'flowbudget_logo',iconColor:'#0a4173'}
+const androidNotificationBranding = {smallIcon:'flowbudget_notification',iconColor:'#0a4173'}
 const BudgetlyReminders = registerPlugin('BudgetlyReminders')
 
 export function reminderTimes(settings) {
@@ -93,5 +93,5 @@ export async function testNotification() {
   if(!('Notification' in window))throw new Error('This browser cannot display device notifications. Use the installed mobile app for reminders.')
   const permission=await window.Notification.requestPermission()
   if(permission!=='granted')throw new Error('Notifications are blocked. Allow notifications in this site\'s browser settings.')
-  try{new window.Notification('Budgetly',{body:'Your browser notifications are ready while Budgetly is open.',icon:'/flowbudget-logo.png',tag:'flowbudget-test'})}catch{throw new Error('This browser requires an installed mobile app for device notifications.')}
+  try{new window.Notification('Budgetly',{body:'Your browser notifications are ready while Budgetly is open.',icon:'/notification-wallet.svg',tag:'flowbudget-test'})}catch{throw new Error('This browser requires an installed mobile app for device notifications.')}
 }

@@ -38,7 +38,8 @@ public class BudgetlyUpdaterPlugin extends Plugin {
     @PluginMethod
     public void setPushAlerts(PluginCall call) {
         boolean enabled = Boolean.TRUE.equals(call.getBoolean("enabled", false));
-        getContext().getSharedPreferences("budgetly-update-push", 0).edit().putBoolean("enabled", enabled).commit();
+        getContext().getSharedPreferences("budgetly-update-push", 0).edit().putBoolean("enabled", enabled)
+            .putBoolean("scheduled", Boolean.TRUE.equals(call.getBoolean("scheduled", false))).commit();
         if (!enabled) ((android.app.NotificationManager)getContext().getSystemService(android.content.Context.NOTIFICATION_SERVICE)).cancel(1500);
         call.resolve();
     }

@@ -10,6 +10,10 @@ import com.google.firebase.messaging.RemoteMessage;
 
 public class BudgetlyUpdateMessagingService extends MessagingService {
     @Override public void onMessageReceived(RemoteMessage message) {
+        if ("true".equals(message.getData().get("budgetlyScheduled"))) {
+            showScheduled(message);
+            return;
+        }
         boolean test = "true".equals(message.getData().get("budgetlyUpdateTest"));
         if (!test && !"true".equals(message.getData().get("budgetlyUpdate"))) return;
         android.content.SharedPreferences preferences = getSharedPreferences("budgetly-update-push", 0);
@@ -39,5 +43,23 @@ public class BudgetlyUpdateMessagingService extends MessagingService {
                 .setAutoCancel(true).setContentIntent(action).build());
             if (!test) preferences.edit().putString("last-version", version).apply();
         } catch (Exception ignored) { /* A push must never prevent the app from opening. */ }
+    }
+
+    private void showScheduled(RemoteMessage message) {
+        try {
+            android.content.SharedPreferences preferences = getSharedPreferences("budgetly-update-push", 0);
+            if (!preferences.getBoolean("scheduled", false)) return;
+            String event = message.getData().get("event");
+            if (event == null || !event.matches("[0-9]{1,12}")) return;
+            NotificationManager manager = (NotificationManager)getSystemService(NOTIFICATION_SERVICE);
+            manager.createNotificationChannel(new NotificationChannel("budgetly-scheduled", "Recorded scheduled entries", NotificationManager.IMPORTANCE_DEFAULT));
+            if (!androidx.core.app.NotificationManagerCompat.from(this).areNotificationsEnabled()) return;
+            Intent open = new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            PendingIntent action = PendingIntent.getActivity(this, 1502, open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+            manager.notify("budgetly-scheduled-" + event, 1502, new NotificationCompat.Builder(this, "budgetly-scheduled")
+                .setSmallIcon(R.drawable.flowbudget_notification).setContentTitle("Scheduled entry recorded")
+                .setContentText(message.getData().get("body")).setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+                .setAutoCancel(true).setContentIntent(action).build());
+        } catch (Exception ignored) { /* Ledger posting never depends on notification delivery. */ }
     }
 }

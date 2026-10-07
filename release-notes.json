@@ -1,4 +1,10 @@
 {
+  "5.15.0": [
+    {"title":"Scheduled entry alerts","detail":"Opt in to a short notification when your scheduled entry is recorded, even with Budgetly closed."},
+    {"title":"Clearer currencies","detail":"Search currency names and codes, or enter a supported currency code manually."},
+    {"title":"Refined Settings and receipts","detail":"Nested settings are easier to expand. Shared reference photos remain under More options when recording an entry."},
+    {"title":"Wallet notification icon","detail":"Android and browser alerts now use a wallet icon."}
+  ],
   "5.14.1": [
     {"title":"Currency configuration","detail":"Currency has its own Settings section and save action, preserving your selection across the workspace."},
     {"title":"Background scheduling support","detail":"A protected scheduled-entry runner supports independent server execution when configured by the administrator."}

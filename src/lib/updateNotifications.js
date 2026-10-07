@@ -20,12 +20,12 @@ export function notifyAppUpdate(release, onClick) {
       if ((await LocalNotifications.checkPermissions()).display !== 'granted' || !updateNotificationsEnabled()) return false
       await LocalNotifications.createChannel({ id: 'budgetly-updates', name: 'App updates', importance: 3, visibility: 0 })
       await LocalNotifications.schedule({ notifications: [{ id: UPDATE_NOTIFICATION_ID, title, body,
-        channelId: 'budgetly-updates', smallIcon: 'flowbudget_notification', largeIcon: 'flowbudget_logo', iconColor: '#0a4173',
+        channelId: 'budgetly-updates', smallIcon: 'flowbudget_notification', iconColor: '#0a4173',
         extra: { budgetlyUpdate: true, version: release.version } }] })
     } else {
       if (!('Notification' in window) || window.Notification.permission !== 'granted') return false
       browserNotice?.close()
-      try { browserNotice = new window.Notification(title, { body, icon: '/flowbudget-logo.png', tag: 'budgetly-update' }) }
+      try { browserNotice = new window.Notification(title, { body, icon: '/notification-wallet.svg', tag: 'budgetly-update' }) }
       catch { return false }
       browserNotice.onclick = () => { window.focus(); onClick(); browserNotice?.close() }
     }

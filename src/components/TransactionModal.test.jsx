@@ -52,7 +52,7 @@ it('shows two recording choices and a clear month label', async () => {
   expect(screen.getByRole('button', { name: 'Record now' })).toHaveAttribute('aria-pressed', 'true')
   fireEvent.click(screen.getByRole('button', { name: 'Schedule' }))
   expect(screen.getByRole('button', { name: 'Schedule' })).toHaveAttribute('aria-pressed', 'true')
-  expect(screen.getByText(/Your balance stays unchanged until then/)).toBeInTheDocument()
+  expect(screen.getByText(/usually within a minute/)).toBeInTheDocument()
   expect(screen.getByLabelText('Month this is for')).toBeInTheDocument()
 })
 it.each(['daily','weekly','monthly','yearly'])('requires a valid end date for %s schedules', async frequency => {

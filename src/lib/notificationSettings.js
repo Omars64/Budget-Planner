@@ -2,6 +2,10 @@ import { Capacitor } from '@capacitor/core'
 
 export const notificationSettingsChangedEvent = 'budgetly:notification-settings-changed'
 const updatePreferenceKey = 'budgetly-update-notifications-v1'
+const scheduledPreferenceKey = 'budgetly-scheduled-notifications-v1'
+export function scheduledNotificationsEnabled() {
+  try { return localStorage.getItem(scheduledPreferenceKey) === 'true' } catch { return false }
+}
 export function updateNotificationsEnabled() {
   try { return localStorage.getItem(updatePreferenceKey) !== 'false' } catch { return true }
 }
@@ -12,6 +16,7 @@ export function saveUpdateNotifications(enabled) {
 
 export const notificationSettingKeys = [
   'update_notifications_enabled',
+  'scheduled_notifications_enabled',
   'reminders_enabled',
   'reminder_interval_hours',
   'reminder_time',
@@ -45,6 +50,7 @@ const normalize = (source = {}) => {
     : '20:00'
   return {
     update_notifications_enabled: updateNotificationsEnabled(),
+    scheduled_notifications_enabled: Boolean(source.scheduled_notifications_enabled),
     reminders_enabled: Boolean(source.reminders_enabled),
     reminder_interval_hours: allowedIntervals.includes(interval) ? interval : 4,
     reminder_time: time,
@@ -65,7 +71,12 @@ export function readNotificationSettings(source, userId) {
   if (!userId || typeof window === 'undefined') return fallback
   try {
     const stored = window.localStorage.getItem(notificationStorageKey(userId))
-    if (stored) return normalize(JSON.parse(stored))
+    if (stored) {
+      const next = normalize(JSON.parse(stored))
+      window.localStorage.setItem(scheduledPreferenceKey,String(next.scheduled_notifications_enabled))
+      return next
+    }
+    window.localStorage.setItem(scheduledPreferenceKey,'false')
     window.localStorage.setItem(notificationStorageKey(userId), JSON.stringify(fallback))
   } catch {
     // Storage can be unavailable in private browsing or a restricted WebView.
@@ -74,6 +85,7 @@ export function readNotificationSettings(source, userId) {
 }
 
 export function saveNotificationSettings(source, userId) {
+  localStorage.setItem(scheduledPreferenceKey, String(Boolean(source.scheduled_notifications_enabled)))
   saveUpdateNotifications(source.update_notifications_enabled !== false)
   const next = normalize(source)
   if (userId && typeof window !== 'undefined') {

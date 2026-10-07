@@ -113,6 +113,59 @@ def test_revoked_shared_access_does_not_post(workspace):
     assert db.get(PlannedTransaction, row.id).status == 'failed'
 
 
+def test_shared_runner_posts_for_owner_and_notifies_creator_once(workspace, monkeypatch):
+    import json
+    from uuid import uuid4
+    from cryptography.fernet import Fernet
+    from api import update_push as push
+    client, db, actor, owner, member, wallet = workspace
+    monkeypatch.setenv('UPDATE_PUSH_ENCRYPTION_KEY', Fernet.generate_key().decode())
+    monkeypatch.setenv('SCHEDULE_RUNNER_SECRET', 'test-runner')
+    share = db.query(WalletShare).one()
+    share.permission = 'add'
+    actor['user'] = member
+    device = push.UpdatePushDevice(id=str(uuid4()), user_id=member.id, platform='browser', installed_version='1.0.0',
+        payload=push.cipher().encrypt(json.dumps({'credentials': {}, 'updates': False, 'scheduled': True}).encode()).decode())
+    db.add(device); db.commit()
+    response = client.post('/api/planned-transactions', json=payload(wallet.id))
+    assert response.status_code == 201
+    plan = db.get(PlannedTransaction, response.json()['id'])
+    plan.due_at = ledger_now() - timedelta(minutes=1)
+    db.commit()
+    calls = []
+    monkeypatch.setattr(push, 'send_device', lambda row, version, notice=None: calls.append(notice) or 503)
+    headers = {'Authorization': 'Bearer test-runner'}
+    result = client.post('/api/maintenance/scheduled-transactions', headers=headers)
+    assert result.json()['scheduled_transactions_posted'] == 1
+    tx = db.query(Transaction).one()
+    assert tx.user_id == owner.id and tx.recorded_by_id == member.id
+    assert db.query(push.ScheduledPush).count() == 1
+    assert db.query(push.ScheduledPush).one().sent_at is None
+    monkeypatch.setattr(push, 'send_device', lambda row, version, notice=None: calls.append(notice) or 200)
+    assert client.post('/api/maintenance/scheduled-transactions', headers=headers).json()['notifications']['sent'] == 1
+    assert client.post('/api/maintenance/scheduled-transactions', headers=headers).json()['notifications']['sent'] == 0
+    assert db.query(Transaction).count() == 1
+    assert calls[-1]['body'] == 'Your scheduled expense was recorded.'
+    assert 'Upcoming bill' not in json.dumps(calls[-1])
+
+
+def test_disabled_scheduled_alerts_create_no_outbox(workspace, monkeypatch):
+    from uuid import uuid4
+    from cryptography.fernet import Fernet
+    from api import update_push as push
+    client, db, _, owner, _, wallet = workspace
+    monkeypatch.setenv('UPDATE_PUSH_ENCRYPTION_KEY', Fernet.generate_key().decode())
+    db.add(push.UpdatePushDevice(id=str(uuid4()), user_id=owner.id, platform='android', installed_version='1.0.0',
+        payload=push.cipher().encrypt(b'"legacy-token"').decode()))
+    db.commit()
+    response = client.post('/api/planned-transactions', json=payload(wallet.id))
+    plan = db.get(PlannedTransaction, response.json()['id'])
+    plan.due_at = ledger_now() - timedelta(minutes=1)
+    db.commit()
+    assert post_due(db) == 1
+    assert db.query(push.ScheduledPush).count() == 0
+
+
 def test_rating_prompt_stops_after_stars(workspace):
     client, db, actor, owner, _, _ = workspace
     from api.workspace import count_feedback_event

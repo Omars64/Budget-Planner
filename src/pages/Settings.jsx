@@ -79,7 +79,7 @@ export default function Settings(){
     e.preventDefault()
     try {
       const enabled=notificationForm.update_notifications_enabled !== false
-      const wantsPermission=enabled||notificationForm.reminders_enabled||notificationForm.upcoming_reminders_enabled
+      const wantsPermission=enabled||notificationForm.scheduled_notifications_enabled||notificationForm.reminders_enabled||notificationForm.upcoming_reminders_enabled
       const granted=wantsPermission ? await requestUpdatePermission() : false
       const next=saveNotificationSettings(notificationForm,user?.id)
       if(isNativeApp()){if(next.upcoming_reminders_enabled)await LocalNotifications.requestPermissions();await configureReminder(next)}

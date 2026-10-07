@@ -107,6 +107,12 @@ body:has(.budgetly-v2) .ambient { display:none; }
 .budgetly-v2 .settings-section>summary::-webkit-details-marker { display:none; }
 .budgetly-v2 .settings-section[open]>summary>svg { transform:rotate(90deg); }
 .budgetly-v2 .settings-section-body { padding:0 24px 24px; }
+.budgetly-v2 .settings-section-body details { border-block:1px solid var(--line); margin-block:8px; }
+.budgetly-v2 .settings-section-body details>summary { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:48px; padding:12px 8px; list-style:none; cursor:pointer; font-size:14px; font-weight:600; }
+.budgetly-v2 .settings-section-body details>summary::-webkit-details-marker { display:none; }
+.budgetly-v2 .settings-section-body details>summary::after { content:'+'; flex-shrink:0; font-size:20px; color:var(--muted); }
+.budgetly-v2 .settings-section-body details[open]>summary::after { content:'-'; }
+.budgetly-v2 .settings-section-body details>summary:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 .budgetly-v2 .settings-section-body .panel-head:empty { display:none; }
 .budgetly-v2 .settings-section .field { max-width:640px; }
 .budgetly-v2 .settings-section .muted { font-size:13px; line-height:1.6; }
