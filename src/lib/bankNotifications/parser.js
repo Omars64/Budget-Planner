@@ -14,6 +14,19 @@ const precedingCurrency = new RegExp(`(?:${codes})\\s*$`, 'i')
 const balanceBefore = /(?:balance|available|limit|الرصيد|رصيد|المتاح)(?:\s+(?:balance|available|remaining|الرصيد|المتاح))?(?:\s+(?:is|of))?\s*[:=]?\s*$/i
 const balanceAfter = /^\s*(?:\((?:available\s+)?balance\)|(?:(?:available\s+)?balance\b|الرصيد|رصيد)(?=\s*(?:$|[.;,])))/i
 
+function notificationMerchant(raw) {
+  const lines = String(raw.bigText || raw.text || '').split(/[\r\n]+/).map(normalizeBankText).filter(Boolean)
+  const title = normalizeBankText(raw.title).toLowerCase()
+  const details = lines.filter(line => {
+    if (line.toLowerCase() === title || /^(?:CBK|CBK Mobile|WAMD)$/i.test(line)) return false
+    if (/^(?:available|balance|remaining|limit|الرصيد|رصيد|المتاح)\b/i.test(line)) return false
+    if (/^(?:(?:you|your)\s+)?(?:card|account|a\/?c)\s*[:#-]?\s*[*xX]*\d/i.test(line)) return false
+    if (Array.from(line.matchAll(amountPattern)).length) return false
+    return /[\p{L}]/u.test(line)
+  }).map(line => line.replace(/^(?:merchant|description|details|reference|beneficiary)\s*:\s*/i, '').trim()).filter(Boolean)
+  return details.join(' - ')
+}
+
 function amountString(value, currency) {
   const [whole, fraction = ''] = value.replace(/,/g, '').split('.')
   const digits = currencyDigits(currency)
@@ -51,8 +64,10 @@ export function parseBankNotification(raw = {}) {
     ? selected.sign === '+' ? actionType === 'refund' ? 'refund' : 'income' : actionType === 'withdrawal' ? 'withdrawal' : 'expense'
     : actionType
   const account_last4 = text.match(/\b(?:ending(?: in)?|card|account|a\/?c)\s*[:#-]?\s*[*xX]*(\d{4})(?!\d)|[*xX]{2,}(\d{4})(?!\d)/i)?.slice(1).find(Boolean) || ''
-  let merchant = text.match(/(?:purchase at|used at|transaction at|merchant\s*:?|\bat|\bfrom|\bPOS)\s+(.+?)(?=\s+(?:on|using|card|account|balance|available|for|ref(?:erence)?)\b|[,;]|$)/i)?.[1]?.trim().replace(/[.]+$/, '') || 'Unknown merchant'
-  merchant = merchant.replace(/\b(?:\d[ -]?){12,19}\b/g, '[redacted]').slice(0, 160)
+  const body = [raw.title, raw.bigText || raw.text, raw.subText].filter(Boolean).join('\n')
+  let merchant = body.match(/(?:purchase at|used at|transaction at|merchant\s*:?|description\s*:|beneficiary\s*:|sent to|\bat|\bfrom|\bPOS)\s+([^\r\n]+?)(?=\s+(?:on|using|card|account|balance|available|for|ref(?:erence)?)\b|[,;]|[\r\n]|$)/i)?.[1]?.trim().replace(/[.]+$/, '') || 'Unknown merchant'
+  if (merchant === 'Unknown merchant') merchant = notificationMerchant(raw) || merchant
+  merchant = normalizeBankText(merchant).replace(/\b(?:\d[ -]?){12,19}\b/g, '[redacted]').slice(0, 160)
   if (/^(?:\d|KWD\b|KD\b)/i.test(merchant)) merchant = 'Unknown merchant'
   if (merchant === 'Unknown merchant' && /\bWAMD\b/i.test(text)) merchant = 'WAMD transfer'
   const reasons = ['Amount detected', 'Transaction type detected', 'Timestamp needs review']

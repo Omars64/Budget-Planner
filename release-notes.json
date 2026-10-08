@@ -1,4 +1,7 @@
 {
+  "6.1.4": [
+    {"title":"Bank alert descriptions","detail":"Read merchant, beneficiary and description details from bank notifications, including multiline alerts, instead of using a generic transfer label when details are available."}
+  ],
   "6.1.3": [
     {"title":"Clean Space categories","detail":"Transaction, scheduled-entry and Bank Inbox category pickers no longer repeat migrated category names. Existing records retain their original category links."},
     {"title":"Broader bank alert support","detail":"Recognize signed credit/debit amounts alongside credited, debited, purchase, refund and transfer wording. Every bank entry still requires your review."}

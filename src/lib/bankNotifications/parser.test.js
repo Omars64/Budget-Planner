@@ -25,6 +25,18 @@ describe('bank alert parser', () => {
     expect(result.reasons).toContain('Transfer direction needs review')
   })
   it('supports a CBK app title and Arabic digits', () => expect(parseBankNotification({ title: 'CBK Mobile', text: 'CBK +١٫٠٠٠KWD YOU Ac ٩٠١٠ WAMD Available ٢٠٫٤٨٨KWD' })).toMatchObject({ amount: '1.000', account_last4: '9010' }))
+  it('reads multiline merchant details instead of falling back to WAMD', () => {
+    expect(parseBankNotification({title:'CBK',text:'-1.000KWD\nYOU Ac 9010\nWAMD\nDescription: Dinner with Ali\nAvailable 19.488KWD'})).toMatchObject({merchant:'Dinner with Ali',account_last4:'9010',amount:'1.000'})
+  })
+  it('reads an unlabeled bank description and ignores account and balance lines', () => {
+    expect(parseBankNotification({title:'CBK',text:'CBK\n-3.500KWD\nYOU Ac 9010\nCITY SUPERMARKET\nAvailable 19.488KWD'}).merchant).toBe('CITY SUPERMARKET')
+  })
+  it('stops named merchant extraction at a newline', () => {
+    expect(parseBankNotification({title:'Bank',text:'Purchase KWD 3.500 at SHOP\nAvailable 20.000KWD'}).merchant).toBe('SHOP')
+  })
+  it('uses expanded notification details and redacts full card numbers', () => {
+    expect(parseBankNotification({title:'CBK',text:'WAMD',bigText:'-1.000KWD\nYOU Ac 9010\nWAMD\nAli 4111111111111111\nAvailable 19.488KWD'}).merchant).toBe('Ali [redacted]')
+  })
   it.each(['CBK Mobile Application is running in foreground', 'CBK Available +20.488KWD', 'CBK +1.000KWD YOU Ac 9010 WAMD Available 20.488KWD OTP 12345', 'CBK +1.0001KWD YOU Ac 9010 WAMD Available 20.488KWD'])('rejects incomplete/security/non-payment CBK alerts: %s', text => expect(parse(text).recognized).toBe(false))
   it.each(fixtures)('fixture: $name', fixture => expect(parse(fixture.text).transaction_type || null).toBe(fixture.kind))
   it.each(['KWD 12.500', '12.500 KWD', 'KD 12.500', 'K.D. 12.500', 'د.ك 12.500', '12.500 د.ك'])('parses %s without floating point', amount => {
