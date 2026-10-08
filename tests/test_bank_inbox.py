@@ -82,6 +82,8 @@ def test_ignore_restore_move_and_duplicates_require_explicit_override(spaces):
 
 def test_currency_security_precision_and_income_month(spaces):
     client, _, _, ids = spaces
+    cbk = client.post('/api/bank-inbox/ingest', json=alert(content_hash='e'*64, merchant='WAMD transfer', reasons=['Transfer direction needs review', 'Signed amount: direction needs review']))
+    assert cbk.status_code == 201, cbk.text
     for changes in [{'merchant': 'OTP 12345'}, {'merchant': '4111111111111111'}, {'reasons': ['Raw private message']}, {'amount': '1.0001'}]:
         assert client.post('/api/bank-inbox/ingest', json=alert(**changes)).status_code == 422
     item = client.post('/api/bank-inbox/ingest', json=alert(currency='USD')).json()['id']

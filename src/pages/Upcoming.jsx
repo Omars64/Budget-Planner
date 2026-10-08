@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Bell, CalendarClock, Check, ChevronDown, ListFilter, Pencil, Plus, Trash2 } from 'lucide-react'
 import { api, jsonBody, money } from '../lib/api'
+import { categoryChoices } from '../lib/categoryChoices'
 import { dateInput, saveDate, showTime } from '../lib/time'
 import DateTimeField from '../components/DateTimeField'
 import ReportingMonthField from '../components/ReportingMonthField'
@@ -75,7 +76,7 @@ export default function Upcoming() {
     }).catch(() => {})
     return () => { active = false }
   }, [draft?.wallet_id, wallet?.owner_id, user.id])
-  const choices = categories.filter(c => c.kind === draft?.type && (wallet?.owner_id === user.id || c.wallet_id === Number(draft?.wallet_id)))
+  const choices = categoryChoices(categories.filter(c => c.kind === draft?.type && (wallet?.owner_id === user.id || c.wallet_id === Number(draft?.wallet_id))), activeSpace?.id, draft?.category_id)
   const displayed = useMemo(() => rows.filter(row => (scope === 'all' || (scope === 'shared') === row.shared) && (filter === 'all' || (filter === 'upcoming' ? ['planned', 'scheduled', 'failed'].includes(row.status) : row.status === filter))), [rows, scope, filter])
   const total = displayed.filter(row => row.status !== 'posted').reduce((value, row) => value + (row.type === 'income' ? row.amount : row.type === 'expense' ? -row.amount : 0), 0)
   const categoryLabel = row => row.type === 'transfer' ? wallets.find(item => item.id === row.transfer_wallet_id)?.name || 'Destination wallet' : row.category_name || 'Uncategorized'

@@ -1,4 +1,4 @@
-# Smart Bank Inbox (Budgetly 6.1.0)
+# Smart Bank Inbox (Budgetly 6.1.2)
 
 ## Implementation Map
 
@@ -32,6 +32,9 @@ Approved entries are ordinary transactions and included in normal backups, analy
 ## Parser and Supported Formats
 
 - Unicode normalization and Arabic/Persian digits; KWD/KD/K.D./د.ك amounts before/after numbers and comma thousands.
+- Signed amounts work across bank formats: `+1.000KWD`, `+ KWD 1.000`, `KWD -1.000` and supported catalog currencies. Plus suggests a credit, minus a debit; explicit positive refunds and negative ATM withdrawals retain their specialized handling. A currency code is required; bare amounts and ambiguous currency symbols are not guessed.
+- Balance/available/limit-labelled amounts are excluded before selecting a payment. A signed payment is preferred over unsigned amounts; multiple possible payments reduce confidence. Signed-only drafts have medium confidence and an explicit direction-review message. This is generic format support, not a guarantee that every bank notification can be parsed.
+- CBK WAMD signed alerts (`CBK +1.000KWD YOU Ac 9010 WAMD Available 20.488KWD`) use the signed payment, never the available balance. Credit/debit drafts require review, including whether this was a transfer between the user's own wallets.
 - Catalog currencies supported at their decimal precision, with existing three-decimal ledger limits. No FX conversion.
 - Refund/reversal before income, then ATM withdrawal, transfer and expense. Security/marketing/balance-only alerts are rejected.
 - Known Talabat aliases are normalized; unknown merchants are not invented. Missing names stay Unknown merchant.
@@ -67,5 +70,9 @@ Verified on 8 October 2026:
 - Production web build, version consistency and Android debug APK compilation passed. Lint has no errors; existing repository warnings remain.
 - Isolated local browser test: paste a synthetic purchase, choose wallet/category, approve, and confirm the ordinary transaction and updated balance. Desktop and 412px mobile layouts were inspected in light/dark appearance.
 - Space routing, actor-private inbox isolation, normal ledger approval, revoked/view-only access, retry deduplication, refund/ATM behavior, currency checks and migrations are covered by automated tests.
+
+The 6.1.1 CBK patch additionally passed 50 focused parser/bridge/review tests and six Bank Inbox API tests. The new fixtures cover signed WAMD credits/debits, Arabic digits, foreground-service notices, malformed amounts and security-code rejection. Previously discarded unsupported alerts are not replayed automatically; paste them for review or test a new notification after upgrading.
+
+The 6.1.2 general signed-amount patch passed 318 frontend tests (66 files, two workers), six focused Bank Inbox API tests, the production web build and Android debug APK build. The initial concurrent-build test run had an unrelated update-delivery timing failure; the complete reduced-concurrency rerun passed. Real-device capture remains a separate verification step.
 
 Real-device listener permission, manufacturer behavior and closed-app capture cannot be marked verified without a connected device/user test. No production account records were used or modified in synthetic tests. Nothing was pushed or published by this implementation.

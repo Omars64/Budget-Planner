@@ -3,6 +3,7 @@ import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, Repeat2 } from 'lucide-rea
 import { dateInput, saveDate } from '../lib/time'
 import { transactionErrors, focusInvalid } from '../lib/transactionForm'
 import SearchableSelect from './SearchableSelect'
+import { categoryChoices } from '../lib/categoryChoices'
 import TransactionTemplates from './TransactionTemplates'
 import { readDraft, writeDraft, clearDraft } from '../lib/transactionDraft'
 import { useApp } from '../App'
@@ -69,7 +70,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
     return () => controller.abort()
   }, [open, editing, draftKey])
 
-  const visibleCategories = useMemo(() => categories.filter(c => c.kind === form.type), [categories, form.type])
+  const visibleCategories = useMemo(() => categoryChoices(categories.filter(c => c.kind === form.type), activeSpace?.id, form.category_id), [categories, form.type, activeSpace?.id, form.category_id])
   const set = (k,v) => {
     setErrors(previous=>({...previous,[k]:''}))
     setForm(f => {const next={...f,[k]:v};if(!editing)writeDraft(draftKey,next);return next})

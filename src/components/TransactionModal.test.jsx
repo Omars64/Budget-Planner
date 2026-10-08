@@ -4,7 +4,8 @@ import TransactionModal from './TransactionModal'
 import { api } from '../lib/api'
 import { rememberEntry } from '../lib/workspacePreferences'
 
-vi.mock('../App', () => ({useApp:() => ({user:{id:9},settings:{currency:'KWD'}})}))
+const context = vi.hoisted(() => ({ activeSpace: null }))
+vi.mock('../App', () => ({useApp:() => ({user:{id:9},settings:{currency:'KWD'}, ...context})}))
 vi.mock('../lib/api', () => ({api:vi.fn(),jsonBody:data=>({body:JSON.stringify(data)}),money:n=>'KWD '+Number(n||0).toFixed(3)}))
 vi.mock('../lib/receiptImage',()=>({receiptImage:vi.fn(async()=>({name:'reference.jpg',image:'data:image/jpeg;base64,AA=='}))}))
 afterEach(cleanup)
@@ -13,6 +14,7 @@ beforeAll(() => {
   window.HTMLDialogElement.prototype.close = function () { this.open = false }
 })
 beforeEach(() => {
+  context.activeSpace = null
   sessionStorage.clear(); localStorage.clear(); vi.clearAllMocks()
   sessionStorage.setItem('flowbudget_tx_draft_9', JSON.stringify({ type:'expense', amount:'', description:'', notes:'', date:'2026-09-12T12:00', wallet_id:1, transfer_wallet_id:'', category_id:'', recurring_frequency:'none', recurring_until:'' }))
   api.mockImplementation(path => Promise.resolve(path==='/api/wallets' ? [{id:1,name:'Main Wallet',balance:50}] : path==='/api/categories' ? [{id:2,name:'Food',kind:'expense'}] : {}))
@@ -21,6 +23,29 @@ async function mount() {
   render(<TransactionModal open onClose={vi.fn()} onSaved={vi.fn()}/> )
   await waitFor(() => expect(screen.getByRole('button',{name:'Add transaction'})).toBeEnabled())
 }
+it('shows migrated Space categories once and uses the Space category for new entries', async () => {
+  context.activeSpace = { id: 7 }
+  api.mockImplementation(path => Promise.resolve(path === '/api/wallets' ? [{id:1,name:'Main Wallet',balance:50}] : path === '/api/categories' ? [
+    {id:2,name:'Bills',kind:'expense',space_id:null},
+    {id:3,name:'Bills',kind:'expense',space_id:7},
+  ] : {}))
+  await mount()
+  await waitFor(() => expect(screen.getByLabelText('Category').options).toHaveLength(2))
+  expect(screen.getByRole('option', { name: 'Bills' })).toHaveValue('3')
+})
+it('retains a historical category ID when editing a Space transaction', async () => {
+  context.activeSpace = { id: 7 }
+  api.mockImplementation(path => Promise.resolve(path === '/api/wallets' ? [{id:1,name:'Main Wallet',balance:50}] : path === '/api/categories' ? [
+    {id:2,name:'Bills',kind:'expense',space_id:null},
+    {id:3,name:'Bills',kind:'expense',space_id:7},
+  ] : {}))
+  render(<TransactionModal open editing={{id:10,type:'expense',amount:2,description:'Bill',date:'2026-09-12T09:00:00Z',wallet_id:1,category_id:2,recurring_frequency:'none'}} onClose={vi.fn()} onSaved={vi.fn()}/>)
+  await waitFor(() => expect(screen.getByRole('button',{name:'Save changes'})).toBeEnabled())
+  expect(screen.getByRole('option', { name: 'Bills' })).toHaveValue('2')
+  fireEvent.click(screen.getByRole('button',{name:'Save changes'}))
+  await waitFor(() => expect(api).toHaveBeenCalledWith('/api/transactions/10', expect.objectContaining({method:'PUT'})))
+  expect(JSON.parse(api.mock.calls.find(([path]) => path === '/api/transactions/10')[1].body).category_id).toBe(2)
+})
 it('keeps image selection under collapsed More options and submits it with the entry',async()=>{
   await mount()
   const options=screen.getByText('More options').closest('details')

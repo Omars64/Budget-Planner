@@ -1,4 +1,14 @@
 {
+  "6.1.3": [
+    {"title":"Clean Space categories","detail":"Transaction, scheduled-entry and Bank Inbox category pickers no longer repeat migrated category names. Existing records retain their original category links."},
+    {"title":"Broader bank alert support","detail":"Recognize signed credit/debit amounts alongside credited, debited, purchase, refund and transfer wording. Every bank entry still requires your review."}
+  ],
+  "6.1.2": [
+    {"title":"Cross-bank signed payment alerts","detail":"Bank Inbox now recognizes signed amounts across bank formats and supported currency codes: plus for credits and minus for debits. Balance-only and security alerts are excluded, and every payment still requires review."}
+  ],
+  "6.1.1": [
+    {"title":"CBK bank alerts","detail":"Signed CBK WAMD payment notifications now appear in Bank Inbox for review, with the account ending and correct credit/debit direction. Available balances are not recorded as payments."}
+  ],
   "6.1.0": [
     {"title":"Smart Bank Inbox","detail":"Choose Android banking apps to capture payment alerts locally. Review and approve before anything is recorded."},
     {"title":"Bank alerts in the right Space","detail":"Map a bank app and card ending to a wallet in Personal or a Space. Move unmapped alerts before recording."},

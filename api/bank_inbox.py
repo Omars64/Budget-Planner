@@ -42,7 +42,7 @@ class CandidateIn(BaseModel):
     @field_validator('reasons')
     @classmethod
     def safe_reasons(cls, values):
-        allowed = {'Amount detected', 'Transaction type detected', 'Merchant detected', 'Card ending detected', 'Timestamp needs review', 'Multiple amounts: review required'}
+        allowed = {'Amount detected', 'Transaction type detected', 'Merchant detected', 'Card ending detected', 'Timestamp needs review', 'Multiple amounts: review required', 'Transfer direction needs review', 'Signed amount: direction needs review'}
         if any(value not in allowed for value in values):
             raise ValueError('Invalid parser reason')
         return values
