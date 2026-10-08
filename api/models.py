@@ -329,3 +329,49 @@ class MessageKey(Base):
     __tablename__ = 'message_keys'
     user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
     digest = Column(String(64), nullable=False, unique=True)
+
+
+class BankCandidate(Base):
+    __tablename__ = 'bank_transaction_candidates'
+    __table_args__ = (UniqueConstraint('user_id', 'content_hash', name='uq_bank_candidate_hash'),)
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    space_id = Column(Integer, ForeignKey('spaces.id', ondelete='SET NULL'), index=True)
+    content_hash = Column(String(64), nullable=False)
+    source_package = Column(String(180), nullable=False)
+    source_app = Column(String(100), nullable=False)
+    transaction_type = Column(String(20), nullable=False)
+    amount = Column(Numeric(16, 3), nullable=False)
+    currency = Column(String(8), nullable=False)
+    merchant = Column(String(160), nullable=False)
+    account_last4 = Column(String(4), nullable=False, default='')
+    occurred_at = Column(DateTime, nullable=False)
+    confidence = Column(Numeric(3, 2), nullable=False)
+    reasons = Column(Text, nullable=False, default='[]')
+    wallet_id = Column(Integer, ForeignKey('wallets.id', ondelete='SET NULL'))
+    category_id = Column(Integer, ForeignKey('categories.id', ondelete='SET NULL'))
+    status = Column(String(20), nullable=False, default='pending', index=True)
+    transaction_id = Column(Integer, ForeignKey('transactions.id', ondelete='SET NULL'))
+    created_at = Column(DateTime, nullable=False, default=utc_now)
+
+
+class BankSourceMapping(Base):
+    __tablename__ = 'bank_source_mappings'
+    __table_args__ = (UniqueConstraint('user_id', 'source_package', 'account_last4', name='uq_bank_source_mapping'),)
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    source_package = Column(String(180), nullable=False)
+    account_last4 = Column(String(4), nullable=False, default='')
+    wallet_id = Column(Integer, ForeignKey('wallets.id', ondelete='CASCADE'), nullable=False)
+
+
+class BankMerchantMemory(Base):
+    __tablename__ = 'bank_merchant_memory'
+    __table_args__ = (UniqueConstraint('user_id', 'scope_key', 'merchant_key', 'kind', name='uq_bank_merchant_memory'),)
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    scope_key = Column(String(30), nullable=False)
+    merchant_key = Column(String(160), nullable=False)
+    kind = Column(String(20), nullable=False)
+    description = Column(String(160), nullable=False)
+    category_id = Column(Integer, ForeignKey('categories.id', ondelete='SET NULL'))

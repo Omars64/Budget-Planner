@@ -36,6 +36,7 @@ import PasswordRecovery from './components/PasswordRecovery'
 import GoogleSignIn from './components/GoogleSignIn'
 import { cancelReminder } from './lib/deviceNotifications'
 import { BankSms, smsAvailable } from './lib/bankSms'
+import { bankNotificationsAvailable, BankNotifications, suspendBankCapture, syncBankNotifications } from './lib/bankNotifications/native'
 import { readDeviceAppearance, useAppearance } from './lib/appearance'
 import AndroidUpdate from './components/AndroidUpdate'
 import FeedbackPrompt from './components/FeedbackPrompt'
@@ -238,7 +239,7 @@ export default function App() {
   const spaceState = useSpaces(session.user, notify, confirm)
   const { activeSpace } = spaceState
   useAppearance(settings, activeSpace?.accent)
-  const accountPage = ['/settings', '/admin', '/feedback', '/ask-ai', '/bank-messages'].includes(currentLocation.pathname)
+  const accountPage = ['/settings', '/admin', '/feedback', '/ask-ai'].includes(currentLocation.pathname)
   const viewSettings = activeSpace && !accountPage ? {...settings, currency: activeSpace.currency, accent_color: activeSpace.accent} : settings
   useEffect(()=>installMoneyInputDefaults(document,viewSettings.currency),[viewSettings.currency])
   useEffect(() => {
@@ -247,6 +248,24 @@ export default function App() {
     return () => window.clearTimeout(timer)
   }, [toast])
   const refresh = useCallback(() => setRefreshKey(v => v + 1), [])
+  useEffect(() => {
+    if (!bankNotificationsAvailable() || session.loading) return
+    if (!session.user || isGuest) { void suspendBankCapture().catch(() => {}); return }
+    let alive = true
+    const sync = async () => {
+      if (!alive || document.visibilityState === 'hidden') return
+      try {
+        await BankNotifications.bindSession({ owner: String(session.user.id) })
+        await syncBankNotifications(session.user.id)
+      } catch { /* Queue is retained; Bank Inbox offers an explicit retry. */ }
+    }
+    void sync()
+    const changed = () => { void sync() }
+    const logout = () => { void suspendBankCapture().catch(() => {}) }
+    window.addEventListener('online', changed); window.addEventListener('focus', changed)
+    document.addEventListener('visibilitychange', changed); window.addEventListener('budgetly:auth-cleared', logout)
+    return () => { alive = false; window.removeEventListener('online', changed); window.removeEventListener('focus', changed); document.removeEventListener('visibilitychange', changed); window.removeEventListener('budgetly:auth-cleared', logout) }
+  }, [session.loading, session.user?.id, isGuest])
   useEffect(() => {
     const prompt = event => { if (guestActive()) setGuestFeature(event.detail || 'this feature') }
     const changed = () => { if (guestActive()) refresh() }
@@ -337,6 +356,7 @@ export default function App() {
   const finishSignOut = useCallback(() => {
     void api('/api/account/signout',{method:'POST'}).catch(()=>{})
     if (smsAvailable()) void BankSms.configure({enabled:false}).catch(console.error)
+    void suspendBankCapture().catch(() => {})
     void cancelReminder().catch(console.error)
     void cancelPlannedNotifications().catch(console.error)
     auth.clear()
@@ -394,7 +414,7 @@ export default function App() {
         <Route path="/notes" element={<Notes />} />
         <Route path="/feedback" element={<Feedback />} />
         <Route path="/settings" element={isGuest ? <GuestSettings /> : <Settings />} />
-        <Route path="/bank-messages" element={activeSpace ? <Navigate to="/" replace /> : <BankMessages />} />
+        <Route path="/bank-messages" element={<BankMessages />} />
         <Route path="/admin" element={session.user?.role === 'admin' ? <Admin /> : <Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>}

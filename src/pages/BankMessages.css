@@ -1,0 +1,15 @@
+.bank-inbox-list { display:grid; gap:12px; }
+.bank-inbox-item { padding:18px; border:1px solid var(--line); border-radius:8px; background:var(--glass); display:grid; gap:12px; min-width:0; }
+.bank-inbox-badge { margin-left:auto; font-size:12px; min-width:22px; text-align:center; padding:2px 5px; background:var(--accent-soft); border-radius:8px; }
+.bank-inbox-item .section-row strong { overflow-wrap:anywhere; }
+.bank-item-meta { display:flex; gap:8px 18px; flex-wrap:wrap; color:var(--muted); font-size:13px; }
+.bank-settings-disclosure { border-top:1px solid var(--line); border-bottom:1px solid var(--line); padding:14px 0; }
+.bank-settings-disclosure > summary { cursor:pointer; font-weight:600; padding:6px 0; }
+.bank-settings-disclosure[open] > summary { margin-bottom:16px; }
+.bank-app-list { max-height:280px; overflow:auto; margin-top:12px; display:grid; gap:12px; }
+.bank-setup small, .bank-duplicate small { display:block; overflow-wrap:anywhere; color:var(--muted); }
+.bank-duplicate { padding:12px; border:1px solid var(--line); border-radius:8px; display:grid; gap:8px; }
+.bank-inbox .tabs { display:flex; gap:12px; }
+.bank-inbox .tabs button { padding:10px 8px; border:0; background:transparent; border-bottom:2px solid transparent; color:var(--muted); cursor:pointer; }
+.bank-inbox .tabs button.active { color:var(--text); border-bottom-color:var(--accent); }
+@media(max-width:620px) { .bank-inbox-item { padding:16px; } .bank-inbox > .section-row { gap:12px; flex-wrap:wrap; } }

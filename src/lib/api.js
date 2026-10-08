@@ -43,6 +43,7 @@ export const auth = {
     } catch { throw new Error('Allow site storage to complete sign-in.') }
   },
   clear() {
+    window.dispatchEvent(new Event('budgetly:auth-cleared'))
     setApiSpace(null)
     responseCache.clear()
     const userId = offlineUser()

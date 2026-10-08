@@ -1,4 +1,9 @@
 {
+  "6.1.0": [
+    {"title":"Smart Bank Inbox","detail":"Choose Android banking apps to capture payment alerts locally. Review and approve before anything is recorded."},
+    {"title":"Bank alerts in the right Space","detail":"Map a bank app and card ending to a wallet in Personal or a Space. Move unmapped alerts before recording."},
+    {"title":"Safer bank-message review","detail":"Detect purchases, income, refunds, transfers and ATM alerts without paid AI. Duplicate checks, category memory and security-code filtering keep you in control."}
+  ],
   "6.0.1": [
     {"title":"Properly sized wallet cards","detail":"Wallets keep their bank-card proportions instead of expanding across the screen, in both Personal and Spaces."}
   ],

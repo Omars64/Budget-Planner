@@ -1,6 +1,7 @@
 """Shared workspaces retain the ledger and its original wallet-level grants."""
 import hashlib
 import json
+import re
 from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import Literal
@@ -88,7 +89,8 @@ def establish_scope(request, db, actor):
             raise HTTPException(409, 'Wallet permissions changed. Ask the owner to review this space membership.')
     writing = request.method not in {'GET', 'HEAD', 'OPTIONS'} and request.url.path != '/api/planner/preview'
     if writing:
-        entry = request.url.path.rstrip('/') in {'/api/transactions', '/api/shared/transactions', '/api/planned-transactions'}
+        path = request.url.path.rstrip('/')
+        entry = path in {'/api/transactions', '/api/shared/transactions', '/api/planned-transactions'} or bool(re.fullmatch(r'/api/bank-inbox/\d+/(approve|ignore|restore)', path))
         if role == 'view' or (role == 'add' and (request.method != 'POST' or not entry)):
             raise HTTPException(403, 'Your space role does not allow this change.')
         if '/shares' in request.url.path:

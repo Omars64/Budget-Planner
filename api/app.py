@@ -7,6 +7,7 @@ from .index import app
 from . import extensions
 from . import workspace
 from . import bank_messages
+from . import bank_inbox
 from . import passkeys
 from . import account_security
 from . import recovery
@@ -34,6 +35,7 @@ extensions.send_code = send_verification_code
 app.include_router(extensions.router)
 app.include_router(workspace.router)
 app.include_router(bank_messages.router)
+app.include_router(bank_inbox.router)
 app.include_router(passkeys.router)
 app.include_router(account_security.router)
 app.include_router(recovery.router)

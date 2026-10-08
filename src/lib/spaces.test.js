@@ -29,3 +29,12 @@ it('remembers context only for the matching account session', () => {
   rememberSpaceSelection(1, null)
   expect(readSpaceSelection(1)).toBeNull()
 })
+
+it('scopes bank review but lets mappings determine notification destinations', () => {
+  setApiSpace(17)
+  expect(scopedPath('/api/bank-inbox?status=pending')).toBe('/api/bank-inbox?status=pending&space_id=17')
+  expect(scopedPath('/api/bank-inbox/2/approve')).toBe('/api/bank-inbox/2/approve?space_id=17')
+  expect(scopedPath('/api/bank-inbox/ingest')).toBe('/api/bank-inbox/ingest')
+  expect(scopedPath('/api/bank-inbox/mappings')).toBe('/api/bank-inbox/mappings')
+  expect(scopedPath('/api/bank-inbox/2/route')).toBe('/api/bank-inbox/2/route')
+})

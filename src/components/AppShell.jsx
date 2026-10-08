@@ -17,6 +17,7 @@ import AndroidUpdate from './AndroidUpdate'
 import { useContainedScroll, useScrollLock } from '../lib/scrollLock'
 import BrandFooter from './BrandFooter'
 import { useWorkspacePreferences } from '../lib/workspacePreferences'
+import BankInboxBadge from './BankInboxBadge'
 import useKeyboardViewport from '../lib/useKeyboardViewport'
 import { LockKeyhole } from 'lucide-react'
 import { guestRoutes } from '../lib/guest'
@@ -35,7 +36,7 @@ const nav = [
   ['/analytics', 'Analytics', BarChart3, 'Planning'],
   ['/ask-ai', 'Ask Budgetly', CircleHelp, 'Workspace'],
   ['/notes', 'Notes', NotebookPen, 'Workspace'],
-  ['/bank-messages', 'Bank messages', ReceiptText, 'Workspace'],
+  ['/bank-messages', 'Bank Inbox', ReceiptText, 'Workspace'],
   ['/feedback', 'Feedback', MessageSquare, 'Workspace'],
   ['/settings', 'Settings', Settings, 'Account'],
 ]
@@ -87,7 +88,7 @@ export default function AppShell({ children }) {
     lastVisit.current = visit
     recordPageVisit(user?.id, location.pathname)
   }, [user?.id, location.pathname, preferences.personalizedShortcuts])
-  const pages = activeSpace ? nav.filter(([path]) => !['/ask-ai', '/bank-messages'].includes(path)) : nav
+  const pages = activeSpace ? nav.filter(([path]) => path !== '/ask-ai') : nav
   const visibleNav = user?.role === 'admin' ? [...pages, ['/admin', 'Admin', ShieldCheck, 'Account']] : pages
   const orderedNav = [...visibleNav].sort((a,b) => { const ia=preferences.navOrder.indexOf(a[0]), ib=preferences.navOrder.indexOf(b[0]); return ia < 0 || ib < 0 ? 0 : ia-ib })
   const matchingNav = orderedNav.filter(([, label]) => label.toLowerCase().includes(navSearch.trim().toLowerCase()))
@@ -113,7 +114,7 @@ export default function AppShell({ children }) {
       <nav className="nav-list">
         {groups.map(group => {
           const pages = matchingNav.filter(([, , , section]) => section === group)
-          return pages.length ? <div className="nav-group" key={group}><span className="nav-group-label">{group}</span>{pages.map(([to, label, Icon]) => <NavLink key={to} to={to} end={to === '/'} onClick={event => {setMenu(false);setNavSearch('');if(isGuest && !guestRoutes.has(to)){event.preventDefault();requestSignIn(label)}}} className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}><Icon size={19}/><span>{label}</span>{isGuest && !guestRoutes.has(to) ? <LockKeyhole className="guest-lock" size={14}/> : label === 'Budgets' && <i className="nav-pulse"/>}</NavLink>)}</div> : null
+          return pages.length ? <div className="nav-group" key={group}><span className="nav-group-label">{group}</span>{pages.map(([to, label, Icon]) => <NavLink key={to} to={to} end={to === '/'} onClick={event => {setMenu(false);setNavSearch('');if(isGuest && !guestRoutes.has(to)){event.preventDefault();requestSignIn(label)}}} className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}><Icon size={19}/><span>{label}</span>{to === '/bank-messages' && <BankInboxBadge/>}{isGuest && !guestRoutes.has(to) ? <LockKeyhole className="guest-lock" size={14}/> : label === 'Budgets' && <i className="nav-pulse"/>}</NavLink>)}</div> : null
         })}
         {!matchingNav.length && <p className="nav-no-results">No matching page</p>}
       </nav>

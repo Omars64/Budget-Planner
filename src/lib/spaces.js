@@ -12,6 +12,11 @@ const routes = /^\/api\/(wallets|categories|transactions|budgets|goals|debts|das
 
 export function setApiSpace(id) { selected = id == null ? null : Number(id) }
 export function scopedPath(path) {
+  if (path.startsWith('/api/bank-inbox') && !/^\/api\/bank-inbox\/(ingest|mappings)(\/|\?|$)/.test(path) && !/\/route(?:\?|$)/.test(path)) {
+    const url = new URL(path, 'https://budgetly.local')
+    if (!url.searchParams.has('space_id')) url.searchParams.set('space_id', selected ?? 'personal')
+    return `${url.pathname}${url.search}`
+  }
   if (!routes.test(path) && !path.startsWith('/api/backup/statement')) return path
   const url = new URL(path, 'https://budgetly.local')
   if (!url.searchParams.has('space_id')) url.searchParams.set('space_id', selected ?? 'personal')

@@ -6,6 +6,7 @@ import androidx.activity.OnBackPressedCallback;
 public class MainActivity extends BridgeActivity {
     @Override public void onCreate(android.os.Bundle state) {
         registerPlugin(BankSmsPlugin.class);
+        registerPlugin(BankNotificationsPlugin.class);
         registerPlugin(PasskeysPlugin.class);
         registerPlugin(BudgetlyRemindersPlugin.class);
         registerPlugin(VoiceInputPlugin.class);

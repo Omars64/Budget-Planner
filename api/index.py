@@ -871,18 +871,24 @@ def validate_transaction_references(db: Session, user_id: int, payload: Transact
 def create_transaction(payload: TransactionWriteIn, request: Request, user: User = Depends(workspace_user), db: Session = Depends(get_db)):
     receipt, previous = reserve(db, user.id, 'transaction', request.headers.get('Idempotency-Key'), payload)
     if previous is not None: return previous
-    validate_transaction_references(db, user.id, payload)
-    actor_id = db.info['space'].actor_id if db.info.get('space') else user.id
-    row = Transaction(user_id=user.id, recorded_by_id=actor_id, **payload.model_dump(exclude={'receipt'})); db.add(row); db.flush(); db.refresh(row)
-    if payload.receipt:
-        from .receipts import store_receipt
-        store_receipt(db, row.id, payload.receipt)
+    row = add_transaction(db, user.id, payload)
     result = tx_payload(row)
     if receipt: receipt.response = json.dumps(result)
-    from .account_security import audit
-    audit(db, user.id, user.id, 'Added transaction', f'transaction:{row.id}')
     db.commit()
     return result
+
+
+def add_transaction(db, user_id, payload):
+    """Create a regular ledger transaction without committing its surrounding operation."""
+    validate_transaction_references(db, user_id, payload)
+    actor_id = db.info['space'].actor_id if db.info.get('space') else user_id
+    row = Transaction(user_id=user_id, recorded_by_id=actor_id, **payload.model_dump(exclude={'receipt'})); db.add(row); db.flush(); db.refresh(row)
+    if getattr(payload, 'receipt', None):
+        from .receipts import store_receipt
+        store_receipt(db, row.id, payload.receipt)
+    from .account_security import audit
+    audit(db, user_id, actor_id, 'Added transaction', f'transaction:{row.id}')
+    return row
 
 
 @app.put("/api/transactions/{item_id}")

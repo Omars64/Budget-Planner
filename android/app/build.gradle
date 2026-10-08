@@ -3,6 +3,7 @@ def budgetlyPackage = new groovy.json.JsonSlurper().parse(rootProject.file('../p
 
 android {
     namespace = "com.flowbudget.app"
+    buildFeatures { buildConfig true }
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
         applicationId "com.flowbudget.app"

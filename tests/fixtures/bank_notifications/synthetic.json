@@ -1,0 +1,11 @@
+[
+  {"name":"purchase","text":"Your card ending 4821 was used for KWD 6.750 at TALABAT.","kind":"expense"},
+  {"name":"arabic digits","text":"Purchase KWD ٦٫٧٥٠ at SHOP.","kind":"expense"},
+  {"name":"refund","text":"KWD 25.000 reversed to card ending 4821","kind":"refund"},
+  {"name":"salary","text":"Salary credited KWD 500.000","kind":"income"},
+  {"name":"transfer","text":"KWD 100.000 transferred to beneficiary","kind":"transfer"},
+  {"name":"atm","text":"ATM withdrawal KWD 50.000","kind":"withdrawal"},
+  {"name":"otp","text":"Your OTP is 492183. Do not share this code.","kind":null},
+  {"name":"marketing","text":"New offer: purchase KWD 5.000","kind":null},
+  {"name":"unknown","text":"Welcome to your bank","kind":null}
+]

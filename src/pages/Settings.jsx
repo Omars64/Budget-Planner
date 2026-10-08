@@ -1,4 +1,6 @@
 import SettingsSection from '../components/SettingsSection'
+import BankNotificationSetup from '../components/BankNotificationSetup'
+import './BankMessages.css'
 import CurrencyConfiguration from '../components/CurrencyConfiguration'
 import RestorePreview from '../components/RestorePreview'
 import { backupPreview } from '../lib/backupPreview'
@@ -125,6 +127,7 @@ export default function Settings(){
     <GuestRecords/>
     <AccountSecurity/>
     <TrashPanel/>
+    <SettingsSection title="Smart Bank Inbox"><BankNotificationSetup/></SettingsSection>
     <SettingsSection title="Personal preferences" className=""><ComfortSettings/><WorkspacePreferences/><form onSubmit={save} className="stack gap-16">
       <label className="field"><span>Appearance</span><select aria-label="Appearance" value={form.theme || 'light'} onChange={e => setForm({...form, theme:e.target.value})}><option value="light">Light</option><option value="dark">Dark</option><option value="system">Match device</option></select></label>
       <label className="field"><span>Font</span><select aria-label="Font" value={form.font_family || 'system'} onChange={e => setForm({...form, font_family:e.target.value})}><option value="system">System</option><option value="arial">Arial</option><option value="georgia">Georgia</option><option value="verdana">Verdana</option></select></label>
