@@ -1,4 +1,8 @@
 {
+  "6.1.6": [
+    {"title":"Updates inside Budgetly","detail":"Update prompts appear after sign-in, not on the login screen. Signed-in users get launch and resume checks without logging out."},
+    {"title":"What's new, once","detail":"Installed release notes appear inside your account once, with update prompts waiting until you finish reading."}
+  ],
   "6.1.5": [
     {"title":"Persistent bank app choices","detail":"Selected bank apps stay saved through session changes and capture resumes when the same account signs back in."},
     {"title":"One bank setup location","detail":"Manage Smart Bank Inbox in Settings. Old phone forwarding is retired; previously saved messages remain read-only."}

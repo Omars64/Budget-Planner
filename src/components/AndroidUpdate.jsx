@@ -21,14 +21,15 @@ export default function AndroidUpdate({ authentication = false, userId, guest = 
   const [progress, setProgress] = useState(0)
   const [dismissed, setDismissed] = useState(false)
   const [whatsNew, setWhatsNew] = useState(false)
+  const [pendingNotes, setPendingNotes] = useState(() => !authentication && !guest && userId != null && !hasSeenRelease(userId, version) && releaseNotes(version).length > 0)
   const [manualOpen, setManualOpen] = useState(false)
   const mounted = useRef(false)
   const busy = useRef(false)
   const checking = useRef(null)
   const lastCheck = useRef(0)
   const native = androidUpdatesAvailable()
-  const enabled = true
-  const settings = !authentication && pathname === '/settings'
+  const enabled = !authentication && !guest && userId != null
+  const settings = enabled && pathname === '/settings'
   const currentNotes = releaseNotes(version)
 
   useEffect(() => {
@@ -36,6 +37,7 @@ export default function AndroidUpdate({ authentication = false, userId, guest = 
     const timer = setInterval(() => {
       if (document.visibilityState === 'hidden' || document.querySelector('[aria-modal="true"], dialog[open]') || document.body.classList.contains('driver-active')) return
       setWhatsNew(true)
+      setPendingNotes(false)
       clearInterval(timer)
     }, 800)
     return () => clearInterval(timer)
@@ -48,8 +50,8 @@ export default function AndroidUpdate({ authentication = false, userId, guest = 
     setWhatsNew(false)
   }
 
-  async function check(manual = false) {
-    if (!enabled || busy.current || checking.current || (!manual && Date.now() - lastCheck.current < 21600000)) return
+  async function check(manual = false, resumed = false) {
+    if (!enabled || busy.current || checking.current || (!manual && Date.now() - lastCheck.current < (resumed ? 300000 : 21600000))) return
     const controller = new AbortController()
     checking.current = controller
     const timeout = setTimeout(() => controller.abort(), 15000)
@@ -75,13 +77,15 @@ export default function AndroidUpdate({ authentication = false, userId, guest = 
     if (!enabled) return () => { mounted.current = false }
     void check()
     const timer = setInterval(() => { if (document.visibilityState === 'visible') void check() }, 21600000)
-    const resume = () => { if (document.visibilityState === 'visible') void check() }
+    const resume = () => { if (document.visibilityState === 'visible') void check(false, true) }
     window.addEventListener('online', resume)
+    window.addEventListener('focus', resume)
     document.addEventListener('visibilitychange', resume)
     return () => {
       mounted.current = false; checking.current?.abort(); checking.current = null
       clearInterval(timer)
       window.removeEventListener('online', resume)
+      window.removeEventListener('focus', resume)
       document.removeEventListener('visibilitychange', resume)
     }
     // This component owns one update check lifecycle, independent of page navigation.
@@ -98,7 +102,7 @@ export default function AndroidUpdate({ authentication = false, userId, guest = 
     if (release && alerts) void notifyAppUpdate(release, () => { setDismissed(false); setManualOpen(true); navigate('/settings') }).catch(() => {})
   }, [release, alerts, navigate])
   useEffect(() => {
-    if (!native) return
+    if (!native || !enabled) return
     let disposed = false, handle
     void LocalNotifications.addListener('localNotificationActionPerformed', action => {
       if (action.notification.extra?.budgetlyUpdate) { setDismissed(false); setManualOpen(true); navigate('/settings'); lastCheck.current = 0; void check(true) }
@@ -106,7 +110,7 @@ export default function AndroidUpdate({ authentication = false, userId, guest = 
     return () => { disposed = true; void handle?.remove() }
     // Listener owns the native update notification, not page-specific data.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [native, navigate])
+  }, [native, navigate, enabled])
 
   async function update() {
     if (!native) { window.location.reload(); return }
@@ -130,7 +134,7 @@ export default function AndroidUpdate({ authentication = false, userId, guest = 
   }
 
   const downloading = status === 'downloading'
-  const availableOpen = native && !!release && !whatsNew && (manualOpen || (alerts && !dismissed))
+  const availableOpen = enabled && native && !!release && !whatsNew && !pendingNotes && (manualOpen || (alerts && !dismissed))
   const notes = release ? releaseNotes(release.version, release.notes) : []
   const renderNotes = items => <ul className="release-change-list">{items.map(item => <li key={item.title}><Check size={17} aria-hidden="true"/><div><strong>{item.title}</strong><p>{item.detail}</p></div></li>)}</ul>
   return <>

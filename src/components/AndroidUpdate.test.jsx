@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import AndroidUpdate from './AndroidUpdate'
 import { version } from '../../package.json'
-import { hasSeenRelease } from '../lib/releaseNotes'
+import { hasSeenRelease, markReleaseSeen } from '../lib/releaseNotes'
 
 const mock = vi.hoisted(() => ({ enabled:true, info:vi.fn(), fetch:vi.fn(), download:vi.fn(), install:vi.fn(), listener:vi.fn(), remove:vi.fn() }))
 vi.mock('../lib/appUpdates', () => ({ androidUpdatesAvailable:()=>mock.enabled, fetchRelease:mock.fetch,
@@ -19,7 +19,10 @@ beforeEach(() => {
   mock.remove.mockResolvedValue(); mock.listener.mockResolvedValue({remove:mock.remove})
 })
 afterEach(cleanup)
-const view = path => render(<MemoryRouter initialEntries={[path || '/']}><AndroidUpdate/></MemoryRouter>)
+const view = path => {
+  markReleaseSeen(1, version)
+  return render(<MemoryRouter initialEntries={[path || '/']}><AndroidUpdate userId={1}/></MemoryRouter>)
+}
 test('offers a higher code, downloads then asks Android for installation', async () => {
   view(); fireEvent.click(await screen.findByRole('button',{name:'Update now'}))
   await screen.findByText(/Allow updates from Budgetly/)
@@ -63,12 +66,24 @@ test('disabled alerts hide the automatic notice but retain manual Settings updat
   await screen.findByRole('button',{name:'Update now'})
 })
 
-test('authentication does not inherit the Settings manual update panel', async () => {
-  mock.fetch.mockResolvedValue({...release,versionCode:43})
+test('authentication never checks or displays updates even when a newer release exists', async () => {
   render(<MemoryRouter initialEntries={['/settings']}><AndroidUpdate authentication/></MemoryRouter>)
-  await waitFor(()=>expect(mock.fetch).toHaveBeenCalled())
+  expect(mock.fetch).not.toHaveBeenCalled()
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   expect(screen.queryByRole('region',{name:'App updates'})).not.toBeInTheDocument()
   expect(screen.queryByRole('button',{name:'Check updates'})).not.toBeInTheDocument()
+})
+
+test('checks for new updates on signed-in resume without requiring logout', async () => {
+  mock.fetch.mockResolvedValueOnce({...release,versionCode:43})
+  view()
+  await waitFor(() => expect(mock.fetch).toHaveBeenCalledTimes(1))
+  const now = Date.now()
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(now + 300001)
+  window.dispatchEvent(new Event('focus'))
+  await screen.findByRole('button', {name:'Update now'})
+  expect(mock.fetch).toHaveBeenCalledTimes(2)
+  clock.mockRestore()
 })
 
 test('browser shows installed release notes after sign-in, once acknowledged', async () => {
@@ -94,4 +109,20 @@ test('Android displays published release notes in the download popup', async () 
   view()
   await screen.findByText('Verified change')
   expect(screen.getByText('Details for this version')).toBeInTheDocument()
+})
+
+test('installed notes take priority over the next Android update and are acknowledged once', async () => {
+  render(<MemoryRouter><AndroidUpdate userId={88}/></MemoryRouter>)
+  await screen.findByRole('heading', {name:"What's new"}, {timeout:2500})
+  expect(screen.queryByRole('button', {name:'Update now'})).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', {name:'Continue to Budgetly'}))
+  await screen.findByRole('button', {name:'Update now'})
+  expect(hasSeenRelease(88, version)).toBe(true)
+})
+
+test('native guest mode never checks or offers an account update prompt', () => {
+  render(<MemoryRouter initialEntries={['/settings']}><AndroidUpdate userId={77} guest/></MemoryRouter>)
+  expect(mock.fetch).not.toHaveBeenCalled()
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(screen.queryByRole('region', {name:'App updates'})).not.toBeInTheDocument()
 })

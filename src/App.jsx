@@ -38,7 +38,6 @@ import { cancelReminder } from './lib/deviceNotifications'
 import { BankSms, smsAvailable } from './lib/bankSms'
 import { bankNotificationsAvailable, BankNotifications, suspendBankCapture, syncBankNotifications } from './lib/bankNotifications/native'
 import { readDeviceAppearance, useAppearance } from './lib/appearance'
-import AndroidUpdate from './components/AndroidUpdate'
 import FeedbackPrompt from './components/FeedbackPrompt'
 import { syncPlannedNotifications, cancelPlannedNotifications } from './lib/plannedNotifications'
 import { notificationSettingsChangedEvent } from './lib/notificationSettings'
@@ -390,7 +389,7 @@ export default function App() {
   }), [session.user, settings, viewSettings, spaceState, activeSpace, appearance, refreshKey, refresh, notify, confirm, loadSettings, loadAppearance, reloadUser, signOut, isGuest, requestSignIn])
 
   if (session.loading) return <div className="app-loading"><BrandLogo className="pulse" /></div>
-  if (!session.user || guestSigningIn) return <><LoginScreen onLogin={completeLogin} onGuest={enterGuest} returningGuest={isGuest}/><AndroidUpdate authentication/></>
+  if (!session.user || guestSigningIn) return <LoginScreen onLogin={completeLogin} onGuest={enterGuest} returningGuest={isGuest}/>
   if (!spaceState.spacesReady) return <div className="app-loading" role="status"><BrandLogo className="pulse" /><span>Opening workspace...</span></div>
 
   return <AppContext.Provider value={value}>
