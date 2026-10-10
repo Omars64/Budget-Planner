@@ -1,4 +1,8 @@
 {
+  "6.1.5": [
+    {"title":"Persistent bank app choices","detail":"Selected bank apps stay saved through session changes and capture resumes when the same account signs back in."},
+    {"title":"One bank setup location","detail":"Manage Smart Bank Inbox in Settings. Old phone forwarding is retired; previously saved messages remain read-only."}
+  ],
   "6.1.4": [
     {"title":"Bank alert descriptions","detail":"Read merchant, beneficiary and description details from bank notifications, including multiline alerts, instead of using a generic transfer label when details are available."}
   ],

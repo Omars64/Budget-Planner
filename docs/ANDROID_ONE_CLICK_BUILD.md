@@ -1,6 +1,6 @@
 # One-click Android release
 
-Double-click `build-android.bat` in the repository root, or run `./build-android.bat` from PowerShell. It works regardless of the terminal's starting directory and keeps the window open to show the result.
+Double-click `build-Budgetly.bat` in the repository root, or run `./build-Budgetly.bat` from PowerShell. It works regardless of the terminal's starting directory and keeps the window open to show the result.
 
 Default execution publishes a release. It checks GitHub access, the main branch and original signing files; stages changes with git add .; creates a relevant versioned commit message when changes exist; pushes origin main; then installs dependencies, runs frontend tests, builds the signed APK/AAB, and verifies the update manifest. It uploads both assets to a draft GitHub release and only then publishes it as latest. Errors stop subsequent steps. A completed push is not rolled back if the build fails. No artificial waiting or Vercel deployment polling is added; backend changes should remain compatible with the previous app during deployment.
 
@@ -11,12 +11,12 @@ The APK is `android/app/build/outputs/apk/release/Budgetly-VERSION.apk`. The Pla
 Optional PowerShell commands:
 
 ```powershell
-./build-android.bat -CheckOnly
-./build-android.bat -BuildOnly
-./build-android.bat -Message "Budgetly update: improve Google signup"
-./build-android.bat -SkipInstall
-./build-android.bat -Debug
-./build-android.bat -JdkHome "C:\path\to\jdk-21" -SdkHome "C:\path\to\Android\Sdk"
+./build-Budgetly.bat -CheckOnly
+./build-Budgetly.bat -BuildOnly
+./build-Budgetly.bat -Message "Budgetly update: improve Google signup"
+./build-Budgetly.bat -SkipInstall
+./build-Budgetly.bat -Debug
+./build-Budgetly.bat -JdkHome "C:\path\to\jdk-21" -SdkHome "C:\path\to\Android\Sdk"
 ```
 
 `-BuildOnly` never commits, pushes or publishes. `-Debug` also implies build-only. `-SkipTests` is only allowed with build-only. `-CheckOnly` checks prerequisites without committing, pushing, building or publishing. If no source changes exist, the commit step is skipped. Set a fresh semantic version and increased Android versionCode before each new release: published releases are never overwritten. Failed draft uploads can be retried only against the same commit; otherwise resolve the draft manually. If a build modifies tracked source files, publication stops so the released APK does not silently differ from its source commit.

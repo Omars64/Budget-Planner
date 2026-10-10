@@ -7,7 +7,8 @@
 - Frontend: `src/lib/bankNotifications/parser.js` parses on-device. `native.js` uploads structured fields on sign-in/resume/online, then acknowledges.
 - Backend: `/api/bank-inbox` stores private candidates and mappings. Approval uses `api.index.add_transaction`, the same transactional helper as manual entry.
 - Spaces: mappings resolve the destination wallet and Space; scoped approval enforces existing membership and wallet/category rules. Alerts are private to the capturing user, not exposed to every Space member. Approved ledger records follow normal sharing.
-- Existing manually forwarded messages are preserved under Previously saved bank messages in Personal. No old messages are automatically recorded or discarded.
+- Existing manually forwarded messages are preserved in a read-only archive under Previously saved bank messages in Personal. Forwarding keys and the old setup guide are retired; old keys cannot submit alerts. No saved records are discarded.
+- Configure capture only in Settings > Smart Bank Inbox. Selected apps survive session suspension; capture resumes only when the same account signs in. Signing out or switching accounts pauses capture. Android notification-access revocation remains visible in Settings and requires the user's permission to restore.
 
 ## Android Setup
 

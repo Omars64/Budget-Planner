@@ -6,7 +6,7 @@ Google credentials needed for revocation are encrypted on the server using a dom
 
 Both user and administrator deletion revoke Google sign-in and connected Drive credentials before deleting local records. Provider/network failures stop deletion rather than silently leaving permission active. Previously linked users without retained credentials must authenticate with Google again before deletion, including Google account confirmation in Settings. Administrators may need to ask the user to do this first. Removing an app connection manually is available at https://myaccount.google.com/connections. Removing permission does not delete the person's Google account or their existing Drive backup files.
 
-Deploy the backend with the migration before distributing the APK. Build with build-android.bat and test on a real Android device:
+Deploy the backend with the migration before distributing the APK. Build with build-Budgetly.bat and test on a real Android device:
 
 1. Google sign-up: choose an account, return to Budgetly, enter a name, finish creation.
 2. Google sign-in: switch away and back, including a brief connection interruption.

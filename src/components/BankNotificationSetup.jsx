@@ -15,6 +15,7 @@ export default function BankNotificationSetup() {
     try {
       setMappings(await api('/api/bank-inbox/mappings'))
       if (native) {
+        await BankNotifications.bindSession({ owner: String(user.id) })
         const [permission, selection, installed] = await Promise.all([BankNotifications.isNotificationAccessGranted(), BankNotifications.getAllowedPackages({ owner: String(user.id) }), BankNotifications.getInstalledCandidateApps()])
         setGranted(permission.granted); setAllowed(selection.packages); setApps(installed.apps.sort((a, b) => a.label.localeCompare(b.label)))
         if (selection.queueFull || selection.captureError) setError('Some alerts could not be captured. Sync queued alerts and check your bank for missed activity.')
@@ -46,6 +47,7 @@ export default function BankNotificationSetup() {
     <p className="muted">Only selected apps are read. Nothing enters your ledger without approval. Security codes are discarded on your phone.</p>
     {error && <p className="form-error" role="alert">{error}</p>}
     {native ? <>
+      {!granted && allowed.length > 0 && <p role="alert" className="form-error">Android notification access is off. Your selected apps are saved; enable access below to resume capture.</p>}
       <div className="section-row"><strong>Notification access: {granted ? 'Enabled' : 'Disabled'}</strong><button type="button" className="icon-button" aria-label="Refresh bank access" onClick={load}><RefreshCw size={18}/></button></div>
       <button type="button" className="button ghost" onClick={() => act(() => BankNotifications.openNotificationAccessSettings())}><BellRing size={18}/>Open Android settings</button>
       <details className="bank-settings-disclosure"><summary>Apps to monitor · {allowed.length} selected</summary>

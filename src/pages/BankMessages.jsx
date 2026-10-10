@@ -7,7 +7,6 @@ import { dateInput, saveDate, showTime } from '../lib/time'
 import { currencyStep } from '../lib/currency'
 import { parseBankNotification, notificationHash } from '../lib/bankNotifications/parser'
 import { bankInboxChanged, syncBankNotifications } from '../lib/bankNotifications/native'
-import BankNotificationSetup from '../components/BankNotificationSetup'
 import Modal from '../components/Modal'
 import DateTimeField from '../components/DateTimeField'
 import './BankMessages.css'
@@ -23,7 +22,7 @@ export default function BankMessages() {
   const [paste, setPaste] = useState(false), [text, setText] = useState(''), [bank, setBank] = useState('nbk')
   const [selected, setSelected] = useState(null), [form, setForm] = useState({})
   const [route, setRoute] = useState(null), [target, setTarget] = useState('personal'), [targetWallets, setTargetWallets] = useState([]), [routeWallet, setRouteWallet] = useState('')
-  const [setup, setSetup] = useState(false), [legacy, setLegacy] = useState(false)
+  const [legacy, setLegacy] = useState(false)
   const load = useCallback(async () => {
     const result = await api(`/api/bank-inbox?status=${status}&page=${page}`)
     setRows(result.items); setTotal(result.total)
@@ -83,10 +82,9 @@ export default function BankMessages() {
   const duplicateWarning = selected && (selected.duplicates.length > 0 || error.includes('similar transaction'))
   return <div className="stack gap-18 bank-inbox">
     <div className="section-row"><div><h3>Bank Inbox</h3><small className="muted">{activeSpace?.name || 'Personal'} · {total} {status}</small></div><div className="button-row"><button type="button" className="icon-button" aria-label="Refresh bank inbox" disabled={busy} onClick={() => act(async () => { await syncBankNotifications(user.id); await load() })}><RefreshCw size={19}/></button><button type="button" className="button primary" disabled={!canAdd} onClick={() => setPaste(true)}><ClipboardPaste size={18}/>Paste message</button></div></div>
-    <details className="bank-settings-disclosure" open={setup} onToggle={event => setSetup(event.currentTarget.open)}><summary>Bank notification setup</summary>{setup && <BankNotificationSetup/>}</details>
     <div className="tabs" role="tablist" aria-label="Bank inbox status">{['pending', 'ignored', 'approved'].map(value => <button key={value} type="button" role="tab" aria-selected={status === value} className={status === value ? 'active' : ''} onClick={() => { setStatus(value); setPage(1); setError('') }}>{value[0].toUpperCase() + value.slice(1)}</button>)}</div>
     {error && !selected && !paste && !route && <p className="form-error" role="alert">{error}</p>}
-    {loading ? <p role="status">Loading bank alerts...</p> : !rows.length ? <div className="empty-state"><h3>No bank transactions {status === 'pending' ? 'waiting for review' : `marked ${status}`}</h3><button type="button" className="button ghost" onClick={() => setSetup(true)}>Configure bank notifications</button></div> : <div className="bank-inbox-list">{rows.map(row => <article className="bank-inbox-item" key={row.id}>
+    {loading ? <p role="status">Loading bank alerts...</p> : !rows.length ? <div className="empty-state"><h3>No bank transactions {status === 'pending' ? 'waiting for review' : `marked ${status}`}</h3><a className="button ghost" href="#/settings">Open Settings</a></div> : <div className="bank-inbox-list">{rows.map(row => <article className="bank-inbox-item" key={row.id}>
       <div className="section-row"><strong>{row.merchant}</strong><strong>{row.currency} {row.amount}</strong></div>
       <div className="bank-item-meta"><span>{kinds[row.transaction_type]}</span><span>{row.source_app}{row.account_last4 && ` ••••${row.account_last4}`}</span><span>{showTime(row.occurred_at)}</span><span>{wallets.find(wallet => wallet.id === row.wallet_id)?.name || 'Choose a wallet'}</span></div>
       <small>{row.confidence >= 0.9 ? 'High' : row.confidence >= 0.65 ? 'Medium' : 'Low'} confidence{row.duplicates.length > 0 && ' · Possible duplicate'}</small>

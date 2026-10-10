@@ -1,7 +1,5 @@
 """Opt-in SMS forwarding inbox; forwarded text never writes the ledger automatically."""
-import hashlib
 import re
-import secrets
 from typing import Literal
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
@@ -22,18 +20,12 @@ class MessageIn(BaseModel):
 
 @router.get('/api/bank-messages/key')
 def key_status(user=Depends(current_user), db=Depends(get_db)):
-    return {'enabled': db.get(MessageKey, user.id) is not None}
+    return {'enabled': False}
 
 
 @router.post('/api/bank-messages/key')
 def create_key(user=Depends(current_user), db=Depends(get_db)):
-    token = secrets.token_urlsafe(32)
-    row = db.get(MessageKey, user.id)
-    if not row:
-        row = MessageKey(user_id=user.id); db.add(row)
-    row.digest = hashlib.sha256(token.encode()).hexdigest()
-    db.commit()
-    return {'token': token}
+    raise HTTPException(410, 'Phone forwarding retired. Use Smart Bank Inbox in Settings.')
 
 
 @router.delete('/api/bank-messages/key', status_code=204)
@@ -62,10 +54,7 @@ def ingest(db, user_id, payload):
 
 @router.post('/api/bank-messages/forward', status_code=201)
 def forward(payload: MessageIn, x_flowbudget_key: str = Header(default='', max_length=100), db=Depends(get_db)):
-    key = db.query(MessageKey).filter_by(digest=hashlib.sha256(x_flowbudget_key.encode()).hexdigest()).first()
-    if not key or not db.query(User).filter_by(id=key.user_id, active=True).first():
-        raise HTTPException(401, 'Invalid or revoked forwarding key')
-    return ingest(db, key.user_id, payload)
+    raise HTTPException(410, 'Phone forwarding retired. Use Smart Bank Inbox in Settings.')
 
 
 @router.post('/api/bank-messages', status_code=201)

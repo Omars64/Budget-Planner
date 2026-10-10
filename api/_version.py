@@ -1,2 +1,2 @@
 # Generated from package.json by npm run version:sync.
-VERSION = "6.1.4"
+VERSION = "6.1.5"

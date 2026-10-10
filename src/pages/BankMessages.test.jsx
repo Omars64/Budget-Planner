@@ -12,7 +12,7 @@ it('reviews a Space alert and sends an ordinary editable transaction only after 
   api.mockImplementation(path => Promise.resolve(path.startsWith('/api/bank-inbox?') ? { items: [item], total: 1 } : path === '/api/wallets' ? [{ id: 5, name: 'Home Card' }] : path === '/api/categories' ? [] : { status: 'approved', transaction_id: 7 }))
   render(<BankMessages/> )
   await screen.findByText('Talabat')
-  expect(screen.getByText('Bank notification setup').closest('details')).not.toHaveAttribute('open')
+  expect(screen.queryByText('Bank notification setup')).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Review & add' }))
   fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Lunch' } })
   fireEvent.click(screen.getByRole('button', { name: 'Approve transaction' }))

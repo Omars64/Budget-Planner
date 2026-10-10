@@ -48,7 +48,8 @@ public class BankNotificationsPlugin extends Plugin {
     }
     @PluginMethod public void getAllowedPackages(PluginCall call) {
         boolean same = owner(call).equals(prefs().getString("owner", ""));
-        JSObject result = new JSObject(); result.put("packages", new JSArray(same && prefs().getBoolean("enabled", false) ? prefs().getStringSet("packages", java.util.Collections.emptySet()) : java.util.Collections.emptySet()));
+        JSObject result = new JSObject(); result.put("packages", new JSArray(same ? prefs().getStringSet("packages", java.util.Collections.emptySet()) : java.util.Collections.emptySet()));
+        result.put("enabled", same && prefs().getBoolean("enabled", false));
         result.put("queueFull", same && prefs().getBoolean("queueFull", false));
         result.put("captureError", same && prefs().getBoolean("captureError", false)); call.resolve(result);
     }
@@ -82,7 +83,10 @@ public class BankNotificationsPlugin extends Plugin {
     }
     @PluginMethod public void suspend(PluginCall call) { prefs().edit().putBoolean("enabled", false).commit(); call.resolve(); }
     @PluginMethod public void bindSession(PluginCall call) {
-        if (!owner(call).equals(prefs().getString("owner", ""))) prefs().edit().putBoolean("enabled", false).commit();
+        String account = owner(call);
+        boolean resume = !account.isEmpty() && account.equals(prefs().getString("owner", "")) && !prefs().getStringSet("packages", java.util.Collections.emptySet()).isEmpty();
+        prefs().edit().putBoolean("enabled", resume).commit();
+        if (resume) android.service.notification.NotificationListenerService.requestRebind(new ComponentName(getContext(), BankNotificationListenerService.class));
         call.resolve();
     }
 }
