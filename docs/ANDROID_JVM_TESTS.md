@@ -60,6 +60,9 @@ the Google Services plugin when `google-services.json` is absent.
           distribution: temurin
           java-version: '21'
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
       - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
       - run: npm ci
       - run: bash android/gradlew -p android :app:testDebugUnitTest --no-daemon --console=plain
