@@ -100,6 +100,7 @@ drill outside the desktop filesystem sandbox for the internal socketpair.
 
 The bounded decoder patch passed all 18 focused archive/verifier tests,
 including input and decompression boundaries and gzip integrity checks.
-The parent subsequently reported full backend gates passing (284 tests) and
-frontend gates passing (342 tests). These full-suite and npm audit results are
-parent-provided evidence; this task ran the focused decoder checks directly.
+Full backend gates passed (284 tests) before the final decoder boundary additions,
+and all 29 focused recovery/monitoring tests passed afterward. Frontend gates
+passed all 342 tests. The development-only source-map-js advisory was addressed
+with compatible version 1.2.2; the complete npm audit then reported zero advisories.
