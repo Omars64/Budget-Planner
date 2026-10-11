@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowUp, Check, ChevronDown, Copy, Globe, LoaderCircle, MessageCircle, NotebookPen, PanelLeftClose, PanelLeftOpen, Pencil, Plus, RefreshCw, Settings2, Sparkles, Square, ThumbsDown, ThumbsUp, Trash2, X } from 'lucide-react'
+import { ArrowUp, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Globe, LoaderCircle, MessageCircle, NotebookPen, Pencil, Plus, RefreshCw, Settings2, Sparkles, Square, ThumbsDown, ThumbsUp, Trash2, X } from 'lucide-react'
 import { api, jsonBody } from '../lib/api'
 import { dateInput } from '../lib/time'
 import { useApp } from '../App'
 import Modal from '../components/Modal'
+import AIConversationGroups from '../components/AIConversationGroups'
 
 const prompts = [
   'Create a roadmap to reduce my spending across categories.',
@@ -68,6 +69,8 @@ export default function AskAI() {
   const initial = useRef(location.state || {})
   const [config, setConfig] = useState(null)
   const [chats, setChats] = useState([])
+  const [groups, setGroups] = useState([])
+  const [selectedGroup, setSelectedGroup] = useState('')
   const [hasChats, setHasChats] = useState(false)
   const [chat, setChat] = useState(null)
   const [question, setQuestion] = useState(initial.current.question || '')
@@ -87,6 +90,7 @@ export default function AskAI() {
   const actionRef = useRef(false)
   const selection = useRef(chatId)
   const requestRef = useRef(null)
+  const listRequest = useRef(0)
   const mounted = useRef(true)
   const messages = useRef(null)
   const composer = useRef(null)
@@ -96,11 +100,12 @@ export default function AskAI() {
   const pending = sending || chat?.turns?.some(turn => turn.status === 'pending')
 
   const loadChats = useCallback(async (offset = 0) => {
-    const data = await api('/api/ai/chats?offset=' + offset)
-    if (!mounted.current) return
-    setChats(previous => offset ? [...previous, ...data.items] : data.items)
+    const request = ++listRequest.current
+    const data = await api('/api/ai/chats?offset=' + offset + (selectedGroup ? '&group_id=' + encodeURIComponent(selectedGroup) : ''))
+    if (!mounted.current || request !== listRequest.current) return
+    setChats(previous => offset ? [...previous, ...data.items.filter(item => !previous.some(row => row.id === item.id))] : data.items)
     setHasChats(data.has_more)
-  }, [])
+  }, [selectedGroup])
   const loadChat = useCallback(async id => {
     const data = await api('/api/ai/chats/' + id)
     if (mounted.current && selection.current === id) setChat(data)
@@ -182,7 +187,7 @@ export default function AskAI() {
       if (!id) {
         const draftId = requestRef.current?.chatId || globalThis.crypto.randomUUID()
         requestRef.current = { ...(requestRef.current || {}), chatId: draftId }
-        const created = await api('/api/ai/chats', { method: 'POST', ...jsonBody({ id: draftId, ...context, wallet_id: context.wallet_id ? Number(context.wallet_id) : null }) })
+        const created = await api('/api/ai/chats', { method: 'POST', ...jsonBody({ id: draftId, ...context, group_id: context.group_id || null, wallet_id: context.wallet_id ? Number(context.wallet_id) : null }) })
         id = created.id
         selection.current = id
         setParams({ chat: id }, { replace: true })
@@ -270,11 +275,18 @@ export default function AskAI() {
   }
   const wallets = selectedScope === 'shared' ? config?.shared_wallets : config?.wallets
   const label = selectedScope === 'general' ? 'General & economy' : wallets?.find(w => w.id === Number(selectedWallet))?.name || 'My wallets'
+  const selectGroup = (id, reload = false) => {
+    setSelectedGroup(id)
+    setContext(current => ({ ...current, group_id: id }))
+    if (reload) { void loadChats().catch(err => notify(err.message, 'error')); if (chatId) void loadChat(chatId).catch(err => setError(err.message)) }
+  }
   const historyList = <div className="ai-chat-list">
+    <AIConversationGroups groups={groups} onGroups={setGroups} selected={selectedGroup} onSelect={selectGroup} disabled={acting || pending}/>
     {!chats.length && <p className="muted">No saved conversations yet.</p>}
-    {chats.map(item => <div key={item.id} className={`ai-history-item ${chatId === item.id ? 'selected' : ''}`}>
+    {selectedGroup && !chats.some(item => item.group_id === selectedGroup) && <p className="muted small">No conversations loaded in this group.</p>}
+    {chats.filter(item => !selectedGroup || item.group_id === selectedGroup).map(item => <div key={item.id} className={`ai-history-item ${chatId === item.id ? 'selected' : ''}`}>
       <button disabled={!item.accessible || sending} onClick={() => { setParams({ chat: item.id }); setQuestion(''); requestRef.current = null }}><MessageCircle size={16}/><span>{item.title}<small>{item.scope === 'general' ? 'General & economy' : item.scope === 'shared' ? 'Shared wallet' : 'Personal'} · {item.month}</small></span></button>
-      <div className="ai-history-actions"><button className="icon-button" title="Rename conversation" aria-label={'Rename ' + item.title} disabled={acting || !item.accessible} onClick={() => setRename({ ...item })}><Pencil size={14}/></button><button className="icon-button danger" title="Delete conversation" aria-label={'Delete ' + item.title} disabled={acting} onClick={() => removeChat(item)}><Trash2 size={14}/></button></div>
+      <div className="ai-history-actions"><button className="icon-button" title="Edit conversation" aria-label={'Rename ' + item.title} disabled={acting || pending || !item.accessible} onClick={() => setRename({ ...item })}><Pencil size={14}/></button><button className="icon-button danger" title="Delete conversation" aria-label={'Delete ' + item.title} disabled={acting} onClick={() => removeChat(item)}><Trash2 size={14}/></button></div>
     </div>)}
     {hasChats && <button className="button ghost" onClick={() => loadChats(chats.length).catch(err => notify(err.message, 'error'))}>Older conversations</button>}
   </div>
@@ -283,9 +295,10 @@ export default function AskAI() {
     {historyOpen && (
       <button className="ai-history-scrim" aria-label="Close conversations" onClick={() => setHistoryOpen(false)}/>
     )}
-    <aside className="ai-history" id="conversation-history"><div className="ai-history-head"><h3>Conversations</h3><button className="icon-button ai-history-toggle" title={historyCollapsed ? 'Expand conversations' : 'Collapse conversations'} aria-label="Toggle conversations" aria-expanded={!historyCollapsed || historyOpen} aria-controls="conversation-history" onClick={toggleHistory}>{historyCollapsed ? <PanelLeftOpen size={20}/> : <PanelLeftClose size={20}/>}</button></div>{historyList}</aside>
+    <aside className="ai-history" id="conversation-history"><div className="ai-history-head"><h3>Conversations</h3><button className="icon-button ai-history-toggle" title={historyCollapsed ? 'Expand conversations' : 'Collapse conversations'} aria-label="Toggle conversations" aria-expanded={!historyCollapsed || historyOpen} aria-controls="conversation-history" onClick={toggleHistory}>{historyCollapsed ? <ChevronRight size={22}/> : <ChevronLeft size={22}/>}</button></div>{historyList}</aside>
     <div className="ai-chat-main">
       <div className="ai-chat-toolbar">
+        {chat?.group_id && <span className="ai-current-group">{groups.find(group => group.id === chat.group_id)?.name}</span>}
         <button className="ai-context-button" disabled={pending} onClick={() => setContextOpen(true)} title="Choose context for a new conversation"><Settings2 size={16}/><span>{label}{selectedScope !== 'general' && <small>{selectedMonth}</small>}</span><ChevronDown size={14}/></button>
         <span className="ai-mode">{config?.ai_available ? 'AI enabled by admin' : 'Built-in guide'}</span>
         <button className="icon-button" title="New conversation" aria-label="New conversation" disabled={pending} onClick={() => setContextOpen(true)}><Plus size={21}/></button>
@@ -319,12 +332,12 @@ export default function AskAI() {
     </div>
 
     <Modal open={contextOpen} onClose={() => setContextOpen(false)} title="New conversation">
-      <form className="stack gap-16" onSubmit={startNew}><label className="field"><span>Answer using</span><select value={context.scope} onChange={e => setContext({ ...context, scope: e.target.value, wallet_id: '' })}><option value="personal">My wallets</option><option value="shared">A shared wallet</option><option value="general">General & economy (no wallet data)</option></select></label>
+      <form className="stack gap-16" onSubmit={startNew}><label className="field"><span>Group</span><select value={context.group_id || ''} onChange={e => setContext({ ...context, group_id: e.target.value })}><option value="">Ungrouped</option>{groups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label><label className="field"><span>Answer using</span><select value={context.scope} onChange={e => setContext({ ...context, scope: e.target.value, wallet_id: '' })}><option value="personal">My wallets</option><option value="shared">A shared wallet</option><option value="general">General & economy (no wallet data)</option></select></label>
         {context.scope !== 'general' && <><label className="field"><span>Wallet</span><select required={context.scope === 'shared'} value={context.wallet_id} onChange={e => setContext({ ...context, wallet_id: e.target.value })}><option value="">{context.scope === 'shared' ? 'Choose a shared wallet' : 'All my wallets'}</option>{(context.scope === 'shared' ? config?.shared_wallets : config?.wallets)?.map(w => <option key={w.id} value={w.id}>{w.name}{w.permission ? ' (' + w.permission + ')' : ''}</option>)}</select></label><label className="field"><span>Month</span><input type="month" required min="1900-01" max="9998-12" value={context.month} onChange={e => setContext({ ...context, month: e.target.value })}/></label></>}
         <p className="muted small">Personal and shared records stay separate. Your existing conversation will remain saved.</p><div className="modal-actions"><button type="button" className="button ghost" onClick={() => setContextOpen(false)}>Cancel</button><button className="button primary" disabled={sending}>Start conversation</button></div>
       </form>
     </Modal>
-    <Modal open={Boolean(rename)} onClose={() => setRename(null)} title="Rename conversation"><form className="stack gap-16" onSubmit={e => { e.preventDefault(); void mutate(async () => { await api('/api/ai/chats/' + rename.id, { method: 'PATCH', ...jsonBody({ title: rename.title }) }); if (chatId === rename.id) await loadChat(chatId); setRename(null); await loadChats() }) }}><label className="field"><span>Name</span><input required maxLength={120} value={rename?.title || ''} onChange={e => setRename(v => ({ ...v, title: e.target.value }))}/></label><button className="button primary" disabled={acting}>Save name</button></form></Modal>
+    <Modal open={Boolean(rename)} onClose={() => setRename(null)} title="Edit conversation"><form className="stack gap-16" onSubmit={e => { e.preventDefault(); void mutate(async () => { await api('/api/ai/chats/' + rename.id, { method: 'PATCH', ...jsonBody({ title: rename.title, group_id: rename.group_id || null }) }); if (chatId === rename.id) await loadChat(chatId); setRename(null); await loadChats() }) }}><label className="field"><span>Name</span><input required maxLength={120} value={rename?.title || ''} onChange={e => setRename(v => ({ ...v, title: e.target.value }))}/></label><label className="field"><span>Group</span><select value={rename?.group_id || ''} onChange={e => setRename(v => ({ ...v, group_id: e.target.value }))}><option value="">Ungrouped</option>{groups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label><button className="button primary" disabled={acting}>Save changes</button></form></Modal>
     <Modal open={Boolean(source)} onClose={() => setSource(null)} title={source?.source?.label || 'Record'}>{source?.loading ? <p>Loading current record...</p> : source && <div className="stack gap-16"><dl className="ai-review-fields">{Object.entries(source.data).filter(([key]) => !key.endsWith('_id') && !['reference', 'id'].includes(key)).map(([key, value]) => <div key={key}><dt>{human(key)}</dt><dd>{readable(value)}</dd></div>)}</dl><button className="button ghost" onClick={() => navigate(source.source.path)}>Open in Budgetly</button></div>}</Modal>
   </section>
 }

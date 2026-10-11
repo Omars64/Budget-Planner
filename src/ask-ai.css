@@ -27,6 +27,16 @@
 .ai-history-head,.ai-chat-header { display:flex; align-items:center; gap:10px; justify-content:space-between; }
 .budgetly-v2 .ai-history-head h3 { font-size:15px; margin:0; padding:6px 4px; }
 .ai-chat-list { display:grid; gap:4px; margin-top:15px; }
+.ai-groups { border-bottom:1px solid var(--line); padding-bottom:12px; margin-bottom:10px; }
+.ai-group-heading,.ai-group-row { display:flex; align-items:center; gap:6px; }
+.ai-group-heading { justify-content:space-between; font-size:12px; color:var(--muted); }
+.ai-group-row>.icon-button { width:30px; height:30px; flex-shrink:0; }
+.ai-group-select { display:flex; align-items:center; gap:8px; width:100%; min-width:0; min-height:40px; padding:8px; border:0; border-radius:6px; text-align:left; background:transparent; color:var(--text); cursor:pointer; font-size:13px; }
+.ai-group-select[aria-pressed=true] { background:var(--surface-soft); color:var(--accent-text); }
+.ai-group-select span { min-width:0; overflow-wrap:anywhere; }
+.ai-group-select svg { flex-shrink:0; }
+.ai-group-select small { display:block; font-size:10px; color:var(--muted); margin-top:3px; }
+.ai-current-group { font-size:12px; max-width:25%; overflow-wrap:anywhere; color:var(--muted); }
 .ai-history-item { border-bottom:1px solid var(--line); padding:8px; border-radius:6px; }
 .ai-history-item.selected { background:var(--surface-soft); }
 .ai-history-item>button { display:flex; align-items:flex-start; gap:8px; text-align:left; width:100%; padding:4px 0; border:0; background:none; color:var(--text); cursor:pointer; }

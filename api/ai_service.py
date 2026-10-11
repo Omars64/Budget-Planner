@@ -389,6 +389,8 @@ def generate(db, user, chat, question, history, research=False, still_active=lam
     horizon = re.search(r'\b(30|60|90)[ -]day\b', question, re.I)
     planner_assumptions = not re.search(r'\b(exclude|without|no) assumptions\b', question, re.I)
     facts, sources = build_context(db, user, chat, int(horizon.group(1)) if horizon else 30, planner_assumptions)
+    from .ai_memory import conversation_memory
+    facts['conversation_memory'] = conversation_memory(db, user, chat)
     draft = _local_draft(facts, chat, question)
     result = {'answer': _local_answer(facts, question)[:22000], 'sources': sources[:20],
               'suggestions': [], 'drafts': [draft] if draft else [], 'usage': {'provider': 'built-in', 'input_tokens': 0, 'output_tokens': 0}}

@@ -12,11 +12,22 @@ class AssistantConfig(Base):
     updated_at = Column(DateTime, nullable=False, default=utc_now)
 
 
+class AIGroup(Base):
+    __tablename__ = 'ai_groups'
+    id = Column(String(36), primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    name = Column(String(80), nullable=False)
+    memory_mode = Column(String(16), nullable=False, default='group')
+    context = Column(Text, nullable=False, default='')
+    created_at = Column(DateTime, nullable=False, default=utc_now)
+
+
 class AIChat(Base):
     __tablename__ = 'ai_chats'
     id = Column(String(36), primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
     title = Column(String(120), nullable=False, default='New conversation')
+    group_id = Column(String(36), ForeignKey('ai_groups.id', ondelete='SET NULL'), nullable=True, index=True)
     scope = Column(String(16), nullable=False, default='personal')
     wallet_id = Column(Integer, nullable=True)
     month = Column(String(7), nullable=False)

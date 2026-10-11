@@ -1,4 +1,8 @@
 {
+  "6.2.0": [
+    {"title":"Ask Budgetly groups","detail":"Organize conversations into groups, move existing chats, and choose General or Group-only AI context in each group's settings."},
+    {"title":"Aligned and spacious layouts","detail":"The footer follows the collapsed sidebar. Overview rows have comfortable padding, Settings has rounded edges, and both sidebars use clear arrow controls."}
+  ],
   "6.1.7": [
     {"title":"Cleaner page edges and navigation","detail":"Rounded workspace edges, a compact page finder and collapsible desktop sidebar give your records more room."},
     {"title":"Transaction actions stay visible","detail":"The transaction header stays available while scrolling. Successful background sync no longer interrupts your screen."}

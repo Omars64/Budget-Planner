@@ -1,6 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { BarChart3, BellDot, CalendarClock, CalendarDays, Gauge, LayoutDashboard, LogOut, Menu, Mountain, PanelLeftClose, PanelLeftOpen, Plus, ReceiptText, Search, Settings, Share2, ShieldCheck, Target, WalletCards, X } from 'lucide-react'
+import { BarChart3, BellDot, CalendarClock, CalendarDays, ChevronLeft, ChevronRight, Gauge, LayoutDashboard, LogOut, Menu, Mountain, PanelLeftOpen, Plus, ReceiptText, Search, Settings, Share2, ShieldCheck, Target, WalletCards, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useApp } from '../App'
 import TransactionModal from './TransactionModal'
@@ -116,7 +116,7 @@ export default function AppShell({ children }) {
           <div><strong>Budgetly</strong><small>Personal finance</small></div>
         </div>
         <button className="icon-button mobile-only" onClick={() => setMenu(false)} aria-label="Close menu"><X size={19}/></button>
-        <button className="icon-button sidebar-toggle" onClick={toggleSidebar} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed}>{collapsed ? <PanelLeftOpen size={19}/> : <PanelLeftClose size={19}/>}</button>
+        <button className="icon-button sidebar-toggle" onClick={toggleSidebar} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed}>{collapsed ? <ChevronRight size={22}/> : <ChevronLeft size={22}/>}</button>
       </div>
       <label className="nav-finder"><Search size={17}/><input ref={navSearchInput} type="search" aria-label="Find a page" placeholder="Find a page" value={navSearch} onChange={event => setNavSearch(event.target.value)}/><kbd>Ctrl K</kbd></label>
       <div className="sidebar-space"><SpaceSwitcher/></div>

@@ -70,6 +70,7 @@ BACKUP_COLLECTION_LIMITS = {
 def ensure_note_columns(connection):
     """Add note workspace columns to databases created before the Notes upgrade."""
     tables = {
+        "ai_chats": {"group_id": "VARCHAR(36) REFERENCES ai_groups(id) ON DELETE SET NULL"},
         "transactions": {
             "is_opening_balance": "BOOLEAN NOT NULL DEFAULT FALSE",
             "recorded_by_id": "INTEGER",

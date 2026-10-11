@@ -9,7 +9,7 @@ from sqlalchemy import or_
 from .database import get_db
 from .index import current_user
 from .models import Note, Wallet, utc_now
-from .ai_models import AIChat, AITurn
+from .ai_models import AIChat, AITurn, AIGroup
 from .ai_context import scope_wallets, month_range
 from .ai_service import generate, read_record
 from .account_security import limit
@@ -25,6 +25,7 @@ class ChatIn(BaseModel):
     scope: Literal['personal', 'shared', 'general'] = 'personal'
     wallet_id: int | None = Field(default=None, gt=0)
     month: str = Field(pattern=r'^\d{4}-\d{2}$')
+    group_id: uuid.UUID | None = None
 
 
 class QuestionIn(BaseModel):
@@ -33,7 +34,65 @@ class QuestionIn(BaseModel):
 
 
 class RenameIn(BaseModel):
-    title: str = Field(min_length=1, max_length=120)
+    title: str | None = Field(default=None, min_length=1, max_length=120)
+    group_id: uuid.UUID | None = None
+
+
+class GroupIn(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    memory_mode: Literal['general', 'group'] = 'group'
+    context: str = Field(default='', max_length=2000)
+
+
+def group_access(db, user, group_id):
+    row = db.query(AIGroup).filter_by(id=str(group_id), user_id=user.id).first()
+    if not row:
+        raise HTTPException(404, 'Group not found')
+    return row
+
+
+def group_json(row):
+    return {'id': row.id, 'name': row.name, 'memory_mode': row.memory_mode, 'context': row.context}
+
+
+@router.get('/groups')
+def groups(user=Depends(current_user), db=Depends(get_db)):
+    return {'items': [group_json(row) for row in db.query(AIGroup).filter_by(user_id=user.id).order_by(AIGroup.created_at, AIGroup.id).all()]}
+
+
+@router.post('/groups', status_code=201)
+def create_group(payload: GroupIn, user=Depends(current_user), db=Depends(get_db)):
+    if not payload.name.strip():
+        raise HTTPException(422, 'Enter a group name')
+    if db.query(AIGroup).filter_by(user_id=user.id).count() >= 100:
+        raise HTTPException(422, 'You can create up to 100 groups')
+    row = AIGroup(id=str(uuid.uuid4()), user_id=user.id, name=payload.name.strip(),
+                  memory_mode=payload.memory_mode, context=payload.context.strip())
+    db.add(row)
+    db.commit()
+    return group_json(row)
+
+
+@router.patch('/groups/{group_id}')
+def update_group(group_id: str, payload: GroupIn, user=Depends(current_user), db=Depends(get_db)):
+    row = group_access(db, user, group_id)
+    if db.query(AIChat.id).filter(AIChat.group_id == row.id, AIChat.busy.is_not(None)).first():
+        raise HTTPException(409, 'Wait for group responses to finish before changing context')
+    if not payload.name.strip():
+        raise HTTPException(422, 'Enter a group name')
+    row.name, row.memory_mode, row.context = payload.name.strip(), payload.memory_mode, payload.context.strip()
+    db.commit()
+    return group_json(row)
+
+
+@router.delete('/groups/{group_id}', status_code=204)
+def delete_group(group_id: str, user=Depends(current_user), db=Depends(get_db)):
+    row = group_access(db, user, group_id)
+    if db.query(AIChat.id).filter(AIChat.group_id == row.id, AIChat.busy.is_not(None)).first():
+        raise HTTPException(409, 'Wait for group responses to finish before deleting the group')
+    db.query(AIChat).filter_by(group_id=row.id, user_id=user.id).update({'group_id': None})
+    db.delete(row)
+    db.commit()
 
 
 class FeedbackIn(BaseModel):
@@ -58,7 +117,7 @@ def turn_access(db, user, turn_id):
 
 def chat_json(chat, accessible=True):
     return {'id': chat.id, 'title': chat.title if accessible else 'Unavailable shared conversation',
-            'scope': chat.scope, 'wallet_id': chat.wallet_id, 'month': chat.month,
+            'scope': chat.scope, 'wallet_id': chat.wallet_id, 'month': chat.month, 'group_id': chat.group_id,
             'updated_at': chat.updated_at.isoformat() + 'Z', 'accessible': accessible}
 
 
@@ -83,8 +142,11 @@ def config(user=Depends(current_user), db=Depends(get_db)):
 
 
 @router.get('/chats')
-def chats(offset: int = Query(0, ge=0), user=Depends(current_user), db=Depends(get_db)):
-    rows = db.query(AIChat).filter_by(user_id=user.id).order_by(AIChat.updated_at.desc(), AIChat.id).offset(offset).limit(51).all()
+def chats(offset: int = Query(0, ge=0), group_id: uuid.UUID | None = None, user=Depends(current_user), db=Depends(get_db)):
+    query = db.query(AIChat).filter_by(user_id=user.id)
+    if group_id:
+        query = query.filter_by(group_id=group_access(db, user, group_id).id)
+    rows = query.order_by(AIChat.updated_at.desc(), AIChat.id).offset(offset).limit(51).all()
     result = []
     for row in rows[:50]:
         try:
@@ -107,7 +169,9 @@ def create_chat(payload: ChatIn, user=Depends(current_user), db=Depends(get_db))
     if payload.scope == 'general' and payload.wallet_id:
         raise HTTPException(422, 'General conversations cannot attach wallets')
     limit(db, f'ai-new-chat:{user.id}', 20, 3600)
-    row = AIChat(id=str(payload.id), user_id=user.id, scope=payload.scope, wallet_id=payload.wallet_id, month=payload.month)
+    group = group_access(db, user, payload.group_id) if payload.group_id else None
+    row = AIChat(id=str(payload.id), user_id=user.id, scope=payload.scope, wallet_id=payload.wallet_id, month=payload.month,
+                 group_id=group.id if group else None)
     scope_wallets(db, user, row)
     db.add(row)
     db.commit()
@@ -135,9 +199,14 @@ def get_chat(chat_id: str, before: str | None = None, user=Depends(current_user)
 @router.patch('/chats/{chat_id}')
 def rename_chat(chat_id: str, payload: RenameIn, user=Depends(current_user), db=Depends(get_db)):
     row = chat_access(db, user, chat_id)
-    if not payload.title.strip():
-        raise HTTPException(422, 'Enter a conversation name')
-    row.title = payload.title.strip()
+    if row.busy:
+        raise HTTPException(409, 'Wait for this response to finish before changing its conversation')
+    if payload.title is not None:
+        if not payload.title.strip():
+            raise HTTPException(422, 'Enter a conversation name')
+        row.title = payload.title.strip()
+    if 'group_id' in payload.model_fields_set:
+        row.group_id = group_access(db, user, payload.group_id).id if payload.group_id else None
     db.commit()
     return chat_json(row)
 

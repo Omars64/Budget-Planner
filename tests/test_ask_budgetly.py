@@ -45,6 +45,46 @@ def create(client, scope='personal', wallet_id=None):
     return result.json()['id']
 
 
+def test_groups_persist_move_keep_chats_and_enforce_ownership(setup):
+    client, db, user, _ = setup
+    group = client.post('/api/ai/groups', json={'name': 'Travel', 'memory_mode': 'group', 'context': 'Keep it concise'}).json()
+    assert client.get('/api/ai/groups').json()['items'] == [group]
+    chat = create(client)
+    assert client.patch(f'/api/ai/chats/{chat}', json={'group_id': group['id']}).json()['group_id'] == group['id']
+    assert client.get(f'/api/ai/chats/{chat}').json()['group_id'] == group['id']
+    other = User(username='Other', email='other-group@test.com', password_hash='unused')
+    db.add(other); db.commit()
+    app.dependency_overrides[current_user] = lambda: other
+    assert client.get('/api/ai/groups').json()['items'] == []
+    assert client.patch('/api/ai/groups/' + group['id'], json={'name': 'Stolen'}).status_code == 404
+    assert client.delete('/api/ai/groups/' + group['id']).status_code == 404
+    assert client.post('/api/ai/chats', json={'id': str(uuid.uuid4()), 'scope': 'general', 'month': '2026-09', 'group_id': group['id']}).status_code == 404
+    app.dependency_overrides[current_user] = lambda: user
+    assert client.delete('/api/ai/groups/' + group['id']).status_code == 204
+    assert client.get(f'/api/ai/chats/{chat}').json()['group_id'] is None
+
+
+def test_memory_never_crosses_private_groups_or_financial_scopes(setup):
+    from api.ai_models import AIChat, AITurn
+    from api.ai_memory import conversation_memory
+    client, db, user, _ = setup
+    private = client.post('/api/ai/groups', json={'name': 'Private', 'memory_mode': 'group'}).json()['id']
+    general = client.post('/api/ai/groups', json={'name': 'General', 'memory_mode': 'general'}).json()['id']
+    own = create(client)
+    rows = [('private', private, 'personal'), ('general', general, 'personal'), ('ungrouped', None, 'personal'), ('wrong-scope', private, 'general')]
+    for text, group_id, scope in rows:
+        cid = create(client, scope=scope)
+        row = db.get(AIChat, cid); row.group_id = group_id
+        db.add(AITurn(id=str(uuid.uuid4()), chat_id=cid, request_id=str(uuid.uuid4()), run_token='test', question=text, answer=text, status='completed'))
+    db.commit()
+    chat = db.get(AIChat, own)
+    assert {r['question'] for r in conversation_memory(db, user, chat)['related_conversations']} == {'general', 'ungrouped'}
+    chat.group_id = private; db.commit()
+    assert {r['question'] for r in conversation_memory(db, user, chat)['related_conversations']} == {'private'}
+    chat.group_id = general; db.commit()
+    assert {r['question'] for r in conversation_memory(db, user, chat)['related_conversations']} == {'general', 'ungrouped'}
+
+
 def test_admin_switch_reauth_roles_and_default_off(setup, monkeypatch):
     client, db, user, provider = setup
     assert client.get('/api/admin/assistant').json()['enabled'] is False
@@ -126,7 +166,7 @@ def test_enabled_routing_and_outage_fallback(setup):
     chat = create(client, 'general')
     result = client.post(f'/api/ai/chats/{chat}/messages', json={'request_id': str(uuid.uuid4()), 'question': 'Explain budgeting.'}).json()
     assert result['provider'] == 'openai'
-    assert set(provider.call_args.args[0]) == {'as_of', 'currency', 'scope', 'month'}
+    assert set(provider.call_args.args[0]) == {'as_of', 'currency', 'scope', 'month', 'conversation_memory'}
     provider.side_effect = httpx.ConnectError('sensitive upstream error')
     result = client.post(f'/api/ai/chats/{chat}/messages', json={'request_id': str(uuid.uuid4()), 'question': 'How do I create a budget?'}).json()
     assert result['status'] == 'completed' and result['provider'] == 'built-in'
