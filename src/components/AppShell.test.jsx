@@ -16,8 +16,20 @@ vi.mock('./ScrollMemory', () => ({ default: () => null }))
 vi.mock('../lib/scrollLock', () => ({ useContainedScroll: vi.fn(), useScrollLock: vi.fn() }))
 
 beforeEach(() => {
+  localStorage.removeItem('budgetly-sidebar-collapsed')
   vi.stubGlobal('matchMedia', () => ({ matches: false }))
   vi.stubGlobal('requestAnimationFrame', callback => callback())
+})
+
+test('desktop sidebar collapse is saved and page finder expands it', () => {
+  render(<MemoryRouter><AppShell/></MemoryRouter>)
+  fireEvent.click(screen.getByRole('button', {name:'Collapse sidebar'}))
+  expect(document.querySelector('.app-shell')).toHaveClass('sidebar-collapsed')
+  expect(localStorage.getItem('budgetly-sidebar-collapsed')).toBe('true')
+  expect(screen.getByRole('link', {name:'Calendar'})).toHaveAttribute('title', 'Calendar')
+  fireEvent.keyDown(window, {key:'k',ctrlKey:true})
+  expect(document.querySelector('.app-shell')).not.toHaveClass('sidebar-collapsed')
+  expect(screen.getByRole('searchbox', {name:'Find a page'})).toHaveFocus()
 })
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 

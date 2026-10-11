@@ -1,0 +1,37 @@
+.budgetly-v2 .sidebar { padding:16px 12px; }
+.budgetly-v2 .sidebar-head { gap:6px; }
+.budgetly-v2 .sidebar-head .brand { min-width:0; gap:8px; }
+.budgetly-v2 .sidebar-head .brand-logo { width:32px; height:32px; }
+.budgetly-v2 .sidebar-head .brand strong { font-size:14px; }
+.budgetly-v2 .sidebar-head .brand small { font-size:10px; }
+.budgetly-v2 .nav-finder { margin-top:12px; padding:6px 9px; min-height:36px; flex-shrink:0; }
+.budgetly-v2 .nav-finder input { min-height:0; height:24px; padding:0; }
+.budgetly-v2 .sidebar-space { margin:8px 0; }
+.budgetly-v2 .nav-list { margin-top:8px; margin-bottom:6px; }
+.budgetly-v2 .nav-group { gap:2px; margin-bottom:6px; }
+.budgetly-v2 .nav-group-label { padding:5px 10px 2px; }
+.budgetly-v2 .nav-item { min-height:36px; padding:7px 10px; }
+.budgetly-v2 .sidebar-foot { padding:6px 4px; }
+.budgetly-v2 .sidebar-signout { min-height:36px; }
+.budgetly-v2 .page-wrap :is(.overview-page,.ledger-page,.workspace,.settings-section,.calendar-panel,.day-panel,.attention-item,.panel) { border-radius:8px; }
+.budgetly-v2 .page-wrap :is(.overview-page,.ledger-page,.workspace) { overflow:clip; }
+.budgetly-v2.has-ledger .topbar { position:sticky; top:0; z-index:25; background:var(--page); padding-top:12px; padding-bottom:12px; border-radius:8px; }
+@media (min-width:821px) {
+  .budgetly-v2 .sidebar-toggle { display:grid; flex-shrink:0; }
+  .budgetly-v2.sidebar-collapsed .sidebar { width:76px; padding:14px 10px; }
+  .budgetly-v2.sidebar-collapsed .main-area { margin-left:76px; }
+  .budgetly-v2.sidebar-collapsed .sidebar-head { flex-direction:column; }
+  .budgetly-v2.sidebar-collapsed :is(.brand>div,.nav-finder,.sidebar-space,.nav-group-label,.nav-item>span,.nav-item>i,.sidebar-foot,.sidebar-signout>span,.guest-lock) { display:none; }
+  .budgetly-v2.sidebar-collapsed .nav-item { justify-content:center; padding:10px; min-height:44px; }
+  .budgetly-v2.sidebar-collapsed .sidebar-signout { justify-content:center; padding:10px; min-height:44px; }
+  .budgetly-v2.sidebar-collapsed .nav-group { border-bottom:1px solid var(--line); padding-bottom:6px; }
+}
+@media (max-width:820px) {
+  .budgetly-v2 .sidebar-toggle { display:none; }
+  .budgetly-v2 .nav-item { min-height:44px; }
+  .budgetly-v2 .nav-finder { min-height:44px; }
+  .budgetly-v2.has-ledger .topbar { top:env(safe-area-inset-top,0px); }
+}
+@media (prefers-reduced-motion:no-preference) {
+  .budgetly-v2 .main-area { transition:margin-left .18s ease; }
+}

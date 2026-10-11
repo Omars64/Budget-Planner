@@ -1,6 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { BarChart3, BellDot, CalendarClock, CalendarDays, Gauge, LayoutDashboard, LogOut, Menu, Mountain, PanelLeftOpen, Plus, ReceiptText, Search, Settings, Share2, ShieldCheck, Target, WalletCards, X } from 'lucide-react'
+import { BarChart3, BellDot, CalendarClock, CalendarDays, Gauge, LayoutDashboard, LogOut, Menu, Mountain, PanelLeftClose, PanelLeftOpen, Plus, ReceiptText, Search, Settings, Share2, ShieldCheck, Target, WalletCards, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useApp } from '../App'
 import TransactionModal from './TransactionModal'
@@ -45,6 +45,13 @@ const groups = ['Money', 'Planning', 'Workspace', 'Account']
 
 export default function AppShell({ children }) {
   const [menu, setMenu] = useState(false)
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem('budgetly-sidebar-collapsed') === 'true' } catch { return false }
+  })
+  const toggleSidebar = () => setCollapsed(value => {
+    try { localStorage.setItem('budgetly-sidebar-collapsed', String(!value)) } catch { /* Navigation works without storage. */ }
+    return !value
+  })
   const [navSearch, setNavSearch] = useState('')
   const [txModal, setTxModal] = useState(false)
   const [tutorialRequest, setTutorialRequest] = useState(0)
@@ -55,6 +62,7 @@ export default function AppShell({ children }) {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
         if (document.querySelector('[aria-modal="true"], dialog[open]')) return
         event.preventDefault()
+        setCollapsed(false)
         if (window.matchMedia('(max-width: 820px)').matches) setMenu(true)
         window.requestAnimationFrame(() => navSearchInput.current?.focus())
       } else if (event.key === 'Escape' && document.activeElement === navSearchInput.current) {
@@ -99,7 +107,7 @@ export default function AppShell({ children }) {
     ? window.dispatchEvent(new window.Event('budgetly:add-shared-transaction'))
     : setTxModal(true)
 
-  return <div className={`app-shell budgetly-v2 ${nativeAndroid ? 'native-android' : 'browser-app'} ${isLedger ? 'has-ledger' : ''} ${keyboardOpen ? 'keyboard-open' : ''} ${location.pathname === '/ask-ai' ? 'has-ai' : ''}`}>
+  return <div className={`app-shell budgetly-v2 ${collapsed ? 'sidebar-collapsed' : ''} ${nativeAndroid ? 'native-android' : 'browser-app'} ${isLedger ? 'has-ledger' : ''} ${keyboardOpen ? 'keyboard-open' : ''} ${location.pathname === '/ask-ai' ? 'has-ai' : ''}`}>
     <ScrollMemory userId={`${user?.id}:${spaceKey}`}/>
     <aside ref={sidebar} className={`sidebar glass ${menu ? 'open' : ''}`}>
       <div className="sidebar-head">
@@ -108,13 +116,14 @@ export default function AppShell({ children }) {
           <div><strong>Budgetly</strong><small>Personal finance</small></div>
         </div>
         <button className="icon-button mobile-only" onClick={() => setMenu(false)} aria-label="Close menu"><X size={19}/></button>
+        <button className="icon-button sidebar-toggle" onClick={toggleSidebar} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed}>{collapsed ? <PanelLeftOpen size={19}/> : <PanelLeftClose size={19}/>}</button>
       </div>
       <label className="nav-finder"><Search size={17}/><input ref={navSearchInput} type="search" aria-label="Find a page" placeholder="Find a page" value={navSearch} onChange={event => setNavSearch(event.target.value)}/><kbd>Ctrl K</kbd></label>
       <div className="sidebar-space"><SpaceSwitcher/></div>
       <nav className="nav-list">
         {groups.map(group => {
           const pages = matchingNav.filter(([, , , section]) => section === group)
-          return pages.length ? <div className="nav-group" key={group}><span className="nav-group-label">{group}</span>{pages.map(([to, label, Icon]) => <NavLink key={to} to={to} end={to === '/'} onClick={event => {setMenu(false);setNavSearch('');if(isGuest && !guestRoutes.has(to)){event.preventDefault();requestSignIn(label)}}} className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}><Icon size={19}/><span>{label}</span>{to === '/bank-messages' && <BankInboxBadge/>}{isGuest && !guestRoutes.has(to) ? <LockKeyhole className="guest-lock" size={14}/> : label === 'Budgets' && <i className="nav-pulse"/>}</NavLink>)}</div> : null
+          return pages.length ? <div className="nav-group" key={group}><span className="nav-group-label">{group}</span>{pages.map(([to, label, Icon]) => <NavLink key={to} to={to} aria-label={label} title={label} end={to === '/'} onClick={event => {setMenu(false);setNavSearch('');if(isGuest && !guestRoutes.has(to)){event.preventDefault();requestSignIn(label)}}} className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}><Icon size={19}/><span>{label}</span>{to === '/bank-messages' && <BankInboxBadge/>}{isGuest && !guestRoutes.has(to) ? <LockKeyhole className="guest-lock" size={14}/> : label === 'Budgets' && <i className="nav-pulse"/>}</NavLink>)}</div> : null
         })}
         {!matchingNav.length && <p className="nav-no-results">No matching page</p>}
       </nav>

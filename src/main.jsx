@@ -34,6 +34,7 @@ import './google.css'
 import './app-updates.css'
 import './guest.css'
 import './ux-refinements.css'
+import './layout-polish.css'
 
 applyAppearance(readDeviceAppearance())
 const removeNumberWheelGuard=installNumberWheelGuard()

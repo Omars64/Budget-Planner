@@ -18,7 +18,7 @@ test('failed shared writes are clearly reviewable instead of silently marked sav
   expect(screen.queryByRole('status')).toBeNull()
 })
 
-test('completed sync announces success only when the queue is empty',async()=>{
+test('completed sync stays silent while pending and failed entries remain visible',async()=>{
   state.rows=[{status:'pending',path:'/api/transactions'}]
   render(<MemoryRouter><ConnectionStatus/></MemoryRouter>)
   await screen.findByRole('status')
@@ -28,5 +28,5 @@ test('completed sync announces success only when the queue is empty',async()=>{
   act(()=>window.dispatchEvent(new CustomEvent('budgetly:sync-state',{detail:{userId:'1',syncing:true}})))
   state.rows=[]
   await act(async()=>{window.dispatchEvent(new Event('budgetly:offline-queue-changed'));window.dispatchEvent(new CustomEvent('budgetly:sync-state',{detail:{userId:'1',syncing:false}}))})
-  expect(screen.getByRole('status')).toHaveTextContent('All entries synced')
+  expect(screen.queryByRole('status')).toBeNull()
 })
