@@ -6,6 +6,7 @@ from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import case
 from .database import get_db
 from .models import User, utc_now
 from .reliability_models import AccountSession, Activity, RateBucket, ResetToken
@@ -32,10 +33,13 @@ def limit(db, key, maximum=10, seconds=300):
                 db.add(row); db.flush()
         except IntegrityError:
             row = db.query(RateBucket).filter_by(key=digest).with_for_update().one()
-    if row.started < utc_now() - timedelta(seconds=seconds):
-        row.started = utc_now(); row.count = 0
-    row.count += 1
-    blocked = row.count > maximum
+    now = utc_now()
+    expired = RateBucket.started <= now - timedelta(seconds=seconds)
+    count = db.execute(RateBucket.__table__.update().where(RateBucket.key == digest).values(
+        started=case((expired, now), else_=RateBucket.started),
+        count=case((expired, 1), else_=RateBucket.count + 1),
+    ).returning(RateBucket.count)).scalar_one()
+    blocked = count > maximum
     db.commit()
     if blocked:
         raise HTTPException(429, 'Too many attempts. Please wait a few minutes and try again.', headers={'Retry-After': str(seconds)})
@@ -44,11 +48,31 @@ def limit(db, key, maximum=10, seconds=300):
 def confirmed(request, db, user):
     sid = getattr(request.state, 'session_id', None)
     session = db.get(AccountSession, sid) if sid else None
-    if not session or not session.verified_at or session.verified_at < utc_now() - timedelta(minutes=5):
+    if (not session or session.user_id != user.id or session.revoked
+            or session.created_at <= utc_now() - timedelta(days=1)
+            or not session.verified_at or session.verified_at < utc_now() - timedelta(minutes=5)):
         raise HTTPException(428, 'Confirm your identity before this action.')
 
 
 from .index import current_user, admin_user, verify_password, hash_password
+
+
+def cancel_pending_signins(db, user_id):
+    from .google_auth import GoogleAuthState
+    db.query(GoogleAuthState).filter_by(user_id=user_id).filter(
+        GoogleAuthState.status.in_(['ready', 'pending', 'exchanging', 'processing'])
+    ).update({'status': 'cancelled', 'verifier': ''}, synchronize_session=False)
+    cancel_drive_consent(db, user_id)
+
+
+def cancel_drive_consent(db, user_id, session_id=None):
+    from .google_drive import GoogleDriveOAuthAttempt
+    query = db.query(GoogleDriveOAuthAttempt).filter_by(user_id=user_id)
+    if session_id is not None:
+        query = query.filter_by(session_id=session_id)
+    query.filter(GoogleDriveOAuthAttempt.status.in_(['pending', 'processing'])).update(
+        {'status': case((GoogleDriveOAuthAttempt.status == 'processing', 'cancelling'), else_='cancelled'),
+         'verifier': None}, synchronize_session=False)
 
 
 class PasswordIn(BaseModel):
@@ -85,6 +109,8 @@ def revoke_session(session_id: str, user=Depends(current_user), db=Depends(get_d
     row = db.query(AccountSession).filter_by(id=session_id, user_id=user.id).first()
     if not row: raise HTTPException(404, 'Session not found')
     row.revoked = True
+    db.flush()
+    cancel_drive_consent(db, user.id, session_id)
     audit(db, user.id, user.id, 'Signed out a session')
     db.commit()
 
@@ -92,6 +118,7 @@ def revoke_session(session_id: str, user=Depends(current_user), db=Depends(get_d
 @router.post('/api/account/signout-all')
 def signout_all(user=Depends(current_user), db=Depends(get_db)):
     db.query(AccountSession).filter_by(user_id=user.id).update({'revoked': True})
+    cancel_pending_signins(db, user.id)
     audit(db, user.id, user.id, 'Signed out all sessions'); db.commit()
     return {'ok': True}
 
@@ -101,7 +128,9 @@ def signout(request: Request, user=Depends(current_user), db=Depends(get_db)):
     from .workspace import count_feedback_event
     count_feedback_event(db, user.id)
     row=db.get(AccountSession,request.state.session_id)
-    row.revoked=True;db.commit()
+    row.revoked=True;db.flush()
+    cancel_drive_consent(db, user.id, row.id)
+    db.commit()
 
 
 @router.get('/api/account/activity')
@@ -137,9 +166,18 @@ def complete_reset(payload: ResetIn, db=Depends(get_db)):
     if not row or row.expires < utc_now(): raise HTTPException(400, 'Reset link expired or already used. Request another link.')
     user = db.get(User, row.user_id)
     if not user or not user.active: raise HTTPException(400, 'Account unavailable')
+    # Claim before changing credentials; row locks alone do not protect SQLite.
+    claimed = db.query(ResetToken).filter_by(digest=digest).filter(
+        ResetToken.expires > utc_now()).delete(synchronize_session=False)
+    if claimed != 1:
+        db.rollback()
+        raise HTTPException(400, 'Reset link expired or already used. Request another link.')
     user.password_hash = hash_password(payload.password)
+    # Match Drive callback lock order: credentials, then session, then consent.
+    db.flush()
     db.query(AccountSession).filter_by(user_id=user.id).update({'revoked':True})
-    db.delete(row); audit(db, user.id, user.id, 'Password reset completed'); db.commit()
+    cancel_pending_signins(db, user.id)
+    audit(db, user.id, user.id, 'Password reset completed'); db.commit()
     return {'ok':True}
 
 

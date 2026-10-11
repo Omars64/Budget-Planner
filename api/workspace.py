@@ -1,9 +1,12 @@
 """Account-scoped notes, explicit collaborator permissions, and feedback inbox."""
+import base64
+import binascii
+import re
 from datetime import datetime, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -16,6 +19,38 @@ from .data_safety import save_recovery, clear_budget, clear_notes
 import json
 
 router = APIRouter()
+
+
+NOTE_ATTACHMENT_MIMES = frozenset({
+    'image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/bmp', 'image/avif',
+    'application/pdf', 'text/plain', 'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+})
+MAX_NOTE_ATTACHMENT_BYTES = 4 * 1024 * 1024
+
+
+def validate_note_attachment(attachment_data, attachment_type, note_type='text'):
+    """Validate the URL boundary, not the contents of downloaded documents."""
+    if attachment_data is None or attachment_data == '':
+        return
+    if not isinstance(attachment_data, str) or len(attachment_data) > 6_000_000:
+        raise ValueError('Invalid attachment data URL')
+    match = re.fullmatch(r'data:([a-z0-9.+-]+/[a-z0-9.+-]+);base64,([A-Za-z0-9+/]+={0,2})',
+                         attachment_data, flags=re.IGNORECASE)
+    mime = attachment_type.lower() if isinstance(attachment_type, str) else None
+    if not match or mime not in NOTE_ATTACHMENT_MIMES or match[1].lower() != mime:
+        raise ValueError('Choose a supported base64 file attachment with a matching type')
+    if note_type == 'drawing' and mime != 'image/png':
+        raise ValueError('Drawings must use PNG attachments')
+    encoded = match[2]
+    if len(encoded) % 4:
+        raise ValueError('Invalid attachment base64')
+    try:
+        raw = base64.b64decode(encoded, validate=True)
+    except (ValueError, binascii.Error) as error:
+        raise ValueError('Invalid attachment base64') from error
+    if not raw or len(raw) > MAX_NOTE_ATTACHMENT_BYTES:
+        raise ValueError('Attachments must be smaller than 4 MB')
 
 
 class FolderIn(BaseModel):
@@ -36,6 +71,11 @@ class NoteIn(BaseModel):
     attachment_type: str | None = Field(default=None, max_length=120)
     attachment_data: str | None = Field(default=None, max_length=6000000)
     version: int = Field(default=1, ge=1)
+
+    @model_validator(mode='after')
+    def valid_attachment(self):
+        validate_note_attachment(self.attachment_data, self.attachment_type, self.note_type)
+        return self
 
 
 class ShareIn(BaseModel):

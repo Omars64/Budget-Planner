@@ -89,9 +89,11 @@ def cron_auth(request):
 @router.get('/api/maintenance/daily')
 def maintenance(request:Request,db=Depends(get_db)):
     cron_auth(request)
+    from .provider_revocation import retry_due
+    revocations = retry_due(db)
     from .planned import post_due
     posted = post_due(db)
-    result = {**daily_snapshots(db), 'scheduled_transactions_posted': posted}
+    result = {**daily_snapshots(db), 'scheduled_transactions_posted': posted, 'provider_revocations': revocations}
     from .update_push import dispatch_updates
     try:
         result['update_push'] = dispatch_updates(db)

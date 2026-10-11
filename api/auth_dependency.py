@@ -26,7 +26,8 @@ def current_user(request: Request, db: Session = Depends(get_db)) -> User:
     if not hmac.compare_digest(data.get('credential', ''), hashlib.sha256(user.password_hash.encode()).hexdigest()):
         raise HTTPException(401, 'Please sign in again')
     session = db.get(AccountSession, data.get('sid', ''))
-    if not session or session.revoked or session.user_id != user.id:
+    if (not session or session.revoked or session.user_id != user.id
+            or session.created_at <= utc_now() - timedelta(days=1)):
         raise HTTPException(401, 'Please sign in again. This session has ended.')
     request.state.session_id = session.id
     if session.label == 'Browser session' or session.last_seen < utc_now() - timedelta(minutes=5):

@@ -365,6 +365,21 @@ class BankSourceMapping(Base):
     wallet_id = Column(Integer, ForeignKey('wallets.id', ondelete='CASCADE'), nullable=False)
 
 
+class ProviderRevocationJob(Base):
+    __tablename__ = 'provider_revocation_jobs'
+    id = Column(String(64), primary_key=True)
+    # Deliberately no user FK: deletion must not cascade away retry credentials.
+    user_id = Column(Integer, nullable=False, index=True)
+    token = Column(Text, nullable=True)
+    status = Column(String(20), nullable=False, default='pending', index=True)
+    attempts = Column(Integer, nullable=False, default=0)
+    next_attempt_at = Column(DateTime, nullable=False, default=utc_now, index=True)
+    lease_id = Column(String(64), nullable=True)
+    lease_until = Column(DateTime, nullable=True)
+    error = Column(String(32), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utc_now)
+
+
 class BankMerchantMemory(Base):
     __tablename__ = 'bank_merchant_memory'
     __table_args__ = (UniqueConstraint('user_id', 'scope_key', 'merchant_key', 'kind', name='uq_bank_merchant_memory'),)

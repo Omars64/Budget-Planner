@@ -1,8 +1,8 @@
 {
   "name": "flowbudget",
   "private": true,
-  "version": "6.2.1",
-  "androidVersionCode": 73,
+  "version": "6.2.2",
+  "androidVersionCode": 74,
   "type": "module",
   "scripts": {
     "version:sync": "node scripts/version.mjs",
@@ -54,6 +54,7 @@
     "@testing-library/user-event": "^14.6.1",
     "@vitejs/plugin-react": "^6.1.1",
     "eslint": "^9.36.0",
+    "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^6.1.1",
     "eslint-plugin-react-refresh": "^0.4.22",
     "jsdom": "^27.0.0",

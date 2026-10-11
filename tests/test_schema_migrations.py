@@ -9,7 +9,7 @@ from api.database import Base
 from api.index import ensure_note_columns
 from api.schema_migrations import apply_migrations
 
-LATEST_REVISION = 'e92a671bf304'
+LATEST_REVISION = 'f43c912ab706'
 
 
 def test_new_and_existing_schemas_reach_baseline_without_losing_rows():

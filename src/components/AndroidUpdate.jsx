@@ -42,7 +42,6 @@ export default function AndroidUpdate({ authentication = false, userId, guest = 
     }, 800)
     return () => clearInterval(timer)
     // Release notes are fixed for the installed build.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authentication, guest, userId])
 
   function closeWhatsNew() {
@@ -89,7 +88,6 @@ export default function AndroidUpdate({ authentication = false, userId, guest = 
       document.removeEventListener('visibilitychange', resume)
     }
     // This component owns one update check lifecycle, independent of page navigation.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled])
 
   useEffect(() => {
@@ -109,7 +107,6 @@ export default function AndroidUpdate({ authentication = false, userId, guest = 
     }).then(listener => { if (disposed) void listener.remove(); else handle = listener }).catch(() => {})
     return () => { disposed = true; void handle?.remove() }
     // Listener owns the native update notification, not page-specific data.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [native, navigate, enabled])
 
   async function update() {

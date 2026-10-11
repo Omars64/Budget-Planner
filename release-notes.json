@@ -1,4 +1,10 @@
 {
+  "6.2.2": [
+    {"title":"Safer Drive disconnect","detail":"Pending Drive consent ends with its sign-in session. Permission-removal failures retry securely, with a clear pending state before reconnecting."},
+    {"title":"Safer account access","detail":"Password resets and signing out all devices invalidate pending Google sign-ins. Stronger one-use reset links and request limits protect account actions."},
+    {"title":"More complete recovery","detail":"Backups are checked before replacement. Space names and permissions restore consistently, with access details shown before confirmation."},
+    {"title":"Database reliability checks","detail":"Automated PostgreSQL checks now cover simultaneous recording, bank approvals and scheduled posting. Synthetic encrypted database recovery has also been verified."}
+  ],
   "6.2.1": [
     {"title":"Reliability and recovery","detail":"Stronger automated checks for Android alerts, bank capture, update safety and isolated backup recovery."},
     {"title":"Service health","detail":"Scheduler heartbeats and overdue detection help identify missed background processing. Sanitized error reports and a reload screen protect against blank pages."}

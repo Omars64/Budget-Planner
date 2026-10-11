@@ -24,6 +24,12 @@ def apply_migrations(connection, compatibility):
         for name, table in Base.metadata.tables.items():
             present = {column['name'] for column in inspector.get_columns(name)}
             missing = {column.name for column in table.columns} - present
+            # The additive Drive migration installs these after legacy baselining.
+            drive_additions = {
+                'google_drive_connections': {'generation'},
+                'google_drive_oauth_attempts': {'session_id', 'credential_digest', 'connection_generation'},
+            }
+            missing -= drive_additions.get(name, set())
             if missing:
                 raise RuntimeError(f'Cannot baseline {name}; missing columns: {sorted(missing)}')
         command.stamp(config, BASELINE_REVISION)

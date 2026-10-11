@@ -21,10 +21,10 @@ from urllib.parse import urlencode, urlsplit
 
 import httpx
 from cryptography.fernet import Fernet, InvalidToken
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import HTMLResponse, JSONResponse, Response
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, case, or_
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, Field
@@ -33,6 +33,8 @@ from .database import Base, get_db
 from .index import current_user, export_backup
 from .models import User, utc_now
 from .account_security import audit, limit
+from .reliability_models import AccountSession
+from . import provider_revocation as revocations
 
 router = APIRouter(prefix='/api/google-drive', tags=['Google Drive backups'])
 SCOPE = 'https://www.googleapis.com/auth/drive.file'
@@ -47,6 +49,7 @@ class GoogleDriveConnection(Base):
     user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
     refresh_token = Column(Text, nullable=True)
     namespace = Column(String(64), nullable=False, default=lambda: secrets.token_hex(32))
+    generation = Column(Integer, nullable=False, default=0, server_default='0')
 
 
 class GoogleDriveOAuthAttempt(Base):
@@ -58,6 +61,9 @@ class GoogleDriveOAuthAttempt(Base):
     verifier = Column(Text, nullable=True)
     expires_at = Column(DateTime, nullable=False, index=True)
     status = Column(String(20), nullable=False, default='pending')
+    session_id = Column(String(64), nullable=True)
+    credential_digest = Column(String(64), nullable=True)
+    connection_generation = Column(Integer, nullable=False, default=0, server_default='0')
 
 
 def configuration():
@@ -79,9 +85,9 @@ def private(data):
 
 async def google_request(method, url, **kwargs):
     try:
-        async with httpx.AsyncClient(timeout=30, follow_redirects=False) as client:
+        async with httpx.AsyncClient(timeout=30, follow_redirects=False, trust_env=False) as client:
             async with client.stream(method, url, **kwargs) as response:
-                if not response.is_success:
+                if not response.is_success and not (url == revocations.REVOKE_URL and response.status_code == 400):
                     raise HTTPException(502, 'Google Drive request failed; reconnect if needed')
                 data = bytearray()
                 async for chunk in response.aiter_bytes(chunk_size=65536):
@@ -111,9 +117,13 @@ def decrypt(cipher, value):
 
 
 @router.post('/start')
-def start(user: User = Depends(current_user), db: Session = Depends(get_db)):
+def start(request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
     (client_id, _, redirect_uri), cipher = configuration()
     limit(db, f'google-drive-start:{user.id}', 10, 3600)
+    sid = getattr(request.state, 'session_id', None)
+    session = db.get(AccountSession, sid) if sid else None
+    if not session or session.user_id != user.id or session.revoked or session.created_at <= utc_now()-timedelta(days=1):
+        raise HTTPException(401, 'Sign in again before connecting Drive')
     connection = db.query(GoogleDriveConnection).filter_by(user_id=user.id).with_for_update().first()
     if connection is None:
         try:
@@ -123,6 +133,14 @@ def start(user: User = Depends(current_user), db: Session = Depends(get_db)):
                 db.flush()
         except IntegrityError:
             connection = db.query(GoogleDriveConnection).filter_by(user_id=user.id).with_for_update().one()
+    db.query(GoogleDriveConnection).filter_by(user_id=user.id).update(
+        {'generation': GoogleDriveConnection.generation}, synchronize_session=False)
+    db.refresh(connection)
+    if revocations.pending(db, user.id) or db.query(GoogleDriveOAuthAttempt.id).filter_by(
+            user_id=user.id).filter(GoogleDriveOAuthAttempt.status.in_(['processing', 'cancelling']),
+            GoogleDriveOAuthAttempt.expires_at > utc_now()).first():
+        db.rollback()
+        raise HTTPException(409, 'Previous Drive authorization or revocation is still pending')
     db.query(GoogleDriveOAuthAttempt).filter(
         GoogleDriveOAuthAttempt.user_id == user.id,
         GoogleDriveOAuthAttempt.status.in_(['pending', 'processing']),
@@ -131,7 +149,9 @@ def start(user: User = Depends(current_user), db: Session = Depends(get_db)):
     attempt = GoogleDriveOAuthAttempt(id=secrets.token_hex(32), user_id=user.id,
         state_hash=hashlib.sha256(state.encode()).hexdigest(),
         poll_hash=hashlib.sha256(poll_secret.encode()).hexdigest(),
-        verifier=cipher.encrypt(verifier.encode()).decode(), expires_at=utc_now() + timedelta(minutes=10))
+        verifier=cipher.encrypt(verifier.encode()).decode(), expires_at=utc_now() + timedelta(minutes=10),
+        session_id=sid, credential_digest=hashlib.sha256(user.password_hash.encode()).hexdigest(),
+        connection_generation=connection.generation)
     db.add(attempt)
     db.commit()
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip('=')
@@ -150,7 +170,8 @@ def status(user: User = Depends(current_user), db: Session = Depends(get_db)):
         configured = True
     except HTTPException:
         configured = False
-    result = {'configured': configured, 'connected': bool(connection and connection.refresh_token)}
+    result = {'configured': configured, 'connected': bool(connection and connection.refresh_token),
+              'revocation_pending': revocations.pending(db, user.id)}
     return private(result)
 
 
@@ -168,6 +189,8 @@ def poll(payload: PollIn, user: User = Depends(current_user), db: Session = Depe
     state = 'expired' if attempt.status in ('pending', 'processing') and attempt.expires_at <= utc_now() else attempt.status
     if state == 'processing':
         state = 'pending'
+    if state == 'cancelling':
+        state = 'cancelled'
     return private({'status': state, 'connected': bool(connection and connection.refresh_token)})
 
 
@@ -179,7 +202,8 @@ def cancel(payload: PollIn, user: User = Depends(current_user), db: Session = De
     db.query(GoogleDriveConnection).filter_by(user_id=user.id).with_for_update().first()
     db.query(GoogleDriveOAuthAttempt).filter_by(id=attempt.id).filter(
         GoogleDriveOAuthAttempt.status.in_(['pending', 'processing'])).update(
-        {'status': 'cancelled', 'verifier': None}, synchronize_session=False)
+        {'status': case((GoogleDriveOAuthAttempt.status == 'processing', 'cancelling'), else_='cancelled'),
+         'verifier': None}, synchronize_session=False)
     db.commit()
     return poll(payload, user, db)
 
@@ -195,6 +219,11 @@ async def callback(state: str = Query(..., min_length=20, max_length=200),
         raise HTTPException(400, 'Invalid or expired authorization')
     attempt_id, user_id = attempt.id, attempt.user_id
     verifier = attempt.verifier
+    if not consent_session(db, attempt):
+        db.query(GoogleDriveOAuthAttempt).filter_by(id=attempt_id, status='pending').update(
+            {'status': 'cancelled', 'verifier': None}, synchronize_session=False)
+        db.commit()
+        raise HTTPException(400, 'Authorization session ended')
     claimed = db.query(GoogleDriveOAuthAttempt).filter_by(id=attempt_id, status='pending').filter(
         GoogleDriveOAuthAttempt.expires_at > utc_now()).update(
         {'status': 'processing', 'verifier': None}, synchronize_session=False)
@@ -202,61 +231,103 @@ async def callback(state: str = Query(..., min_length=20, max_length=200),
     if not claimed:
         raise HTTPException(400, 'Authorization already used')
     refresh = None
+    provider_grant = None
     if code and not error:
         try:
             tokens = object_json(await google_request('POST', TOKEN_URL, data={
                 'client_id': client_id, 'client_secret': client_secret,
                 'redirect_uri': redirect_uri, 'grant_type': 'authorization_code',
                 'code': code, 'code_verifier': decrypt(cipher, verifier)}))
+            grant = tokens.get('refresh_token') or tokens.get('access_token')
+            if isinstance(grant, str) and grant:
+                provider_grant = cipher.encrypt(grant.encode()).decode()
             # Fail closed if consent omitted Drive or silently combined sign-in scopes.
             if isinstance(tokens.get('scope'), str) and set(tokens['scope'].split()) == {SCOPE} and isinstance(tokens.get('refresh_token'), str) and tokens['refresh_token']:
-                refresh = cipher.encrypt(tokens['refresh_token'].encode()).decode()
+                refresh = provider_grant
         except HTTPException:
             pass
-    connection = db.query(GoogleDriveConnection).filter_by(user_id=user_id).with_for_update().populate_existing().first()
-    if connection is None:
-        db.rollback()
-        return HTMLResponse('<!doctype html><title>Budgetly</title><p>Authorization ended.</p>', headers=PRIVATE)
-    db.refresh(attempt)
-    owner = db.get(User, user_id)
-    if attempt.status == 'processing' and attempt.expires_at > utc_now() and owner and owner.active:
+    attempt = db.query(GoogleDriveOAuthAttempt).filter_by(id=attempt_id).populate_existing().first()
+    valid = attempt is not None and consent_session(db, attempt)
+    # Write claims serialize against signout/reset and disconnect even on SQLite.
+    connection_claim = db.query(GoogleDriveConnection).filter_by(user_id=user_id,
+        generation=attempt.connection_generation if attempt else -1).update(
+        {'generation': GoogleDriveConnection.generation}, synchronize_session=False) if valid else 0
+    claimed = db.query(GoogleDriveOAuthAttempt).filter_by(id=attempt_id, status='processing').filter(
+        GoogleDriveOAuthAttempt.expires_at > utc_now()).update(
+        {'status': 'connected' if refresh else 'failed'}, synchronize_session=False) if connection_claim and not revocations.pending(db, user_id) else 0
+    if claimed:
         if refresh:
-            connection.refresh_token = refresh
-            audit(db, owner.id, owner.id, 'Connected Google Drive backups', 'google-drive')
-        attempt.status = 'connected' if refresh else 'failed'
-        db.commit()
-    else:
-        db.rollback()
+            db.query(GoogleDriveConnection).filter_by(user_id=user_id).update(
+                {'refresh_token': refresh, 'generation': GoogleDriveConnection.generation + 1}, synchronize_session=False)
+            audit(db, user_id, user_id, 'Connected Google Drive backups', 'google-drive')
+    if provider_grant and not (claimed and refresh):
+        revocations.enqueue(db, user_id, provider_grant)
+    if not claimed:
+        db.query(GoogleDriveOAuthAttempt).filter_by(id=attempt_id).filter(
+            GoogleDriveOAuthAttempt.status.in_(['processing', 'cancelling'])).update(
+            {'status': 'cancelled', 'verifier': None}, synchronize_session=False)
+    db.commit()
     return HTMLResponse('<!doctype html><title>Budgetly</title><p>Authorization finished. Return to Budgetly to check the result.</p>',
         headers={**PRIVATE, 'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'"})
 
 
 @router.post('/disconnect')
 async def disconnect(user: User = Depends(current_user), db: Session = Depends(get_db)):
-    connection = db.query(GoogleDriveConnection).filter_by(user_id=user.id).with_for_update().first()
-    token = None
-    credential_error = None
+    db.query(GoogleDriveConnection).filter_by(user_id=user.id).update(
+        {'generation': GoogleDriveConnection.generation + 1}, synchronize_session=False)
+    connection = db.query(GoogleDriveConnection).filter_by(user_id=user.id).with_for_update().populate_existing().first()
     if connection and connection.refresh_token:
-        try:
-            _, cipher = configuration()
-            token = decrypt(cipher, connection.refresh_token)
-        except HTTPException as exc:
-            credential_error = exc
+        revocations.enqueue(db, user.id, connection.refresh_token)
     if connection:
         connection.refresh_token = None
     db.query(GoogleDriveOAuthAttempt).filter_by(user_id=user.id).filter(
         GoogleDriveOAuthAttempt.status.in_(['pending', 'processing'])).update(
-        {'status': 'cancelled', 'verifier': None}, synchronize_session=False)
+        {'status': case((GoogleDriveOAuthAttempt.status == 'processing', 'cancelling'), else_='cancelled'),
+         'verifier': None}, synchronize_session=False)
     audit(db, user.id, user.id, 'Disconnected Google Drive backups', 'google-drive')
     db.commit()
-    if credential_error:
-        raise HTTPException(503, 'Disconnected locally; Google revocation could not be completed')
-    if token:
+    from .models import ProviderRevocationJob
+    jobs = db.query(ProviderRevocationJob.id).filter_by(user_id=user.id, status='pending').order_by(
+        ProviderRevocationJob.created_at).limit(10).all()
+    for (job_id,) in jobs:
+        db.query(ProviderRevocationJob).filter_by(id=job_id, status='pending').filter(or_(
+            ProviderRevocationJob.lease_until.is_(None), ProviderRevocationJob.lease_until <= utc_now())).update(
+            {'next_attempt_at': utc_now()}, synchronize_session=False)
+        db.commit()
+        claimed = revocations.claim(db, job_id)
+        if not claimed:
+            continue
+        lease, ciphertext = claimed
         try:
-            await google_request('POST', 'https://oauth2.googleapis.com/revoke', data={'token': token})
+            credential = revocations.token(ciphertext)
+            response = await google_request('POST', revocations.REVOKE_URL, data={'token': credential})
+            error = None if revocations.revoked(response) else 'provider_failure'
+        except ValueError:
+            error = 'credential_unreadable'
         except HTTPException:
-            raise HTTPException(502, 'Disconnected locally; Google revocation could not be completed') from None
-    return private({'connected': False})
+            error = 'provider_failure'
+        revocations.finish(db, job_id, lease, error)
+        if error:
+            raise HTTPException(503 if error == 'credential_unreadable' else 502,
+                'Disconnected locally; Google revocation is queued for retry')
+    return private({'connected': False, 'revocation_pending': revocations.pending(db, user.id)})
+
+
+def consent_session(db, attempt):
+    if not attempt.session_id or not attempt.credential_digest:
+        return False
+    # Hold these write locks until final installation/cancellation commits. Reset
+    # flushes credentials before revoking sessions, matching this lock order.
+    owner_claim = db.query(User).filter_by(id=attempt.user_id, active=True).update(
+        {'active': True}, synchronize_session=False)
+    if not owner_claim:
+        return False
+    owner = db.query(User).filter_by(id=attempt.user_id).populate_existing().one()
+    if not secrets.compare_digest(attempt.credential_digest, hashlib.sha256(owner.password_hash.encode()).hexdigest()):
+        return False
+    return db.query(AccountSession).filter_by(id=attempt.session_id, user_id=attempt.user_id, revoked=False).filter(
+        AccountSession.created_at > utc_now()-timedelta(days=1)).update(
+        {'last_seen': AccountSession.last_seen}, synchronize_session=False) == 1
 
 
 async def credentials(user, db):

@@ -48,7 +48,7 @@ def test_passkey_registration_login_replay_and_revocation(credential_origin):
             db.commit()
             assert db.get(Passkey, enc(credential_id)) is not None
         # Workbook restores must never erase or import account credentials.
-        restored = client.post('/api/backup/restore', headers=headers, json={'version':1, 'settings':{'passkey':'untrusted'}})
+        restored = client.post('/api/backup/restore', headers=headers, json={'version':1, 'settings':{'passkey':'untrusted'}, 'wallets':[], 'categories':[], 'transactions':[], 'budgets':[], 'goals':[], 'debts':[]})
         assert restored.status_code == 200, restored.text
         with SessionLocal() as db:
             assert db.query(Passkey).count() == 2

@@ -306,6 +306,12 @@ def callback(state: str, code: str = '', error: str = '', db=Depends(get_db)):
         # Keep this write lock through all side effects and the final commit.
         # A cancellation that commits first makes the claim fail, even if the
         # identity map still contains an older copy of the OAuth state.
+        if row.link_session_id:
+            # Match reset/signout ordering before locking the OAuth state.
+            db.query(User).filter_by(id=row.user_id).update(
+                {'active': User.active}, synchronize_session=False)
+            db.query(AccountSession).filter_by(id=row.link_session_id).update(
+                {'last_seen': AccountSession.last_seen}, synchronize_session=False)
         changed = db.query(GoogleAuthState).filter_by(digest=state_digest, status='exchanging').filter(
             GoogleAuthState.expires_at > utc_now()).update(
             {'status': 'processing'}, synchronize_session='fetch')
@@ -339,6 +345,7 @@ def callback(state: str, code: str = '', error: str = '', db=Depends(get_db)):
             if not user or not user.active:
                 raise HTTPException(403, 'Account unavailable')
             row.user_id, row.status = user.id, 'ready'
+            row.credential = digest(user.password_hash)
         elif db.query(User).filter(func.lower(User.email) == row.email).first():
             row.status = 'link_required'
         else:
@@ -381,6 +388,10 @@ def session_result(db, row, expected):
     if not user or not user.active:
         db.rollback()
         raise HTTPException(403, 'Account unavailable')
+    if expected == 'ready' and (not row.credential or not hmac.compare_digest(
+            row.credential, digest(user.password_hash))):
+        db.rollback()
+        raise HTTPException(400, 'Account credentials changed; start Google sign-in again')
     sid = secrets.token_urlsafe(32)
     db.add(AccountSession(id=sid, user_id=user.id, verified_at=None))
     from .workspace import count_feedback_event

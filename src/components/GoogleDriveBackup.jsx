@@ -122,15 +122,23 @@ export default function GoogleDriveBackup() {
   const disconnect = () => act('disconnect', async signal => {
     if (!await confirm('Disconnect Google Drive? Existing backups in Drive will be kept.')) return
     if (signal.aborted || !mounted.current) return
-    await api(`${base}/disconnect`, { method: 'POST', signal })
+    let result
+    try { result = await api(`${base}/disconnect`, { method: 'POST', signal }) }
+    catch (failure) {
+      if (!signal.aborted && mounted.current) {
+        try { await load(signal) } catch { /* Keep the original operation error. */ }
+      }
+      throw failure
+    }
     if (signal.aborted || !mounted.current) return
     await load(signal)
-    if (!signal.aborted && mounted.current) setMessage('Google Drive disconnected.')
+    if (!signal.aborted && mounted.current) setMessage(result.revocation_pending ? 'Drive is disconnected locally. Google permission removal will retry automatically.' : 'Google Drive disconnected.')
   })
 
   const configured = status?.configured !== false
   const connected = Boolean(status?.connected)
-  const stateLabel = !status ? 'Connection not checked' : !configured ? 'Not configured' : connected ? 'Connected' : 'Disconnected'
+  const revocationPending = Boolean(status?.revocation_pending)
+  const stateLabel = !status ? 'Connection not checked' : !configured ? 'Not configured' : connected ? 'Connected' : revocationPending ? 'Permission removal pending' : 'Disconnected'
 
   return <>
     <details className="ledger-disclosure" onToggle={event => setExpanded(event.currentTarget.open)}>
@@ -146,7 +154,9 @@ export default function GoogleDriveBackup() {
         <div role="status" aria-live="polite">
           {busy === 'connect' ? <p className="muted">Waiting for Google authorization...</p> : busy === 'reload' ? <p className="muted">Checking Google Drive...</p> : message && <p className="muted">{message}</p>}
         </div>
-        {busy === 'connect' ? <button type="button" className="button ghost self-start" onClick={cancel}><X size={18}/>Cancel waiting</button> : status && configured && !connected && <button type="button" className="button ghost self-start" disabled={Boolean(busy)} onClick={connect}><ExternalLink size={18}/>Connect Google Drive</button>}
+        {revocationPending && <p className="muted">Your backups remain in Drive. Reconnect after Google permission removal completes; Budgetly retries automatically.</p>}
+        {busy === 'connect' ? <button type="button" className="button ghost self-start" onClick={cancel}><X size={18}/>Cancel waiting</button> : status && configured && !connected && !revocationPending && <button type="button" className="button ghost self-start" disabled={Boolean(busy)} onClick={connect}><ExternalLink size={18}/>Connect Google Drive</button>}
+        {revocationPending && <button type="button" className="button ghost self-start" disabled={Boolean(busy)} onClick={disconnect}><RefreshCw size={18}/>Retry permission removal</button>}
         {connected && <>
           <div className="button-row">
             <button type="button" className="button primary" disabled={Boolean(busy)} onClick={backup}><Upload size={18}/>{busy === 'backup' ? 'Saving backup...' : 'Back up now'}</button>

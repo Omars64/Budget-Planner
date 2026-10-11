@@ -23,6 +23,33 @@ const expand = () => {
   return view
 }
 
+test('pending permission removal blocks reconnect and supports a confirmed retry', async () => {
+  mocks.confirm.mockResolvedValue(true)
+  mocks.api.mockResolvedValue({configured:true,connected:false,revocation_pending:true})
+  expand()
+  expect(await screen.findByText('Permission removal pending')).toBeInTheDocument()
+  expect(screen.queryByRole('button',{name:'Connect Google Drive'})).toBeNull()
+  fireEvent.click(screen.getByRole('button',{name:'Retry permission removal'}))
+  await waitFor(()=>expect(mocks.api).toHaveBeenCalledWith('/api/google-drive/disconnect',expect.objectContaining({method:'POST'})))
+  expect(await screen.findByText('Drive is disconnected locally. Google permission removal will retry automatically.')).toBeInTheDocument()
+  expect(mocks.reserve).not.toHaveBeenCalled()
+})
+
+test('a failed remote disconnect refreshes the locally disconnected state', async () => {
+  let pending = false
+  mocks.confirm.mockResolvedValue(true)
+  mocks.api.mockImplementation(async path => {
+    if (path.endsWith('/disconnect')) { pending = true; throw new Error('Disconnected locally; Google revocation is queued for retry') }
+    if (path.endsWith('/status')) return {configured:true,connected:!pending,revocation_pending:pending}
+    return {files:[]}
+  })
+  expand()
+  fireEvent.click(await screen.findByRole('button',{name:'Disconnect',exact:true}))
+  expect(await screen.findByText('Permission removal pending')).toBeInTheDocument()
+  expect(screen.queryByRole('button',{name:'Connect Google Drive'})).toBeNull()
+  expect(screen.getByRole('button',{name:'Retry permission removal'})).toBeInTheDocument()
+})
+
 test('loads only when expanded and prevents connecting when configuration is unavailable', async () => {
   mocks.api.mockResolvedValue({ configured: false, connected: false })
   const view = render(<GoogleDriveBackup/> )

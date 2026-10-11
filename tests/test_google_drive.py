@@ -15,6 +15,7 @@ from sqlalchemy.pool import StaticPool
 from api import google_drive as drive
 from api.database import Base, get_db
 from api.models import User, utc_now
+from api.reliability_models import AccountSession
 
 
 @pytest.fixture
@@ -33,12 +34,15 @@ def setup(monkeypatch):
     db.add_all([User(id=1, username='one', email='one@test.local', password_hash='unused'),
                 User(id=2, username='two', email='two@test.local', password_hash='unused')])
     db.commit()
+    db.add_all([AccountSession(id='drive-session-one', user_id=1), AccountSession(id='drive-session-two', user_id=2)])
+    db.commit()
     app = FastAPI()
     app.include_router(drive.router)
     def user(request: Request):
         token = request.headers.get('Authorization')
         if token not in ('Bearer one', 'Bearer two'):
             raise HTTPException(401, 'Sign in')
+        request.state.session_id = 'drive-session-one' if token == 'Bearer one' else 'drive-session-two'
         return db.get(User, 1 if token == 'Bearer one' else 2)
     app.dependency_overrides[drive.current_user] = user
     app.dependency_overrides[get_db] = lambda: db
@@ -126,7 +130,7 @@ def test_expiry_denial_cancellation_and_disconnect(setup):
     assert client.post('/api/google-drive/poll', headers=HEADERS, json={k: flow[k] for k in ('flow_id', 'poll_secret')}).json()['status'] == 'failed'
     connect(client)
     _, state = start(client)
-    assert client.post('/api/google-drive/disconnect', headers=HEADERS).json() == {'connected': False}
+    assert client.post('/api/google-drive/disconnect', headers=HEADERS).json() == {'connected': False, 'revocation_pending': False}
     assert db.get(drive.GoogleDriveConnection, 1).refresh_token is None
     assert client.get('/api/google-drive/callback', params={'state': state, 'code': 'code'}).status_code == 400
     assert client.post('/api/google-drive/backup', headers=HEADERS).status_code == 409
@@ -165,7 +169,7 @@ def test_upload_export_is_user_scoped(setup):
 
 def test_status_configuration_cancel_and_rate_limit(setup, monkeypatch):
     client, db, _, requests, _ = setup
-    assert client.get('/api/google-drive/status', headers=HEADERS).json() == {'configured': True, 'connected': False}
+    assert client.get('/api/google-drive/status', headers=HEADERS).json() == {'configured': True, 'connected': False, 'revocation_pending': False}
     flow, state = start(client)
     body = {k: flow[k] for k in ('flow_id', 'poll_secret')}
     assert client.post('/api/google-drive/cancel', headers=OTHER, json=body).status_code == 404

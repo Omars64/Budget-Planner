@@ -1,7 +1,7 @@
 import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowLeft, RefreshCw, Sparkles } from 'lucide-react'
+import { ArrowLeft, RefreshCw } from 'lucide-react'
 import { api, auth, flushOfflineTransactions, jsonBody } from './lib/api'
 import {installMoneyInputDefaults} from './lib/moneyInputs'
 import { rememberOfflineSession, restoreOfflineSession, setOfflineUser } from './lib/offlineSync'

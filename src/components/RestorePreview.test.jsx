@@ -23,3 +23,10 @@ test('cancel does not restore records', () => {
   expect(close).toHaveBeenCalledOnce()
   expect(restore).not.toHaveBeenCalled()
 })
+
+test('discloses archived member access before restoration', () => {
+  render(<RestorePreview preview={{...preview,data:{version:1,spaces:[{id:1,name:'Home',members:[{email:'member@example.test',role:'view'}]}]}}} onClose={vi.fn()} onRestore={vi.fn()}/>)
+  expect(screen.getByText(/Previously removed members may regain access/)).toBeInTheDocument()
+  expect(screen.getByText(/member@example.test/)).toHaveTextContent('view')
+  expect(screen.getByRole('button',{name:'Replace workspace'})).toBeDisabled()
+})

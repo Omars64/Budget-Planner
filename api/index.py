@@ -1228,6 +1228,8 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
     # Reject foreign IDs before replacing any account data.
     from pydantic import ValidationError
     try:
+        from .backup_validation import validate_archive_records
+        validate_archive_records(data, BACKUP_COLLECTION_LIMITS)
         from .spaces import SpaceIn, MemberIn
         archived_spaces = {}
         for space in data.get('spaces', []):
@@ -1302,9 +1304,14 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
         if not space:
             space = Space(owner_id=user.id, **space_data.model_dump())
             db.add(space); db.flush()
-            for member in members:
-                account = db.query(User).filter_by(email=member.email).first()
-                db.add(SpaceMember(space_id=space.id, member_user_id=account.id if account else None, **member.model_dump()))
+        else:
+            for key, value in space_data.model_dump().items():
+                setattr(space, key, value)
+            db.query(SpaceMember).filter_by(space_id=space.id).delete(synchronize_session=False)
+            db.flush()
+        for member in members:
+            account = db.query(User).filter_by(email=member.email, active=True).first()
+            db.add(SpaceMember(space_id=space.id, member_user_id=account.id if account else None, **member.model_dump()))
         space_map[original_id] = space.id
     for collection in ('wallets', 'categories', 'budgets', 'goals', 'debts', 'notes', 'note_folders'):
         for item in data.get(collection, []):
