@@ -12,6 +12,7 @@ from .index import current_user, admin_user
 from .models import User, RecoveryPoint, utc_now
 from .reliability_models import ServiceEvent, RateBucket
 from .data_safety import save_recovery
+from .monitoring import job_status
 
 router=APIRouter()
 
@@ -69,9 +70,9 @@ def daily_snapshots(db):
     if external_backup_ready():
         try:
             external = external_snapshots(db)
-        except Exception:
+        except Exception as error:
             import logging
-            logging.getLogger('flowbudget').exception('External backup failed')
+            logging.getLogger('flowbudget').error('External backup failed: %s', type(error).__name__)
             db.rollback()
             db.add(ServiceEvent(area='external-backup', status=500))
             db.commit()
@@ -109,12 +110,19 @@ def scheduled_transactions(request: Request, db=Depends(get_db)):
     from .models import PlannedTransaction
     from .timekeeping import now as ledger_now
     # Keep frequent execution separate from backups and push dispatch.
+    from .monitoring import record_job
     posted = 0
-    for _ in range(10):
-        batch = post_due(db)
-        posted += batch
-        if not db.query(PlannedTransaction.id).filter(PlannedTransaction.status == 'scheduled', PlannedTransaction.due_at <= ledger_now()).first():
-            break
+    try:
+        for _ in range(10):
+            batch = post_due(db)
+            posted += batch
+            if not db.query(PlannedTransaction.id).filter(PlannedTransaction.status == 'scheduled', PlannedTransaction.due_at <= ledger_now()).first():
+                break
+        record_job(db, 'scheduler-heartbeat', 200)
+    except Exception:
+        db.rollback()
+        record_job(db, 'scheduler-heartbeat', 503)
+        raise HTTPException(503, 'Scheduled processing failed; previously posted entries remain protected against duplicates') from None
     if posted:
         db.add(ServiceEvent(area='scheduled-transactions', status=200))
         db.commit()
@@ -123,6 +131,7 @@ def scheduled_transactions(request: Request, db=Depends(get_db)):
         delivery = dispatch_scheduled(db)
     except Exception:
         db.rollback()
+        record_job(db, 'scheduled-notification-delivery', 503)
         delivery = {'failed': True}
     return {'ok': True, 'scheduled_transactions_posted': posted, 'notifications': delivery}
 
@@ -160,4 +169,4 @@ def operations(user=Depends(admin_user),db=Depends(get_db)):
     events=db.query(ServiceEvent).order_by(ServiceEvent.id.desc()).limit(100).all()
     backup=db.query(ServiceEvent).filter_by(area='daily-recovery',status=200).order_by(ServiceEvent.id.desc()).first()
     external=db.query(ServiceEvent).filter_by(area='external-backup',status=200).order_by(ServiceEvent.id.desc()).first()
-    return {'database':'connected','database_engine':engine.dialect.name,'persistent_storage':not IS_EPHEMERAL_VERCEL_SQLITE,'email_configured':smtp_status().get('configured',False),'daily_job_configured':bool(os.getenv('CRON_SECRET')),'external_backup_configured':external_backup_ready(),'last_daily_backup':backup.created_at.isoformat()+'Z' if backup else None,'last_external_backup':external.created_at.isoformat()+'Z' if external else None,'events':[{'id':r.id,'area':r.area,'status':r.status,'duration_ms':r.duration_ms,'created_at':r.created_at.isoformat()+'Z'} for r in events]}
+    return {'jobs':job_status(db),'database':'connected','database_engine':engine.dialect.name,'persistent_storage':not IS_EPHEMERAL_VERCEL_SQLITE,'email_configured':smtp_status().get('configured',False),'daily_job_configured':bool(os.getenv('CRON_SECRET')),'external_backup_configured':external_backup_ready(),'last_daily_backup':backup.created_at.isoformat()+'Z' if backup else None,'last_external_backup':external.created_at.isoformat()+'Z' if external else None,'events':[{'id':r.id,'area':r.area,'status':r.status,'duration_ms':r.duration_ms,'created_at':r.created_at.isoformat()+'Z'} for r in events]}

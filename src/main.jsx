@@ -34,17 +34,23 @@ import './google.css'
 import './app-updates.css'
 import './guest.css'
 import './ux-refinements.css'
+import './shell-layout.css'
+import './overview-layout.css'
 import './layout-polish.css'
+import AppErrorBoundary from './components/AppErrorBoundary'
+import { installClientDiagnostics } from './lib/diagnostics'
 
 applyAppearance(readDeviceAppearance())
 const removeNumberWheelGuard=installNumberWheelGuard()
+const removeClientDiagnostics=installClientDiagnostics()
+if(import.meta.hot)import.meta.hot.dispose(removeClientDiagnostics)
 if(import.meta.hot)import.meta.hot.dispose(removeNumberWheelGuard)
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <MotionPreferences><HashRouter>
+    <AppErrorBoundary><MotionPreferences><HashRouter>
       {window.location.pathname === '/download' || window.location.pathname === '/download/' ? <DownloadApp/> : <App />}
-    </HashRouter></MotionPreferences>
+    </HashRouter></MotionPreferences></AppErrorBoundary>
   </React.StrictMode>,
 )
 

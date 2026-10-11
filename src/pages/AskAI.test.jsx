@@ -48,3 +48,27 @@ it('creates a group with a saved memory preference and offers it for new chats',
   fireEvent.click(screen.getByRole('button', { name: 'New conversation' }))
   expect(screen.getByLabelText('Group')).toHaveValue('group-1')
 })
+
+it('selects history, clears the composer, loads older chats and closes mobile history', async () => {
+  window.matchMedia = vi.fn(() => ({ matches: true }))
+  const item = { id: 'chat-1', title: 'Monthly spending', scope: 'personal', month: '2026-10', accessible: true }
+  api.mockImplementation(path => Promise.resolve(
+    path === '/api/ai/config' ? { wallets: [], shared_wallets: [] }
+      : path === '/api/ai/groups' ? { items: [] }
+        : path === '/api/ai/chats/chat-1' ? { ...item, turns: [{ id: 'turn-1', question: 'Where did it go?', answer: 'Saved answer', sources: [], created_at: '2026-10-01T10:00:00Z', status: 'completed' }] }
+          : { items: [item], has_more: true }
+  ))
+  const { container } = render(<MemoryRouter><AskAI/></MemoryRouter>)
+  await screen.findByText('Monthly spending')
+  fireEvent.click(screen.getByText('Older conversations'))
+  await waitFor(() => expect(api).toHaveBeenCalledWith('/api/ai/chats?offset=1'))
+  fireEvent.change(screen.getByLabelText('Message Ask Budgetly'), { target: { value: 'Unsent text' } })
+  fireEvent.click(screen.getByLabelText('Toggle conversations'))
+  expect(container.querySelector('.ai-workspace')).toHaveClass('history-mobile-open')
+  fireEvent.click(screen.getByText('Monthly spending'))
+  await screen.findByText('Saved answer')
+  expect(screen.getByLabelText('Message Ask Budgetly')).toHaveValue('')
+  expect(container.querySelector('.ai-workspace')).not.toHaveClass('history-mobile-open')
+  expect(container.querySelector('.ai-history-item')).toHaveClass('selected')
+  expect(window.localStorage.getItem('budgetly-chat-history-collapsed')).toBeNull()
+})

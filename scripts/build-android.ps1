@@ -21,6 +21,8 @@ Push-Location $projectRoot
 try {
     & npm.cmd run android:sync
     if ($LASTEXITCODE -ne 0) { throw 'Web build or Android sync failed.' }
+    & ./android/gradlew.bat -p android :app:testDebugUnitTest --no-daemon
+    if ($LASTEXITCODE -ne 0) { throw 'Android JVM tests failed; assembly stopped.' }
     if ($Release) {
         $signingDir = Join-Path $projectRoot '.android-signing'
         $keyFile = Join-Path $signingDir 'flowbudget-upload.p12'

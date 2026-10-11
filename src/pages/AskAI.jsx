@@ -1,65 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowUp, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Globe, LoaderCircle, MessageCircle, NotebookPen, Pencil, Plus, RefreshCw, Settings2, Sparkles, Square, ThumbsDown, ThumbsUp, Trash2, X } from 'lucide-react'
+import { ArrowUp, ChevronDown, Plus, Settings2, Square, X } from 'lucide-react'
 import { api, jsonBody } from '../lib/api'
 import { dateInput } from '../lib/time'
 import { useApp } from '../App'
 import Modal from '../components/Modal'
-import AIConversationGroups from '../components/AIConversationGroups'
+import AIHistory from '../components/AIHistory'
+import AIConversation from '../components/AIConversation'
 
-const prompts = [
-  'Create a roadmap to reduce my spending across categories.',
-  'Where did my money go this month?',
-  'Help me plan my savings and debt repayments.',
-  'How do I share a wallet in Budgetly?',
-]
 const human = key => key.replaceAll('_', ' ').replace(/^./, char => char.toUpperCase())
 const readable = value => value == null ? 'None' : typeof value === 'boolean' ? (value ? 'Yes' : 'No') : String(value)
-const safeUrl = value => { try { return new URL(value).protocol === 'https:' ? value : '' } catch { return '' } }
-
-function inlineText(value) {
-  const parts = String(value).split(/(\*\*[^*]+\*\*|`[^`]+`|https?:\/\/[^\s)]+)/g)
-  return parts.map((part, index) => {
-    if (part.startsWith('**') && part.endsWith('**')) return <strong key={index}>{part.slice(2, -2)}</strong>
-    if (part.startsWith('`') && part.endsWith('`')) return <code key={index}>{part.slice(1, -1)}</code>
-    if (/^https?:\/\//.test(part)) return safeUrl(part) ? <a key={index} href={part} target="_blank" rel="noopener noreferrer">{part}</a> : part
-    return <span key={index}>{part}</span>
-  })
-}
-
-function Answer({ text }) {
-  const blocks = String(text).split(/\n{2,}/).map(block => block.trim()).filter(Boolean)
-  return <div className="ai-markdown">{blocks.map((block, index) => {
-    const lines = block.split('\n').map(line => line.trim()).filter(Boolean)
-    const list = lines.length > 0 && lines.every(line => /^[-*]\s+/.test(line))
-    if (list) return <ul key={index}>{lines.map((line, item) => <li key={item}>{inlineText(line.replace(/^[-*]\s+/, ''))}</li>)}</ul>
-    const heading = lines.length === 1 && /^(#{1,4})\s+/.test(lines[0])
-    if (heading) return <h3 key={index}>{inlineText(lines[0].replace(/^#{1,4}\s+/, ''))}</h3>
-    return <p key={index}>{lines.map((line, lineIndex) => <span key={lineIndex}>{lineIndex > 0 && <br/>}{inlineText(line)}</span>)}</p>
-  })}</div>
-}
-
-function TransactionDraftCard({ draft, shared, canUse, onUse }) {
-  const details = [
-    ['Type', human(draft.type || 'transaction')],
-    ['Amount', draft.amount || 'Needs amount'],
-    ['Description', draft.description || 'No description'],
-    ['Wallet', draft.wallet_name || 'Needs wallet'],
-    [draft.type === 'transfer' ? 'To wallet' : 'Category', draft.type === 'transfer' ? (draft.transfer_wallet_name || 'Needs destination wallet') : (draft.category_name || 'Needs category')],
-    ['Date', draft.date ? new Date(`${draft.date}:00+03:00`).toLocaleString(undefined, { timeZone: 'Asia/Kuwait', dateStyle: 'medium', timeStyle: 'short' }) : 'Needs date'],
-  ]
-  return <section className="ai-proposal ai-draft" aria-label="Transaction draft">
-    <div>
-      <strong>Transaction draft</strong>
-      <small>Review every field. Nothing has been recorded.</small>
-      <dl className="ai-review-fields">{details.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
-      {draft.missing?.length > 0 && <p className="form-note">Choose {draft.missing.join(' and ')} before saving.</p>}
-      {shared && !canUse && <p className="form-note">You have view-only access to this shared wallet, so the draft cannot be saved here.</p>}
-    </div>
-    <button className="button primary small" type="button" disabled={!canUse} onClick={() => onUse(draft)}>{shared ? (canUse ? 'Review shared transaction' : 'View-only access') : 'Review in Transactions'}</button>
-  </section>
-}
-
 export default function AskAI() {
   const { user, notify, confirm, refresh } = useApp()
   const location = useLocation()
@@ -280,22 +230,13 @@ export default function AskAI() {
     setContext(current => ({ ...current, group_id: id }))
     if (reload) { void loadChats().catch(err => notify(err.message, 'error')); if (chatId) void loadChat(chatId).catch(err => setError(err.message)) }
   }
-  const historyList = <div className="ai-chat-list">
-    <AIConversationGroups groups={groups} onGroups={setGroups} selected={selectedGroup} onSelect={selectGroup} disabled={acting || pending}/>
-    {!chats.length && <p className="muted">No saved conversations yet.</p>}
-    {selectedGroup && !chats.some(item => item.group_id === selectedGroup) && <p className="muted small">No conversations loaded in this group.</p>}
-    {chats.filter(item => !selectedGroup || item.group_id === selectedGroup).map(item => <div key={item.id} className={`ai-history-item ${chatId === item.id ? 'selected' : ''}`}>
-      <button disabled={!item.accessible || sending} onClick={() => { setParams({ chat: item.id }); setQuestion(''); requestRef.current = null }}><MessageCircle size={16}/><span>{item.title}<small>{item.scope === 'general' ? 'General & economy' : item.scope === 'shared' ? 'Shared wallet' : 'Personal'} · {item.month}</small></span></button>
-      <div className="ai-history-actions"><button className="icon-button" title="Edit conversation" aria-label={'Rename ' + item.title} disabled={acting || pending || !item.accessible} onClick={() => setRename({ ...item })}><Pencil size={14}/></button><button className="icon-button danger" title="Delete conversation" aria-label={'Delete ' + item.title} disabled={acting} onClick={() => removeChat(item)}><Trash2 size={14}/></button></div>
-    </div>)}
-    {hasChats && <button className="button ghost" onClick={() => loadChats(chats.length).catch(err => notify(err.message, 'error'))}>Older conversations</button>}
-  </div>
+
 
   return <section className={`ai-workspace ${historyCollapsed ? 'history-collapsed' : ''} ${historyOpen ? 'history-mobile-open' : ''}`} aria-label="Ask Budgetly workspace">
     {historyOpen && (
       <button className="ai-history-scrim" aria-label="Close conversations" onClick={() => setHistoryOpen(false)}/>
     )}
-    <aside className="ai-history" id="conversation-history"><div className="ai-history-head"><h3>Conversations</h3><button className="icon-button ai-history-toggle" title={historyCollapsed ? 'Expand conversations' : 'Collapse conversations'} aria-label="Toggle conversations" aria-expanded={!historyCollapsed || historyOpen} aria-controls="conversation-history" onClick={toggleHistory}>{historyCollapsed ? <ChevronRight size={22}/> : <ChevronLeft size={22}/>}</button></div>{historyList}</aside>
+    <AIHistory chats={chats} groups={groups} onGroups={setGroups} selectedGroup={selectedGroup} onSelectGroup={selectGroup} chatId={chatId} acting={acting} pending={pending} sending={sending} hasChats={hasChats} historyCollapsed={historyCollapsed} historyOpen={historyOpen} onToggle={toggleHistory} onSelectChat={id => { setParams({ chat: id }); setQuestion(''); requestRef.current = null }} onRename={setRename} onRemove={removeChat} onLoadMore={() => loadChats(chats.length).catch(err => notify(err.message, 'error'))}/>
     <div className="ai-chat-main">
       <div className="ai-chat-toolbar">
         {chat?.group_id && <span className="ai-current-group">{groups.find(group => group.id === chat.group_id)?.name}</span>}
@@ -303,27 +244,7 @@ export default function AskAI() {
         <span className="ai-mode">{config?.ai_available ? 'AI enabled by admin' : 'Built-in guide'}</span>
         <button className="icon-button" title="New conversation" aria-label="New conversation" disabled={pending} onClick={() => setContextOpen(true)}><Plus size={21}/></button>
       </div>
-      <div className="ai-messages" ref={messages} role="log" aria-label="Conversation" aria-live="polite" aria-relevant="additions">
-        {loading && <p role="status"><LoaderCircle size={17} className="ai-spinner"/> Loading conversation...</p>}
-        {!loading && !chat?.turns?.length && <div className="ai-welcome"><Sparkles size={29}/><h2>What would you like to figure out?</h2><div className="ai-welcome-prompts">{prompts.map(text => <button key={text} onClick={() => { setQuestion(text); composer.current?.focus() }}>{text}<ArrowUp size={16}/></button>)}</div></div>}
-        {chat?.has_more && <button className="button ghost small" onClick={async () => { try { const data = await api(`/api/ai/chats/${chatId}?before=${chat.turns[0].id}`); setChat(current => ({ ...current, turns: [...data.turns, ...current.turns], has_more: data.has_more })) } catch (err) { setError(err.message) } }}>Earlier messages</button>}
-        {chat?.turns?.map(turn => <article className="ai-turn" key={turn.id}>
-          <p className="ai-user-message" dir="auto">{turn.question}</p>
-          <div className="ai-answer">
-             <div className="ai-answer-label"><Sparkles size={15}/><strong>{turn.provider && turn.provider !== 'built-in' ? 'Budgetly · AI' : 'Budgetly'}</strong><time dateTime={turn.created_at}>{new Date(turn.created_at).toLocaleString(undefined, { timeZone: 'Asia/Kuwait', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</time></div>
-            {turn.notice && <p className="ai-response-notice">{turn.notice}</p>}
-            {turn.status === 'pending' && <p className="ai-thinking" role="status"><LoaderCircle className="ai-spinner" size={17}/>Working on your question...</p>}
-            {['failed', 'stopped'].includes(turn.status) && <div className="ai-answer-error"><p>{turn.error || 'Response stopped. Your question is saved.'}</p><button className="button ghost small" disabled={pending} onClick={event => send(event, turn.id)}><RefreshCw size={16}/>Retry</button></div>}
-            {turn.answer && <><Answer text={turn.answer}/>
-              {turn.drafts?.map((draft, index) => <TransactionDraftCard key={`${turn.id}-draft-${index}`} draft={draft} shared={selectedScope === 'shared'} canUse={selectedScope !== 'shared' || ['add', 'edit'].includes(wallets?.find(wallet => wallet.id === Number(selectedWallet))?.permission)} onUse={useDraft}/>)}
-              {!!turn.sources.length && <details className="ai-sources"><summary>Sources & records ({turn.sources.length})</summary>{turn.sources.map(ref => ref.url ? <a key={ref.key} href={safeUrl(ref.url)} target="_blank" rel="noopener noreferrer"><Globe size={14}/>{ref.label}</a> : <button key={ref.key} onClick={() => openSource(ref)}>{ref.label}</button>)}</details>}
-              <div className="ai-answer-tools"><button className="icon-button" title="Copy answer" aria-label="Copy answer" onClick={async () => { try { await globalThis.navigator.clipboard.writeText(turn.answer); notify('Answer copied') } catch { notify('Clipboard is unavailable on this device.', 'error') } }}><Copy size={16}/></button><button className="icon-button" title={turn.note_id ? 'Saved to Notes' : 'Save to Notes'} aria-label="Save answer to Notes" disabled={acting || Boolean(turn.note_id)} onClick={() => saveNote(turn)}>{turn.note_id ? <Check size={16}/> : <NotebookPen size={16}/>}</button><button className="icon-button" title="Helpful" aria-label="Helpful answer" aria-pressed={turn.feedback === 'helpful'} disabled={acting} onClick={() => feedback(turn, 'helpful')}><ThumbsUp size={16}/></button><button className="icon-button" title="Report incorrect answer" aria-label="Report incorrect answer" aria-pressed={turn.feedback === 'incorrect'} disabled={acting} onClick={() => feedback(turn, 'incorrect')}><ThumbsDown size={16}/></button></div>
-              {turn.id === lastTurn?.id && !!turn.suggestions?.length && <div className="ai-followups">{turn.suggestions.map(text => <button key={text} disabled={pending} onClick={() => { setQuestion(text); composer.current?.focus() }}>{text}</button>)}</div>}
-            </>}
-          </div>
-        </article>)}
-        {sending && !chat?.turns?.some(t => t.status === 'pending') && <p className="ai-thinking" role="status"><LoaderCircle className="ai-spinner" size={17}/>Sending your question...</p>}
-      </div>
+      <AIConversation chat={chat} loading={loading} sending={sending} pending={pending} acting={acting} selectedScope={selectedScope} selectedWallet={selectedWallet} wallets={wallets} messagesRef={messages} onPrompt={text => { setQuestion(text); composer.current?.focus() }} onEarlier={async () => { try { const data = await api(`/api/ai/chats/${chatId}?before=${chat.turns[0].id}`); setChat(current => ({ ...current, turns: [...data.turns, ...current.turns], has_more: data.has_more })) } catch (err) { setError(err.message) } }} onRetry={send} onUseDraft={useDraft} onSource={openSource} onSaveNote={saveNote} onFeedback={feedback} notify={notify}/>
       <div className="ai-composer-zone">
         {error && <p className="ai-error" role="alert">{error}<button title="Dismiss error" aria-label="Dismiss error" onClick={() => setError('')}><X size={15}/></button></p>}
         <form className="ai-composer" onSubmit={send}><textarea ref={composer} rows={1} aria-label="Message Ask Budgetly" placeholder="Ask Budgetly..." value={question} maxLength={8000} onChange={e => setQuestion(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && window.matchMedia('(min-width: 821px)').matches) { e.preventDefault(); void send(e) } }}/>{pending ? <button type="button" className="ai-send" title="Stop response" aria-label="Stop response" onClick={stop}><Square size={18}/></button> : <button className="ai-send" title="Send message" aria-label="Send message" disabled={!question.trim() || !config || loading || Boolean(chatId && !chat)}><ArrowUp size={21}/></button>}</form>

@@ -166,18 +166,25 @@ async def storage_readiness(request: Request, call_next):
     if not getattr(app.state, "storage_ready", False):
         return JSONResponse(status_code=503, content={"detail": "The service is temporarily unavailable. Please try again shortly.", "code": "STORAGE_UNAVAILABLE"}, headers={"Retry-After": "30", "Cache-Control": "no-store"})
     started=time.monotonic()
-    response = await call_next(request)
+    request_id = secrets.token_hex(8)
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        logging.getLogger('flowbudget').error('request_failure id=%s type=%s', request_id, type(exc).__name__)
+        response = JSONResponse(status_code=503 if isinstance(exc, OperationalError) else 500,
+            content={'detail':'The service is temporarily unavailable. Please try again shortly.', 'request_id':request_id})
     duration=int((time.monotonic()-started)*1000)
     if response.status_code>=500 or duration>=2000:
         from .reliability_models import ServiceEvent
-        area=re.sub(r'/\d+(?=/|$)','/:id',request.url.path)[:100]
-        logging.getLogger('flowbudget').warning('request path=%s status=%d duration_ms=%d',area,response.status_code,duration)
+        area=getattr(request.scope.get('route'), 'path', '/unmatched')[:100]
+        logging.getLogger('flowbudget').warning('request id=%s route=%s status=%d duration_ms=%d',request_id,area,response.status_code,duration)
         try:
             with SessionLocal() as events:
                 events.add(ServiceEvent(area=area,status=response.status_code,duration_ms=duration));events.commit()
         except Exception:
             logging.getLogger('flowbudget').warning('Operational event could not be stored')
     response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Request-ID"] = request_id
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "same-origin"
     return response

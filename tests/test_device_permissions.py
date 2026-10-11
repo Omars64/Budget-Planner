@@ -30,9 +30,9 @@ def test_native_app_has_no_sms_capture_and_only_explicit_notification_access():
     assert 'requestPermission' not in plugin
     assert '.remove(' not in plugin and '.clear(' not in plugin
 
-def test_site_denies_capture_and_framing_but_allows_first_party_passkeys():
+def test_site_limits_capture_to_first_party_and_denies_framing():
     config = json.loads((ROOT / 'vercel.json').read_text())
     headers = {h['key']:h['value'] for h in config['headers'][0]['headers']}
     assert headers['X-Frame-Options'] == 'DENY'
-    for directive in ['camera=()', 'microphone=()', 'display-capture=()', 'otp-credentials=()', 'publickey-credentials-create=(self)', 'publickey-credentials-get=(self)']:
+    for directive in ['camera=(self)', 'microphone=(self)', 'display-capture=()', 'otp-credentials=()', 'publickey-credentials-create=(self)', 'publickey-credentials-get=(self)']:
         assert directive in headers['Permissions-Policy']

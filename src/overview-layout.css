@@ -1,0 +1,15 @@
+/* Final Overview spacing; shared planner summary keeps its own mobile inset. */
+.budgetly-v2 .overview-page { --overview-inset:24px; }
+.budgetly-v2 .overview-disclosure>summary { padding:16px var(--overview-inset); }
+.budgetly-v2 .overview-shortcuts { padding:16px var(--overview-inset); }
+.budgetly-v2 :is(.overview-attention-link,.planner-summary) { padding:18px var(--overview-inset,24px); }
+.budgetly-v2 .page-wrap .overview-page { border-radius:8px; overflow:clip; }
+.budgetly-v2 .overview-recent .ledger-entry { padding-left:16px; padding-right:16px; }
+.budgetly-v2 .weekly-summary>.weekly-totals { padding:16px var(--overview-inset); }
+.budgetly-v2 .weekly-summary>.weekly-action { padding:12px var(--overview-inset); }
+.budgetly-v2 .weekly-summary>p { margin:16px var(--overview-inset); }
+.budgetly-v2 .overview-page .ai-overview-entry { padding:22px var(--overview-inset); }
+@media (max-width:820px) {
+  .budgetly-v2 .overview-page { --overview-inset:16px; }
+  .budgetly-v2 .planner-summary { padding:18px 16px; }
+}

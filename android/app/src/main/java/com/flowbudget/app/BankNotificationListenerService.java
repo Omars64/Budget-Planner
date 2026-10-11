@@ -14,7 +14,9 @@ import java.util.concurrent.Executors;
 import java.util.regex.Pattern;
 
 public class BankNotificationListenerService extends NotificationListenerService {
-    private final ExecutorService worker = Executors.newSingleThreadExecutor();
+    private final ExecutorService worker;
+    public BankNotificationListenerService() { this(Executors.newSingleThreadExecutor()); }
+    BankNotificationListenerService(ExecutorService worker) { this.worker = worker; }
     private static final Pattern SECURITY = Pattern.compile("\\b(otp|one[- ]time|verification code|authentication code|security code|password|passcode|login attempt|do not share|pin)\\b|رمز\\s*(التحقق|التفعيل)|كلمة\\s*المرور", Pattern.CASE_INSENSITIVE);
     private static String safe(CharSequence value) {
         if (value == null) return "";

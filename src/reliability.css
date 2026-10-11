@@ -28,3 +28,5 @@
 .shared-wallet-title strong{white-space:normal;overflow-wrap:anywhere}
 @media(max-width:900px){.ledger-filter-fields{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:620px){.ledger-filters{padding:12px}.ledger-filter-fields{gap:12px 8px}.wallet-badges>span{font-size:14px}.shared-wallet-title strong{font-size:14px}.shared-wallet-title small{font-size:11px}}
+.recovery-screen { min-height:100dvh; padding:48px 24px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; text-align:center; background:var(--page); color:var(--text); }
+.recovery-screen h1 { font-size:24px; }

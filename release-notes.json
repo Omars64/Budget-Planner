@@ -1,4 +1,8 @@
 {
+  "6.2.1": [
+    {"title":"Reliability and recovery","detail":"Stronger automated checks for Android alerts, bank capture, update safety and isolated backup recovery."},
+    {"title":"Service health","detail":"Scheduler heartbeats and overdue detection help identify missed background processing. Sanitized error reports and a reload screen protect against blank pages."}
+  ],
   "6.2.0": [
     {"title":"Ask Budgetly groups","detail":"Organize conversations into groups, move existing chats, and choose General or Group-only AI context in each group's settings."},
     {"title":"Aligned and spacious layouts","detail":"The footer follows the collapsed sidebar. Overview rows have comfortable padding, Settings has rounded edges, and both sidebars use clear arrow controls."}

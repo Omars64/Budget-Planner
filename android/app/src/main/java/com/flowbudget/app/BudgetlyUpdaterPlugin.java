@@ -56,7 +56,7 @@ public class BudgetlyUpdaterPlugin extends Plugin {
         } catch (Exception error) { call.reject("Could not read the installed app version."); }
     }
 
-    private URI allowedUri(String value, boolean first) throws Exception {
+    URI allowedUri(String value, boolean first) throws Exception {
         URI uri = new URI(value);
         String host = uri.getHost();
         if (!"https".equals(uri.getScheme()) || uri.getUserInfo() != null || uri.getPort() != -1 || uri.getFragment() != null) {
@@ -114,7 +114,7 @@ public class BudgetlyUpdaterPlugin extends Plugin {
         return Build.VERSION.SDK_INT >= 28 ? PackageManager.GET_SIGNING_CERTIFICATES : PackageManager.GET_SIGNATURES;
     }
 
-    private Set<String> signers(PackageInfo info) throws Exception {
+    Set<String> signers(PackageInfo info) throws Exception {
         if (info == null) throw new Exception("APK signing information is missing.");
         Signature[] signatures = Build.VERSION.SDK_INT >= 28 && info.signingInfo != null ? info.signingInfo.getApkContentsSigners() : info.signatures;
         if (signatures == null) throw new Exception("APK signing information is missing.");
@@ -128,6 +128,10 @@ public class BudgetlyUpdaterPlugin extends Plugin {
         PackageManager manager = getContext().getPackageManager();
         PackageInfo installed = manager.getPackageInfo(getContext().getPackageName(), signingFlags());
         PackageInfo candidate = manager.getPackageArchiveInfo(apk.getAbsolutePath(), signingFlags());
+        verifyIdentity(installed, candidate, version);
+    }
+
+    void verifyIdentity(PackageInfo installed, PackageInfo candidate, long version) throws Exception {
         if (candidate == null || !installed.packageName.equals(candidate.packageName) ||
                 versionCode(candidate) != version || versionCode(candidate) <= versionCode(installed) ||
                 !signers(installed).equals(signers(candidate))) {
