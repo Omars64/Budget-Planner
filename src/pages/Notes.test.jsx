@@ -1,13 +1,14 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import Notes from './Notes'
 import { api } from '../lib/api'
 
-const state=vi.hoisted(()=>({notify:vi.fn()}))
-vi.mock('../App', () => ({ useApp: () => ({ user: { id: 901 }, notify: state.notify, confirm: vi.fn(async () => true) }) }))
+const state=vi.hoisted(()=>({notify:vi.fn(), activeSpace:null}))
+vi.mock('../App', () => ({ useApp: () => ({ user: { id: 901 }, activeSpace: state.activeSpace, notify: state.notify, confirm: vi.fn(async () => true) }) }))
 vi.mock('../lib/api', () => ({ api: vi.fn(), jsonBody: value => ({ body: JSON.stringify(value) }) }))
 let note
 beforeEach(() => {
+  state.activeSpace = null
   note = { id: 1, title: 'Plan', content: 'Original content', is_owner: true, can_edit: true, version: 1, note_type: 'text', page_style: 'plain', shares: [] }
   sessionStorage.clear()
   localStorage.clear()
@@ -30,6 +31,36 @@ it('undoes a note move without discarding content edits', async () => {
   expect(screen.getByLabelText('Note content')).toHaveValue('Keep this edit')
 })
 afterEach(() => { cleanup(); vi.clearAllMocks() })
+
+it('opens a folder drawer, selects a folder and closes without changing saved notes', async () => {
+  render(<Notes/> )
+  await screen.findByText('Plan')
+  fireEvent.click(screen.getByRole('button', { name: 'Folders', exact: true }))
+  const drawer = await screen.findByRole('dialog', { name: 'Folders' })
+  fireEvent.click(within(drawer).getByRole('button', { name: 'Personal 0' }))
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Folders', exact: true })).toHaveAttribute('aria-expanded', 'false'))
+  expect(screen.getByRole('heading', { name: 'Personal 0' })).toBeInTheDocument()
+  expect(screen.getByText('No notes here yet')).toBeInTheDocument()
+  expect(api.mock.calls.some(([, options]) => options?.method)).toBe(false)
+})
+
+it('distinguishes no search results and clears the query without losing the folder', async () => {
+  render(<Notes/> )
+  await screen.findByText('Plan')
+  fireEvent.change(screen.getByRole('textbox', { name: 'Search notes' }), { target: { value: 'no match here' } })
+  expect(screen.getByText('No matching notes')).toBeInTheDocument()
+  fireEvent.click(screen.getAllByRole('button', { name: 'Clear search' })[0])
+  expect(screen.getByText('Plan')).toBeInTheDocument()
+})
+
+it('shows scoped Space notes to a member without treating ownership as visibility', async () => {
+  state.activeSpace = { id: 77 }
+  note = { ...note, is_owner: false, folder_id: 2 }
+  render(<Notes/> )
+  await screen.findByText('Plan')
+  expect(screen.getByRole('heading', { name: 'All notes 1' })).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /Shared notes/ })).not.toBeInTheDocument()
+})
 
 it('keeps secondary controls collapsed, exposes accessible icon tools and autosaves settings with content', async () => {
   render(<Notes/> )

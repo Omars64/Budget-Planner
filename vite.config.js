@@ -48,6 +48,7 @@ export default defineConfig({
     },
   },
   test: {
+    include: ['src/**/*.test.{js,jsx,ts,tsx}'],
     maxWorkers: 2,
     environment: 'jsdom',
     setupFiles: './src/testSetup.js',

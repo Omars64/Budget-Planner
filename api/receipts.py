@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from .schemas import ReceiptIn
 from PIL import Image, UnidentifiedImageError
 from .database import get_db
-from .spaces import workspace_actor
+from .spaces import workspace_actor, establish_scope
+from .coordination import lock_record
 from .index import current_user
 from .models import Transaction, TransactionReceipt, utc_now
 from .account_security import limit
@@ -31,7 +32,7 @@ def validate_image(value):
         raise HTTPException(422,'Choose a valid JPEG, PNG or WebP receipt under 1.5 MB.')
 
 def owned(db,user,transaction_id,shared=False,write=False):
-    row=db.query(Transaction).filter_by(id=transaction_id).with_for_update().first()
+    row=lock_record(db, Transaction, transaction_id)
     if not row:raise HTTPException(404,'Transaction not found')
     if shared:
         from .extensions import shared_wallet_ids, can_edit_wallet
@@ -60,9 +61,12 @@ def receipt(transaction_id:int,request:Request,user=Depends(workspace_actor),db=
 
 @router.put('/api/transactions/{transaction_id}/receipt')
 @router.put('/api/shared/transactions/{transaction_id}/receipt')
-def save_receipt(transaction_id:int,payload:ReceiptIn,request:Request,user=Depends(workspace_actor),db=Depends(get_db)):
-    owned(db,user,transaction_id,shared=request.url.path.startswith('/api/shared/'),write=True)
+def save_receipt(transaction_id:int,payload:ReceiptIn,request:Request,user=Depends(current_user),db=Depends(get_db)):
     limit(db,f'receipt:{user.id}',30,3600)
+    # The limiter commits; rebuild permissions and acquire claims afterwards.
+    db.info.pop('space', None)
+    establish_scope(request, db, user)
+    owned(db,user,transaction_id,shared=request.url.path.startswith('/api/shared/'),write=True)
     row=store_receipt(db,transaction_id,payload)
     db.commit()
     return {'name':row.name,'image':row.image,'saved_at':row.saved_at.isoformat()}

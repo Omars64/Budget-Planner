@@ -14,12 +14,13 @@ from sqlalchemy.orm import Session, with_loader_criteria
 from .database import get_db
 from .models import Wallet, WalletShare, User, AppSetting, Transaction, PlannedTransaction, Category, Budget, Goal, Debt, Note, NoteFolder, Space, SpaceMember
 from .auth_dependency import current_user as authenticated
+from .coordination import lock_owners
 
 PALETTE = {'green': '#267d75', 'blue': '#3158aa', 'yellow': '#aa850e', 'pink': '#aa4c79', 'lime': '#66852b', 'violet': '#7956aa'}
 SCOPED = (Wallet, Category, Budget, Goal, Debt, Note, NoteFolder)
 
 
-def migrate_shared_wallets(connection):
+def migrate_shared_wallets(connection, owner_id=None):
     """Only attach original wallets; never recreate financial records or broaden grants."""
     spaces, members, wallets, shares = Space.__table__, SpaceMember.__table__, Wallet.__table__, WalletShare.__table__
     all_shares = connection.execute(shares.select().order_by(shares.c.id)).mappings().all()
@@ -27,7 +28,10 @@ def migrate_shared_wallets(connection):
     for share in all_shares:
         grouped.setdefault(share['wallet_id'], []).append(share)
     groups = {}
-    for wallet in connection.execute(wallets.select().where(wallets.c.space_id.is_(None))).mappings():
+    query = wallets.select().where(wallets.c.space_id.is_(None))
+    if owner_id is not None:
+        query = query.where(wallets.c.user_id == owner_id)
+    for wallet in connection.execute(query).mappings():
         grants = grouped.get(wallet['id'], [])
         if not grants:
             continue
@@ -52,7 +56,7 @@ def migrate_shared_wallets(connection):
 def member_role(db, space, user):
     if space.owner_id == user.id:
         return 'owner'
-    member = db.query(SpaceMember).filter(SpaceMember.space_id == space.id, or_(SpaceMember.member_user_id == user.id, SpaceMember.email == user.email.lower())).first()
+    member = db.query(SpaceMember).filter(SpaceMember.space_id == space.id, or_(SpaceMember.member_user_id == user.id, SpaceMember.email == user.email.lower())).populate_existing().first()
     if not member:
         raise HTTPException(403, 'You no longer have access to this space.')
     return member.role
@@ -60,22 +64,34 @@ def member_role(db, space, user):
 
 def establish_scope(request, db, actor):
     raw = request.query_params.get('space_id')
+    writing = request.method not in {'GET', 'HEAD', 'OPTIONS'} and request.url.path != '/api/planner/preview'
     if not raw:
         return None
+    db.info['scope_request'] = (request, actor)
     if db.info.get('space'):
         return db.info['space']
     if raw == 'personal':
+        if writing:
+            lock_owners(db, actor.id)
         wallets = [row[0] for row in db.query(Wallet.id).filter(Wallet.user_id == actor.id, Wallet.space_id.is_(None))]
         context = SimpleNamespace(id=None, owner_id=actor.id, currency=None, role='owner', actor_id=actor.id, wallet_ids=wallets, category_ids=[])
         db.info['space'] = context
+        if writing:
+            db.info['scope_authorized_transaction'] = db.get_transaction()
         return context
     try:
         space_id = int(raw)
     except ValueError:
         raise HTTPException(422, 'Invalid space')
-    space = db.get(Space, space_id)
+    space = db.query(Space).filter_by(id=space_id).populate_existing().first()
     if not space:
         raise HTTPException(404, 'Space not found')
+    if writing:
+        # Bank approval and scheduled posting also claim the actor's User row.
+        lock_owners(db, *sorted({space.owner_id, actor.id}))
+        space = db.query(Space).filter_by(id=space_id).populate_existing().first()
+        if not space:
+            raise HTTPException(404, 'Space not found')
     role = member_role(db, space, actor)
     owned = db.query(Wallet).filter_by(space_id=space.id).all()
     # Legacy clients can revoke individual wallet grants. Do not infer wider access
@@ -87,7 +103,6 @@ def establish_scope(request, db, actor):
         wallet_ids = list(grants)
         if len(wallet_ids) != len(owned) or any(s != role for s in grants.values()):
             raise HTTPException(409, 'Wallet permissions changed. Ask the owner to review this space membership.')
-    writing = request.method not in {'GET', 'HEAD', 'OPTIONS'} and request.url.path != '/api/planner/preview'
     if writing:
         path = request.url.path.rstrip('/')
         entry = path in {'/api/transactions', '/api/shared/transactions', '/api/planned-transactions'} or bool(re.fullmatch(r'/api/bank-inbox/\d+/(approve|ignore|restore)', path))
@@ -103,17 +118,24 @@ def establish_scope(request, db, actor):
     legacy_categories += [row[0] for row in db.query(PlannedTransaction.category_id).filter(PlannedTransaction.wallet_id.in_(wallet_ids), PlannedTransaction.category_id.is_not(None)).distinct()]
     context = SimpleNamespace(id=space.id, owner_id=space.owner_id, currency=space.currency, role=role, actor_id=actor.id, wallet_ids=wallet_ids, category_ids=legacy_categories)
     db.info['space'] = context
+    if writing:
+        db.info['scope_authorized_transaction'] = db.get_transaction()
     return context
 
 
 def workspace_user(request: Request, actor=Depends(authenticated), db: Session = Depends(get_db)):
     context = establish_scope(request, db, actor)
+    if not context and request.method not in {'GET', 'HEAD', 'OPTIONS'} and request.url.path != '/api/planner/preview':
+        lock_owners(db, actor.id)
     try:
         # Financial ownership remains with the space owner; authentication and audit
         # identity remain with the signed-in actor. Account routes never use this dependency.
         yield SimpleNamespace(id=context.owner_id, username=actor.username, email=actor.email, role=actor.role) if context else actor
     finally:
         db.info.pop('space', None)
+        db.info.pop('scope_request', None)
+        db.info.pop('scope_authorized_transaction', None)
+        db.info.pop('wallet_access', None)
 
 
 def workspace_actor(request: Request, actor=Depends(authenticated), db: Session = Depends(get_db)):
@@ -122,6 +144,9 @@ def workspace_actor(request: Request, actor=Depends(authenticated), db: Session 
         yield actor
     finally:
         db.info.pop('space', None)
+        db.info.pop('scope_request', None)
+        db.info.pop('scope_authorized_transaction', None)
+        db.info.pop('wallet_access', None)
 
 
 @contextmanager
@@ -224,6 +249,7 @@ def list_spaces(actor=Depends(authenticated), db: Session = Depends(get_db)):
 
 @router.post('', status_code=201)
 def create_space(payload: SpaceIn, request: Request, actor=Depends(authenticated), db: Session = Depends(get_db)):
+    lock_owners(db, actor.id)
     from .idempotency import reserve
     receipt, previous = reserve(db, actor.id, 'space', request.headers.get('Idempotency-Key'), payload)
     if previous is not None:
@@ -244,7 +270,8 @@ def create_space(payload: SpaceIn, request: Request, actor=Depends(authenticated
 
 
 def require_owner(db, space_id, actor):
-    space = db.query(Space).filter_by(id=space_id).with_for_update().first()
+    lock_owners(db, actor.id)
+    space = db.query(Space).filter_by(id=space_id).populate_existing().with_for_update().first()
     if not space or space.owner_id != actor.id:
         raise HTTPException(403, 'Only the space owner can manage this space.')
     return space

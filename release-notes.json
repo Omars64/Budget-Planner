@@ -1,4 +1,12 @@
 {
+  "6.2.4": [
+    {"title":"A clearer Notes library","detail":"A phone-friendly folder drawer keeps folders in tidy rows, with counts and dedicated management controls."},
+    {"title":"Find and organize notes","detail":"Browse the selected folder, sort by title or date, switch grid and list views, and search without losing your place."}
+  ],
+  "6.2.3": [
+    {"title":"Safer concurrent changes","detail":"Stronger coordination protects workspace edits, permission changes and recovery snapshots when requests overlap."},
+    {"title":"Account and backup protection","detail":"Aggregate reset limits reduce abuse, Google deletion and consent are coordinated, and backup failures appear in service health."}
+  ],
   "6.2.2": [
     {"title":"Safer Drive disconnect","detail":"Pending Drive consent ends with its sign-in session. Permission-removal failures retry securely, with a clear pending state before reconnecting."},
     {"title":"Safer account access","detail":"Password resets and signing out all devices invalidate pending Google sign-ins. Stronger one-use reset links and request limits protect account actions."},

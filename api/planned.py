@@ -12,6 +12,7 @@ from .models import Category, PlannedTransaction, Transaction, User, Wallet, Wal
 from .extensions import can_edit_wallet, share_for_wallet, shared_wallet_ids
 from .schemas import TransactionIn
 from .timekeeping import ledger_iso, now as ledger_now
+from .coordination import lock_owners, lock_wallet_owners, lock_record
 
 router = APIRouter()
 
@@ -36,6 +37,7 @@ def access(db, user, wallet_id):
 
 def validate_plan(db, user, payload, existing=None):
     tx = payload.transaction
+    lock_wallet_owners(db, tx.wallet_id, tx.transfer_wallet_id)
     if tx.recurring_frequency != 'none' or tx.recurring_until is not None:
         raise HTTPException(422, 'Schedule one transaction at a time; repeat is available for recorded transactions.')
     if payload.status == 'scheduled' and tx.date <= ledger_now():
@@ -77,7 +79,15 @@ def post_due(db: Session, limit=100):
     query = db.query(PlannedTransaction).filter(
         PlannedTransaction.status == 'scheduled', PlannedTransaction.due_at <= ledger_now()
     ).order_by(PlannedTransaction.due_at, PlannedTransaction.id)
-    if db.bind.dialect.name == 'postgresql':
+    candidates = query.with_entities(PlannedTransaction.id, PlannedTransaction.owner_id,
+                                     PlannedTransaction.created_by_id).limit(limit).all()
+    if not candidates:
+        return 0
+    lock_owners(db, *(ident for row in candidates for ident in (row.owner_id, row.created_by_id)))
+    query = query.filter(PlannedTransaction.id.in_([row.id for row in candidates]),
+                         PlannedTransaction.owner_id.in_([row.owner_id for row in candidates]),
+                         PlannedTransaction.created_by_id.in_([row.created_by_id for row in candidates])).populate_existing()
+    if db.get_bind().dialect.name == 'postgresql':
         query = query.with_for_update(skip_locked=True)
     rows = query.limit(limit).all()
     posted = 0
@@ -135,7 +145,7 @@ def create_plan(payload: PlanIn, user: User = Depends(workspace_actor), db: Sess
 
 @router.put('/api/planned-transactions/{plan_id}')
 def update_plan(plan_id: int, payload: PlanIn, user: User = Depends(workspace_actor), db: Session = Depends(get_db)):
-    row = db.query(PlannedTransaction).filter_by(id=plan_id).with_for_update().first()
+    row = lock_record(db, PlannedTransaction, plan_id, (payload.transaction.wallet_id, payload.transaction.transfer_wallet_id))
     if not row: raise HTTPException(404, 'Planned entry not found')
     if row.status == 'posted': raise HTTPException(409, 'This entry has already been recorded. Edit the transaction instead.')
     access(db, user, row.wallet_id)
@@ -157,7 +167,7 @@ def update_plan(plan_id: int, payload: PlanIn, user: User = Depends(workspace_ac
 
 @router.delete('/api/planned-transactions/{plan_id}', status_code=204)
 def delete_plan(plan_id: int, user: User = Depends(workspace_actor), db: Session = Depends(get_db)):
-    row = db.query(PlannedTransaction).filter_by(id=plan_id).with_for_update().first()
+    row = lock_record(db, PlannedTransaction, plan_id)
     if not row: raise HTTPException(404, 'Planned entry not found')
     access(db, user, row.wallet_id)
     if row.created_by_id != user.id and row.owner_id != user.id and not can_edit_wallet(db, user, row.wallet_id):

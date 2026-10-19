@@ -37,6 +37,7 @@ import './ux-refinements.css'
 import './shell-layout.css'
 import './overview-layout.css'
 import './layout-polish.css'
+import './notes-library.css'
 import AppErrorBoundary from './components/AppErrorBoundary'
 import { installClientDiagnostics } from './lib/diagnostics'
 

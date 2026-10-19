@@ -61,15 +61,17 @@ def revocation_cipher():
 def revoke_google_access(db, user_id):
     """Fail closed before deleting records: never discard a grant we could not revoke."""
     from .google_drive import GoogleDriveConnection, configuration as drive_configuration, decrypt
-    identity = db.query(GoogleIdentity).filter_by(user_id=user_id).first()
-    credential = db.query(GoogleRevocationCredential).filter_by(user_id=user_id).first()
+    # Match Drive consent's owner lock and retain it through account deletion.
+    db.query(User).filter_by(id=user_id).update({'active': User.active}, synchronize_session=False)
+    identity = db.query(GoogleIdentity).filter_by(user_id=user_id).populate_existing().first()
+    credential = db.query(GoogleRevocationCredential).filter_by(user_id=user_id).populate_existing().first()
     tokens = []
     if identity and not credential:
         raise HTTPException(409, 'Google permission needs confirmation before deletion. Sign in with Google again, or remove Budgetly at https://myaccount.google.com/connections and reconnect Google before retrying.')
     try:
         if credential:
             tokens.append(revocation_cipher().decrypt(credential.token.encode()).decode())
-        connection = db.get(GoogleDriveConnection, user_id)
+        connection = db.query(GoogleDriveConnection).filter_by(user_id=user_id).populate_existing().first()
         if connection and connection.refresh_token:
             _, cipher = drive_configuration()
             tokens.append(decrypt(cipher, connection.refresh_token))
@@ -159,7 +161,8 @@ def google_account_payload(user, db=None):
 
 def start_flow(request, db, user=None, mode='signin'):
     client, _, redirect = configuration()
-    limit(db, 'google-start:' + (request.client.host if request.client else 'unknown'), 20)
+    from .client_address import client_address
+    limit(db, 'google-start:' + client_address(request), 20)
     if mode == 'link':
         confirmed(request, db, user)
     if mode == 'reauth' and not db.query(GoogleIdentity).filter_by(user_id=user.id).first():
@@ -352,6 +355,11 @@ def callback(state: str, code: str = '', error: str = '', db=Depends(get_db)):
             row.status = 'name_required'
         token = tokens.get('refresh_token')
         if row.status in ('ready', 'linked', 'reauthenticated', 'name_required') and isinstance(token, str) and token:
+            if row.user_id is not None:
+                claimed = db.query(User).filter_by(id=row.user_id, active=True).update(
+                    {'active': User.active}, synchronize_session=False)
+                if not claimed:
+                    raise HTTPException(403, 'Account unavailable')
             grant = db.get(GoogleRevocationCredential, row.subject)
             if grant is None:
                 grant = GoogleRevocationCredential(subject=row.subject)
@@ -409,7 +417,8 @@ def session_result(db, row, expected):
 def poll(payload: PollIn, request: Request, response: Response, db=Depends(get_db)):
     response.headers['Cache-Control'] = 'no-store'
     configuration()
-    limit(db, 'google-poll:' + (request.client.host if request.client else 'unknown'), 600, 60)
+    from .client_address import client_address
+    limit(db, 'google-poll:' + client_address(request), 600, 60)
     row = poll_row(db, payload.poll_secret)
     if row.status == 'ready':
         return session_result(db, row, 'ready')
@@ -447,7 +456,8 @@ def cancel(payload: PollIn, response: Response, db=Depends(get_db)):
 def complete(payload: CompleteIn, request: Request, response: Response, db=Depends(get_db)):
     response.headers['Cache-Control'] = 'no-store'
     configuration()
-    limit(db, 'google-create:' + (request.client.host if request.client else 'unknown'), 10, 3600)
+    from .client_address import client_address
+    limit(db, 'google-create:' + client_address(request), 10, 3600)
     name = payload.preferred_name.strip()
     if not name or any(ord(c) < 32 for c in name):
         raise HTTPException(422, 'Enter a preferred name')

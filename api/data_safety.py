@@ -2,9 +2,11 @@ import json
 from fastapi.encoders import jsonable_encoder
 from .models import RecoveryPoint, WalletShare, Transaction, PlannedTransaction, Budget, Goal, Debt, Category, Wallet, WalletBalanceCheck, NoteShare, Note, NoteFolder
 from .models import NoteRevision
+from .coordination import lock_owners
 
 
 def save_recovery(db, owner, actor, reason):
+    lock_owners(db, owner.id, nowait=True)
     from .index import export_backup
     from .spaces import unscoped
     with unscoped(db):
@@ -18,6 +20,7 @@ def save_recovery(db, owner, actor, reason):
 
 
 def clear_budget(db, user_id, preserve_main_wallet=False, preserve_categories=False):
+    lock_owners(db, user_id, nowait=True)
     wallet_ids = db.query(Wallet.id).filter_by(user_id=user_id)
     db.query(WalletBalanceCheck).filter(WalletBalanceCheck.wallet_id.in_(wallet_ids)).delete(synchronize_session=False)
     db.query(PlannedTransaction).filter_by(owner_id=user_id).delete(synchronize_session=False)
@@ -46,6 +49,7 @@ def clear_budget(db, user_id, preserve_main_wallet=False, preserve_categories=Fa
 
 
 def clear_notes(db, user_id):
+    lock_owners(db, user_id, nowait=True)
     ids = db.query(Note.id).filter_by(user_id=user_id)
     db.query(NoteRevision).filter(NoteRevision.note_id.in_(ids)).delete(synchronize_session=False)
     db.query(NoteShare).filter(NoteShare.note_id.in_(ids)).delete(synchronize_session=False)

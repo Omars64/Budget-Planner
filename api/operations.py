@@ -3,6 +3,7 @@ import hmac
 import gzip
 import json
 import os
+import secrets
 from datetime import timedelta
 from fastapi.encoders import jsonable_encoder
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -35,17 +36,30 @@ def external_snapshots(db):
                           aws_access_key_id=os.environ['BACKUP_S3_ACCESS_KEY_ID'],
                           aws_secret_access_key=os.environ['BACKUP_S3_SECRET_ACCESS_KEY'])
     day = utc_now().date().isoformat()
+    prefix = f'budgetly/{day}/{secrets.token_hex(16)}'
     count = 0
+    identities = []
     for user in db.query(User).filter_by(active=True).all():
         data = json.dumps(jsonable_encoder(export_backup(user, db))).encode()
         payload = cipher.encrypt(gzip.compress(data))
         upload = {'Bucket': os.environ['BACKUP_S3_BUCKET'],
-                  'Key': f'budgetly/{day}/user-{user.id}.json.gz.enc', 'Body': payload,
+                  'Key': f'{prefix}/user-{user.id}.json.gz.enc', 'Body': payload,
                   'ContentType': 'application/octet-stream'}
         if not os.getenv('BACKUP_S3_ENDPOINT_URL'):
             upload['ServerSideEncryption'] = 'AES256'
         client.put_object(**upload)
+        identities.append({'id': user.id, 'email': user.email, 'username': user.username,
+                           'role': user.role, 'archive_key': upload['Key']})
         count += 1
+    manifest = {'version': 1, 'kind': 'budgetly-account-recovery-manifest',
+                'exported_at': utc_now().isoformat() + 'Z', 'accounts': identities}
+    metadata = {'Bucket': os.environ['BACKUP_S3_BUCKET'],
+                'Key': f'{prefix}/manifest.json.gz.enc',
+                'Body': cipher.encrypt(gzip.compress(json.dumps(manifest).encode())),
+                'ContentType': 'application/octet-stream'}
+    if not os.getenv('BACKUP_S3_ENDPOINT_URL'):
+        metadata['ServerSideEncryption'] = 'AES256'
+    client.put_object(**metadata)
     db.add(ServiceEvent(area='external-backup', status=200))
     db.commit()
     return count

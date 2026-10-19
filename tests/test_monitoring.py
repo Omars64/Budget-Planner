@@ -73,3 +73,23 @@ def test_diagnostics_require_auth_and_readiness_exposes_no_details(monitor):
     app.dependency_overrides.pop(current_user)
     assert client.post('/api/diagnostics/client-error', json={'code':'render','version':'6.2.1'}).status_code == 401
     assert db.query(ServiceEvent).filter(ServiceEvent.area.like('client:%')).count() == 0
+
+
+def test_external_backup_failure_and_partial_config_fail_readiness(monitor, monkeypatch):
+    client, db = monitor
+    record_job(db, 'scheduler-heartbeat', 200)
+    keys = ('BACKUP_S3_BUCKET', 'BACKUP_S3_REGION', 'BACKUP_S3_ACCESS_KEY_ID',
+            'BACKUP_S3_SECRET_ACCESS_KEY', 'BACKUP_ENCRYPTION_KEY')
+    for key in keys: monkeypatch.delenv(key, raising=False)
+    assert client.get('/api/health/ready').status_code == 200
+    monkeypatch.setenv(keys[0], 'synthetic')
+    assert client.get('/api/health/ready').status_code == 503
+    for key in keys: monkeypatch.setenv(key, 'synthetic')
+    record_job(db, 'external-backup', 200)
+    assert client.get('/api/health/ready').status_code == 200
+    record_job(db, 'external-backup', 500)
+    assert client.get('/api/health/ready').json() == {'ok':False}
+    record_job(db, 'external-backup', 200)
+    row = db.query(ServiceEvent).filter_by(area='external-backup').one()
+    row.created_at = utc_now() - timedelta(hours=37); db.commit()
+    assert client.get('/api/health/ready').status_code == 503

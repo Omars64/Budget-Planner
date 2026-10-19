@@ -42,6 +42,7 @@ from ._version import VERSION
 from .ledger_accounting import personal_wallet_ids, personal_records, opening_amount, set_opening_balance, migrate_opening_balances, require_regular_transaction
 from .spaces import workspace_user, router as spaces_router, attach_wallet_members
 from .auth_dependency import current_user
+from .coordination import lock_owners, snapshot_session
 
 APP_SECRET = os.getenv("APP_SECRET", "flowbudget-dev-secret-change-me")
 serializer = URLSafeTimedSerializer(APP_SECRET, salt="flowbudget-lock")
@@ -175,12 +176,12 @@ async def storage_readiness(request: Request, call_next):
             content={'detail':'The service is temporarily unavailable. Please try again shortly.', 'request_id':request_id})
     duration=int((time.monotonic()-started)*1000)
     if response.status_code>=500 or duration>=2000:
-        from .reliability_models import ServiceEvent
+        from .service_events import record_event
+        from starlette.concurrency import run_in_threadpool
         area=getattr(request.scope.get('route'), 'path', '/unmatched')[:100]
         logging.getLogger('flowbudget').warning('request id=%s route=%s status=%d duration_ms=%d',request_id,area,response.status_code,duration)
         try:
-            with SessionLocal() as events:
-                events.add(ServiceEvent(area=area,status=response.status_code,duration_ms=duration));events.commit()
+            await run_in_threadpool(record_event, area, response.status_code, duration)
         except Exception:
             logging.getLogger('flowbudget').warning('Operational event could not be stored')
     response.headers["Cache-Control"] = "no-store"
@@ -326,14 +327,45 @@ def next_occurrence(value: datetime, frequency: str) -> datetime:
     return value
 
 
+def due_recurrence_ids(db, at, user_id=None):
+    query = db.query(Transaction.id, Transaction.user_id, Transaction.date,
+                     Transaction.recurring_frequency, Transaction.recurring_until).filter(
+        Transaction.recurring_frequency != 'none', Transaction.recurring_parent_id.is_(None))
+    if user_id is not None:
+        query = query.filter(Transaction.user_id == user_id)
+    templates = query.all()
+    if not templates:
+        return []
+    dates = {}
+    for parent, occurrence in db.query(Transaction.recurring_parent_id, Transaction.date).filter(
+            Transaction.recurring_parent_id.in_([row.id for row in templates])):
+        dates.setdefault(parent, set()).add(occurrence)
+    pending = []
+    for template in templates:
+        occurrence = next_occurrence(template.date, template.recurring_frequency)
+        safety = 0
+        while occurrence <= at and (not template.recurring_until or occurrence.date() <= template.recurring_until) and safety < 1000:
+            if occurrence not in dates.get(template.id, set()):
+                pending.append((template.id, template.user_id))
+                break
+            occurrence = next_occurrence(occurrence, template.recurring_frequency)
+            safety += 1
+    return pending
+
+
 def materialize_recurring(db: Session) -> int:
     """Create any missing due occurrences. Safe to call repeatedly."""
     now = datetime.now()
+    pending = due_recurrence_ids(db, now)
+    if not pending:
+        return 0
+    lock_owners(db, *(owner for _, owner in pending))
     created = 0
     templates = db.query(Transaction).filter(
+        Transaction.id.in_([ident for ident, _ in pending]),
         Transaction.recurring_frequency != "none",
         Transaction.recurring_parent_id.is_(None),
-    ).all()
+    ).populate_existing().with_for_update().all()
     for template in templates:
         occurrence = next_occurrence(template.date, template.recurring_frequency)
         until = template.recurring_until
@@ -345,7 +377,7 @@ def materialize_recurring(db: Session) -> int:
             ).first()
             if not exists:
                 db.add(Transaction(
-                    type=template.type, amount=template.amount, description=template.description,
+                    user_id=template.user_id, type=template.type, amount=template.amount, description=template.description,
                     notes=template.notes, date=occurrence, wallet_id=template.wallet_id,
                     reporting_month=occurrence.strftime("%Y-%m"),
                     transfer_wallet_id=template.transfer_wallet_id, category_id=template.category_id,
@@ -361,12 +393,17 @@ def materialize_recurring(db: Session) -> int:
 
 def materialize_recurring_for_user(db: Session, user_id: int) -> int:
     now = ledger_now()
+    pending = due_recurrence_ids(db, now, user_id)
+    if not pending:
+        return 0
+    lock_owners(db, user_id)
     created = 0
     templates = db.query(Transaction).filter(
+        Transaction.id.in_([ident for ident, _ in pending]),
         Transaction.user_id == user_id,
         Transaction.recurring_frequency != "none",
         Transaction.recurring_parent_id.is_(None),
-    ).with_for_update().all()
+    ).populate_existing().with_for_update().all()
     for template in templates:
         existing_dates = {r[0] for r in db.query(Transaction.date).filter(Transaction.user_id == user_id, Transaction.recurring_parent_id == template.id).all()}
         occurrence = next_occurrence(template.date, template.recurring_frequency)
@@ -494,7 +531,8 @@ def health(db: Session = Depends(get_db)):
 def login(payload: LoginPayload, request: Request, db: Session = Depends(get_db)):
     from .account_security import limit, audit
     limit(db, 'login:'+normalize_email(payload.email), 10, 900)
-    limit(db, 'login-ip:'+(request.client.host if request.client else 'unknown'), 50, 900)
+    from .client_address import client_address
+    limit(db, 'login-ip:'+client_address(request), 50, 900)
     user = db.query(User).filter(User.email == normalize_email(payload.email)).first()
     if not user or not user.active or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")
@@ -559,6 +597,7 @@ def admin_create_user(payload: UserCreate, _: User = Depends(admin_user), db: Se
 
 @app.put("/api/admin/users/{user_id}")
 def admin_update_user(user_id: int, payload: UserUpdate, admin: User = Depends(admin_user), db: Session = Depends(get_db)):
+    lock_owners(db, *sorted({user_id, admin.id}))
     row = db.get(User, user_id)
     if not row:
         raise HTTPException(404, "User not found")
@@ -646,6 +685,7 @@ def admin_user_categories(user_id: int, _: User = Depends(admin_user), db: Sessi
 
 @app.post("/api/admin/users/{user_id}/categories", status_code=201)
 def admin_create_category(user_id: int, payload: CategoryIn, _: User = Depends(admin_user), db: Session = Depends(get_db)):
+    lock_owners(db, user_id)
     if not db.get(User, user_id):
         raise HTTPException(404, "User not found")
     row = Category(user_id=user_id, **payload.model_dump())
@@ -655,6 +695,7 @@ def admin_create_category(user_id: int, payload: CategoryIn, _: User = Depends(a
 
 @app.put("/api/admin/users/{user_id}/categories/{category_id}")
 def admin_update_category(user_id: int, category_id: int, payload: CategoryIn, _: User = Depends(admin_user), db: Session = Depends(get_db)):
+    lock_owners(db, user_id)
     row = db.query(Category).filter(Category.id == category_id, Category.user_id == user_id).first()
     if not row:
         raise HTTPException(404, "Category not found")
@@ -666,6 +707,7 @@ def admin_update_category(user_id: int, category_id: int, payload: CategoryIn, _
 
 @app.delete("/api/admin/users/{user_id}/categories/{category_id}", status_code=204)
 def admin_delete_category(user_id: int, category_id: int, _: User = Depends(admin_user), db: Session = Depends(get_db)):
+    lock_owners(db, user_id)
     row = db.query(Category).filter(Category.id == category_id, Category.user_id == user_id).first()
     if not row:
         raise HTTPException(404, "Category not found")
@@ -742,6 +784,7 @@ def get_settings(user: User = Depends(current_user), db: Session = Depends(get_d
 
 @app.put("/api/settings")
 def update_settings(payload: SettingsPayload, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    lock_owners(db, user.id)
     # Settings saves can be partial. Only persist fields present in the request;
     # schema defaults must not reset device-local notification preferences.
     for k in payload.model_fields_set:
@@ -789,6 +832,7 @@ def update_wallet(item_id: int, payload: WalletIn, user: User = Depends(workspac
 
 @app.delete("/api/wallets/{item_id}", status_code=204)
 def delete_wallet(item_id: int, delete_transactions: bool = False, user: User = Depends(workspace_user), db: Session = Depends(get_db)):
+    lock_owners(db, user.id)
     row = db.query(Wallet).filter(Wallet.id == item_id, Wallet.user_id == user.id).first()
     if not row: raise HTTPException(404, "Wallet not found")
     used = db.query(Transaction).filter(Transaction.user_id == user.id, or_(Transaction.wallet_id == item_id, Transaction.transfer_wallet_id == item_id)).first()
@@ -888,6 +932,7 @@ def create_transaction(payload: TransactionWriteIn, request: Request, user: User
 
 def add_transaction(db, user_id, payload):
     """Create a regular ledger transaction without committing its surrounding operation."""
+    lock_owners(db, user_id, nowait=True)
     validate_transaction_references(db, user_id, payload)
     actor_id = db.info['space'].actor_id if db.info.get('space') else user_id
     row = Transaction(user_id=user_id, recorded_by_id=actor_id, **payload.model_dump(exclude={'receipt'})); db.add(row); db.flush(); db.refresh(row)
@@ -1159,6 +1204,11 @@ def calendar(year: int = Query(..., ge=1, le=9998), month: int = Query(..., ge=1
 
 @app.get("/api/backup")
 def export_backup(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    with snapshot_session(db, user.id) as snapshot:
+        return _export_backup(user, snapshot)
+
+
+def _export_backup(user, db):
     from .models import Space, SpaceMember
     payload = {
         "version": 1, "exported_at": datetime.now().astimezone().isoformat(),
@@ -1285,6 +1335,8 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
                 {t['id'] for t in data.get('transactions', [])}, {p['id'] for p in data.get('planned_transactions', [])})
     except (KeyError, TypeError, ValueError, ValidationError):
         raise HTTPException(400, "Backup contains invalid references")
+    lock_owners(db, user.id)
+    confirmed(request, db, user)
     old_planner = setting(db, user.id, planner_key, '{}')
     try:
         planner_revision = int(json.loads(old_planner).get('revision', 0))
@@ -1425,7 +1477,7 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
     for wallet in db.query(Wallet).filter(Wallet.user_id == user.id, Wallet.space_id.is_not(None)).all():
         attach_wallet_members(db, wallet)
     from .spaces import migrate_shared_wallets
-    migrate_shared_wallets(db.connection())
+    migrate_shared_wallets(db.connection(), owner_id=user.id)
     migrate_opening_balances(db, user.id)
     db.commit()
     return {"ok": True}

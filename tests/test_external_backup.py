@@ -45,5 +45,25 @@ def test_external_backup_is_encrypted_and_reports_success_only_after_upload(monk
         decoded = json.loads(gzip.decompress(Fernet(key).decrypt(written[0]['Body'])))
         assert decoded['version'] == 1
         assert 'password_hash' not in decoded
+        manifest = json.loads(gzip.decompress(Fernet(key).decrypt(written[1]['Body'])))
+        assert manifest['kind'] == 'budgetly-account-recovery-manifest'
+        assert manifest['accounts'][0]['archive_key'] == written[0]['Key']
+        assert manifest['accounts'][0]['email'] == 'owner@backup.test'
+        assert 'password_hash' not in manifest['accounts'][0]
+        assert 'owner@backup.test' not in written[1]['Body'].decode()
         assert db.query(ServiceEvent).filter_by(area='external-backup', status=200).count() == 1
+        assert external_snapshots(db) == 1
+        assert written[2]['Key'] != written[0]['Key']
+        assert written[3]['Key'] != written[1]['Key']
+
+        class InterruptedClient:
+            def put_object(self, **kwargs):
+                if kwargs['Key'].endswith('/manifest.json.gz.enc'):
+                    raise RuntimeError('Synthetic interrupted manifest upload')
+
+        monkeypatch.setattr(boto3, 'client', lambda *args, **kwargs: InterruptedClient())
+        with pytest.raises(RuntimeError, match='Synthetic interrupted'):
+            external_snapshots(db)
+        db.rollback()
+        assert db.query(ServiceEvent).filter_by(area='external-backup', status=200).count() == 2
     engine.dispose()

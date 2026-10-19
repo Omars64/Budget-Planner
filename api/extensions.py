@@ -123,16 +123,19 @@ def validate_image(value: Optional[str], max_bytes: int, label: str) -> str:
 
 
 def share_for_wallet(db: Session, user: User, wallet_id: int):
-    wallet = db.get(Wallet, wallet_id)
+    from .coordination import remember_wallet_access
+    wallet = db.query(Wallet).filter_by(id=wallet_id).populate_existing().first()
     if not wallet:
         raise HTTPException(404, "Wallet not found")
     if wallet.user_id == user.id:
+        remember_wallet_access(db, user, wallet, 'edit')
         return wallet, "edit", True
-    share = db.query(WalletShare).filter(WalletShare.wallet_id == wallet_id, or_(WalletShare.member_user_id == user.id, WalletShare.invitee_email == normalize_email(user.email))).first()
+    share = db.query(WalletShare).filter(WalletShare.wallet_id == wallet_id, or_(WalletShare.member_user_id == user.id, WalletShare.invitee_email == normalize_email(user.email))).populate_existing().first()
     if not share:
         raise HTTPException(403, "This wallet is not shared with you")
     if share.member_user_id is None:
-        share.member_user_id = user.id; db.commit()
+        share.member_user_id = user.id
+    remember_wallet_access(db, user, wallet, share.permission)
     return wallet, share.permission, False
 
 
@@ -185,6 +188,8 @@ def shared_tx_payload(db: Session, user: User, tx: Transaction, visible_ids: set
 
 
 def validate_shared_tx(db: Session, user: User, payload: SharedTransactionIn, owner_id: Optional[int] = None):
+    from .coordination import lock_wallet_owners
+    lock_wallet_owners(db, payload.wallet_id, payload.transfer_wallet_id)
     source = require_edit(db, user, payload.wallet_id, creating=owner_id is None)
     if payload.transfer_wallet_id:
         dest = require_edit(db, user, payload.transfer_wallet_id, creating=owner_id is None)
@@ -280,6 +285,8 @@ def shared_wallets(user: User = Depends(workspace_actor), db: Session = Depends(
 
 @router.post("/api/shared/wallets/{wallet_id}/shares", status_code=201)
 def share_wallet(wallet_id: int, payload: ShareIn, user: User = Depends(workspace_actor), db: Session = Depends(get_db)):
+    from .coordination import lock_owners
+    lock_owners(db, user.id)
     wallet = db.query(Wallet).filter(Wallet.id == wallet_id, Wallet.user_id == user.id).first()
     if not wallet: raise HTTPException(404, "Wallet not found")
     email = clean_email(payload.email)
@@ -298,6 +305,8 @@ def share_wallet(wallet_id: int, payload: ShareIn, user: User = Depends(workspac
 
 @router.delete("/api/shared/shares/{share_id}", status_code=204)
 def remove_share(share_id: int, user: User = Depends(workspace_actor), db: Session = Depends(get_db)):
+    from .coordination import lock_owners
+    lock_owners(db, user.id)
     share = db.query(WalletShare).filter(WalletShare.id == share_id, WalletShare.owner_id == user.id).first()
     if not share: raise HTTPException(404, "Share not found")
     from .account_security import audit
@@ -361,7 +370,8 @@ def create_shared_transaction(payload: SharedTransactionIn, request: Request, us
 
 @router.put("/api/shared/transactions/{transaction_id}")
 def update_shared_transaction(transaction_id: int, payload: SharedTransactionIn, request: Request, user: User = Depends(workspace_actor), db: Session = Depends(get_db)):
-    row = db.query(Transaction).filter_by(id=transaction_id).with_for_update().first()
+    from .coordination import lock_record
+    row = lock_record(db, Transaction, transaction_id, (payload.wallet_id, payload.transfer_wallet_id))
     if not row: raise HTTPException(404, "Transaction not found")
     if not can_edit_wallet(db, user, row.wallet_id) or (row.type == "transfer" and not can_edit_wallet(db, user, row.transfer_wallet_id)): raise HTTPException(403, "You do not have edit access to this transaction")
     require_regular_transaction(row)
@@ -384,7 +394,8 @@ def update_shared_transaction(transaction_id: int, payload: SharedTransactionIn,
 
 @router.delete("/api/shared/transactions/{transaction_id}", status_code=204)
 def delete_shared_transaction(transaction_id: int, undo: bool = False, user: User = Depends(workspace_actor), db: Session = Depends(get_db)):
-    row = db.get(Transaction, transaction_id)
+    from .coordination import lock_record
+    row = lock_record(db, Transaction, transaction_id)
     if not row: raise HTTPException(404, "Transaction not found")
     if not can_edit_wallet(db, user, row.wallet_id) or (row.type == "transfer" and not can_edit_wallet(db, user, row.transfer_wallet_id)): raise HTTPException(403, "You do not have edit access to this transaction")
     require_regular_transaction(row)

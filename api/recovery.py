@@ -10,6 +10,7 @@ from .models import TransactionReceipt
 from .reliability_models import TrashItem
 from .index import current_user
 from .account_security import audit
+from .coordination import lock_owners
 
 router = APIRouter()
 MODELS = {'wallet':Wallet, 'category':Category, 'transaction':Transaction, 'note':Note, 'budget':Budget, 'goal':Goal, 'debt':Debt}
@@ -20,6 +21,7 @@ def snapshot(row):
 
 
 def trash(db, row, actor, kind):
+    lock_owners(db, row.user_id, nowait=True)
     payload = {'item':snapshot(row)}
     if kind == 'wallet':
         payload['transactions'] = [snapshot(t) for t in db.query(Transaction).filter(Transaction.user_id==row.user_id, or_(Transaction.wallet_id==row.id,Transaction.transfer_wallet_id==row.id)).all()]
@@ -80,6 +82,7 @@ def restore_row(db, model, values, user_id, wallet_map=None):
 
 @router.post('/api/trash/{item_id}/restore')
 def restore(item_id:int,user=Depends(current_user),db=Depends(get_db)):
+    lock_owners(db, user.id)
     item=db.query(TrashItem).filter_by(id=item_id,user_id=user.id).with_for_update().first()
     if not item: raise HTTPException(404,'Deleted item not found')
     if item.restored_at: return {'ok':True,'already_restored':True}

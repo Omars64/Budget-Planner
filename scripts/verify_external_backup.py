@@ -35,6 +35,19 @@ def decode_backup(encrypted, secret):
     if len(raw) > MAX_JSON_BYTES:
         raise ValueError('Decompressed backup exceeds the JSON byte limit')
     data = json.loads(raw)
+    if isinstance(data, dict) and data.get('kind') == 'budgetly-account-recovery-manifest':
+        accounts = data.get('accounts')
+        if data.get('version') != 1 or not isinstance(accounts, list) or any(
+            not isinstance(row, dict) or type(row.get('id')) is not int or row['id'] <= 0 or
+            not isinstance(row.get('email'), str) or '@' not in row['email'] or
+            not isinstance(row.get('username'), str) or row.get('role') not in {'admin', 'user'} or
+            not isinstance(row.get('archive_key'), str) or
+            not row['archive_key'].startswith('budgetly/') or
+            not row['archive_key'].endswith(f"/user-{row['id']}.json.gz.enc")
+            for row in accounts
+        ) or len({row['id'] for row in accounts}) != len(accounts) or len({row['email'] for row in accounts}) != len(accounts):
+            raise ValueError('Invalid account recovery manifest')
+        return data
     collections = ('wallets', 'categories', 'transactions', 'budgets', 'goals', 'debts')
     if (not isinstance(data, dict) or data.get('version') != 1
             or any(not isinstance(data.get(name), list) for name in collections)
@@ -70,6 +83,12 @@ def main():
         with closing(client.get_object(Bucket=os.environ['BACKUP_S3_BUCKET'], Key=args.key)['Body']) as body:
             encrypted = read_archive(body)
     data = decode_backup(encrypted, secret.encode())
+    if data.get('kind') == 'budgetly-account-recovery-manifest':
+        print('Recovery manifest verified: accounts=' + str(len(data['accounts'])))
+        if args.output:
+            with args.output.open('x', encoding='utf-8') as output:
+                json.dump(data, output, indent=2)
+        return
     required = ('wallets', 'categories', 'transactions', 'budgets', 'goals', 'debts', 'settings')
     if data.get('version') != 1 or any(name not in data for name in required):
         raise ValueError('This is not a supported Budgetly workspace backup')

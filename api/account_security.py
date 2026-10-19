@@ -10,6 +10,7 @@ from sqlalchemy import case
 from .database import get_db
 from .models import User, utc_now
 from .reliability_models import AccountSession, Activity, RateBucket, ResetToken
+from .client_address import client_address
 
 router = APIRouter()
 
@@ -152,6 +153,9 @@ def send_reset(db, target, actor_id):
 @router.post('/api/auth/password-reset/request')
 def request_reset(payload: EmailIn, request: Request, db=Depends(get_db)):
     email = payload.email.strip().lower()
+    # Fixed aggregate buckets bound abuse before attacker-selected email keys.
+    limit(db, 'reset-global', 300, 3600)
+    limit(db, 'reset-ip:' + client_address(request), 20, 3600)
     limit(db, 'reset:'+email, 3, 3600)
     target = db.query(User).filter_by(email=email, active=True).first()
     if target:
