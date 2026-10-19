@@ -190,6 +190,8 @@ class PinPayload(BaseModel):
 
 
 class SettingsPayload(BaseModel):
+    support_popup_enabled: bool = True
+    support_sidebar_enabled: bool = True
     quiet_hours_enabled: bool = False
     quiet_start: str = Field(default='22:00', pattern=r'^([01]\d|2[0-3]):[0-5]\d$')
     quiet_end: str = Field(default='08:00', pattern=r'^([01]\d|2[0-3]):[0-5]\d$')

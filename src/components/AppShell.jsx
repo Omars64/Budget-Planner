@@ -130,7 +130,7 @@ export default function AppShell({ children }) {
         })}
         {!matchingNav.length && <p className="nav-no-results">No matching page</p>}
       </nav>
-      <a className="sidebar-support-link" aria-label="Buy me a coffee" title="Buy me a coffee - support Budgetly" href={SUPPORT_URL} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer"><Coffee size={21}/><span>Buy me a coffee<small>Support Budgetly</small></span><ExternalLink size={14}/></a>
+      {(user?.role !== 'admin' || settings.support_sidebar_enabled !== false) && <a className="sidebar-support-link" aria-label="Buy me a coffee" title="Buy me a coffee - support Budgetly" href={SUPPORT_URL} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer"><Coffee size={21}/><span>Buy me a coffee<small>Support Budgetly</small></span><ExternalLink size={14}/></a>}
       <button className="button ghost sidebar-signout" onClick={lock}><LogOut size={17}/><span>{isGuest ? 'Sign in' : 'Sign out'}</span></button>
       <div className="sidebar-foot glass-subtle">
         {appearance.profile_image ? <img className="sidebar-avatar" src={appearance.profile_image} alt="Profile"/> : <span className="default-avatar"><Mountain size={24}/></span>}<div><strong>{user?.username || 'Budgetly'}</strong><small>{user?.role === 'admin' ? 'Admin account' : 'Personal workspace'}</small></div>
@@ -162,7 +162,7 @@ export default function AppShell({ children }) {
     </nav>
 
     <TransactionModal open={txModal} onClose={() => setTxModal(false)} onSaved={(saved, scheduled) => { setTxModal(false); refresh(); notify(saved.queued ? 'Saved on this device. Will sync when connected.' : scheduled ? 'Transaction scheduled' : 'Transaction saved') }} />
-    <SupportPrompt userId={user?.id} guest={isGuest} suppressed={menu || keyboardOpen || txModal}/>
+    <SupportPrompt userId={user?.id} guest={isGuest} popupEnabled={settings.support_popup_enabled !== false} suppressed={menu || keyboardOpen || txModal}/>
     {!isGuest && <><AppTutorial request={tutorialRequest}/><Milestone/></>}
   </div>
 }

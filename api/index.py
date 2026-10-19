@@ -762,6 +762,8 @@ def get_settings(user: User = Depends(current_user), db: Session = Depends(get_d
         display_name = "Budgetly"
     return {
         'quiet_hours_enabled': setting(db,user.id,'quiet_hours_enabled','false') == 'true',
+        'support_popup_enabled': setting(db, user.id, 'support_popup_enabled', 'true') == 'true',
+        **({'support_sidebar_enabled': setting(db, user.id, 'support_sidebar_enabled', 'true') == 'true'} if user.role == 'admin' else {}),
         'quiet_start': setting(db,user.id,'quiet_start','22:00'),
         'quiet_end': setting(db,user.id,'quiet_end','08:00'),
         'reminder_topics': json.loads(setting(db,user.id,'reminder_topics','["daily"]')),
@@ -784,6 +786,8 @@ def get_settings(user: User = Depends(current_user), db: Session = Depends(get_d
 
 @app.put("/api/settings")
 def update_settings(payload: SettingsPayload, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    if 'support_sidebar_enabled' in payload.model_fields_set and user.role != 'admin':
+        raise HTTPException(403, 'Only administrators can hide their support sidebar link')
     lock_owners(db, user.id)
     # Settings saves can be partial. Only persist fields present in the request;
     # schema defaults must not reset device-local notification preferences.

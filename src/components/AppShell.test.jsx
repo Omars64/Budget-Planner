@@ -3,9 +3,10 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import AppShell from './AppShell'
 
+const preferences = vi.hoisted(() => ({role:'user', sidebar:true}))
 vi.mock('../App', () => ({ useApp: () => ({
-  user: { id: 1, username: 'Omar', role: 'user' },
-  settings: { display_name: 'Budgetly' }, appearance: {},
+  user: { id: 1, username: 'Omar', role: preferences.role },
+  settings: { display_name: 'Budgetly', support_sidebar_enabled: preferences.sidebar }, appearance: {},
   refresh: vi.fn(), notify: vi.fn(), lock: vi.fn(),
 }) }))
 vi.mock('./TransactionModal', () => ({ default: () => null }))
@@ -16,9 +17,19 @@ vi.mock('./ScrollMemory', () => ({ default: () => null }))
 vi.mock('../lib/scrollLock', () => ({ useContainedScroll: vi.fn(), useScrollLock: vi.fn() }))
 
 beforeEach(() => {
+  preferences.role = 'user'; preferences.sidebar = true
   localStorage.removeItem('budgetly-sidebar-collapsed')
   vi.stubGlobal('matchMedia', () => ({ matches: false }))
   vi.stubGlobal('requestAnimationFrame', callback => callback())
+})
+
+test('only admins can hide their own sidebar link', () => {
+  preferences.role = 'admin'; preferences.sidebar = false
+  const view = render(<MemoryRouter><AppShell/></MemoryRouter>)
+  expect(document.querySelector('.sidebar-support-link')).toBeNull()
+  preferences.role = 'user'
+  view.rerender(<MemoryRouter><AppShell/></MemoryRouter>)
+  expect(document.querySelector('.sidebar-support-link')).toBeInTheDocument()
 })
 
 test('desktop sidebar collapse is saved and page finder expands it', () => {

@@ -2,12 +2,12 @@ import { useEffect, useId, useState } from 'react'
 import { Coffee, ExternalLink, X } from 'lucide-react'
 import { dismissSupport, SUPPORT_URL, supportDismissed } from '../lib/support'
 
-export default function SupportPrompt({ userId, guest = false, suppressed = false }) {
+export default function SupportPrompt({ userId, guest = false, suppressed = false, popupEnabled = true }) {
   const titleId = useId()
   const [closed, setClosed] = useState(() => supportDismissed(userId))
   const [ready, setReady] = useState(false)
   const [blocked, setBlocked] = useState(true)
-  const enabled = userId != null && !guest && !closed
+  const enabled = userId != null && !guest && !closed && popupEnabled
   useEffect(() => {
     if (!enabled) return
     const check = () => setBlocked(document.visibilityState === 'hidden' || Boolean(document.querySelector('[aria-modal="true"], dialog[open], .driver-popover')) || Boolean(document.activeElement?.matches('input, textarea, select, [contenteditable="true"]')))

@@ -7,6 +7,18 @@ beforeEach(() => { vi.useFakeTimers(); resetSupportPrompt(704); sessionStorage.c
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks() })
 const ready = () => act(() => { vi.advanceTimersByTime(1300) })
 
+it('does not reopen a disabled popup after a new session reset', () => {
+  resetSupportPrompt(704)
+  const view = render(<SupportPrompt userId={704} popupEnabled={false}/> )
+  ready()
+  expect(screen.queryByRole('region')).not.toBeInTheDocument()
+  view.rerender(<SupportPrompt userId={704}/> )
+  ready()
+  expect(screen.getByRole('region')).toBeInTheDocument()
+  view.rerender(<SupportPrompt userId={704} popupEnabled={false}/> )
+  expect(screen.queryByRole('region')).not.toBeInTheDocument()
+})
+
 it('stays dismissed across page/Space remounts and returns after a fresh sign-in reset', () => {
   const view = render(<SupportPrompt userId={704}/> )
   ready()

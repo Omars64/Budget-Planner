@@ -1,4 +1,7 @@
 {
+  "6.2.7": [
+    {"title":"Support preferences","detail":"Choose whether the coffee popup appears after sign-in. Administrators can also hide the support link in their own sidebar without changing it for anyone else."}
+  ],
   "6.2.6": [
     {"title":"Support Budgetly, your way","detail":"A highlighted sidebar link keeps Ko-fi within reach. An optional sign-in prompt can be closed for the session and stays out of dialogs and data entry."}
   ],
