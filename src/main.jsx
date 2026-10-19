@@ -38,6 +38,7 @@ import './shell-layout.css'
 import './overview-layout.css'
 import './layout-polish.css'
 import './notes-library.css'
+import './support.css'
 import AppErrorBoundary from './components/AppErrorBoundary'
 import { installClientDiagnostics } from './lib/diagnostics'
 

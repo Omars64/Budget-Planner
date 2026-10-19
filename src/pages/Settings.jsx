@@ -1,4 +1,5 @@
 import SettingsSection from '../components/SettingsSection'
+import SupportBudgetly from '../components/SupportBudgetly'
 import BankNotificationSetup from '../components/BankNotificationSetup'
 import './BankMessages.css'
 import CurrencyConfiguration from '../components/CurrencyConfiguration'
@@ -125,6 +126,7 @@ export default function Settings(){
   return <div className="settings-grid">
     {restorePreview && <RestorePreview preview={restorePreview} onClose={()=>setRestorePreview(null)} onRestore={confirmRestore}/>}
     <GuestRecords/>
+    <SupportBudgetly/>
     <AccountSecurity/>
     <TrashPanel/>
     <SettingsSection title="Smart Bank Inbox"><BankNotificationSetup/></SettingsSection>

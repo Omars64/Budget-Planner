@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import AppShell from './AppShell'
@@ -50,4 +50,17 @@ test('More is active for secondary pages but not a primary tab', () => {
   expect(screen.getByRole('button', { name: 'More' })).toHaveAttribute('aria-current', 'page')
   rerender(<MemoryRouter initialEntries={['/']} key="overview"><AppShell/></MemoryRouter>)
   expect(screen.getByRole('button', { name: 'More' })).not.toHaveAttribute('aria-current')
+})
+
+test('the highlighted support link stays at the sidebar bottom when filtered or collapsed', () => {
+  render(<MemoryRouter><AppShell/></MemoryRouter>)
+  const sidebar = within(document.querySelector('.sidebar'))
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Find a page' }), { target: { value: 'does not exist' } })
+  const link = sidebar.getByRole('link', { name: 'Buy me a coffee', exact: true })
+  expect(link).toHaveAttribute('href', 'https://ko-fi.com/omarsolanki')
+  expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+  expect(link.closest('.nav-list')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }))
+  expect(link).toBeInTheDocument()
+  expect(link).toHaveAttribute('title', 'Buy me a coffee - support Budgetly')
 })

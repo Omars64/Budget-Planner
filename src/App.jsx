@@ -9,6 +9,7 @@ import AppShell from './components/AppShell'
 import './spaces.css'
 import useSpaces from './lib/useSpaces'
 import { rememberSpaceSelection, setApiSpace } from './lib/spaces'
+import { resetSupportPrompt } from './lib/support'
 const Overview = lazy(() => import('./pages/Overview'))
 const AskAI = lazy(() => import('./pages/AskAI'))
 const Transactions = lazy(() => import('./pages/Transactions'))
@@ -367,6 +368,7 @@ export default function App() {
   const signOut = useCallback(() => setSignoutRequested(true), [])
 
   const completeLogin = useCallback(async user => {
+    resetSupportPrompt(user.id)
     setApiSpace(null); rememberSpaceSelection(user.id, null)
     setGuestActive(false); setGuestSigningIn(false)
     setOfflineUser(user.id)

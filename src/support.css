@@ -1,0 +1,17 @@
+.budgetly-v2 .sidebar-support-link { display:flex; align-items:center; gap:10px; flex-shrink:0; min-height:52px; padding:10px; margin:6px 0 2px; border:1px solid #e0bf50; border-radius:8px; background:#ffe083; color:#302811; font-size:13px; font-weight:700; text-decoration:none; }
+.sidebar-support-link>svg { flex-shrink:0; }
+.sidebar-support-link>span { flex:1; min-width:0; overflow-wrap:anywhere; }
+.sidebar-support-link small { display:block; margin-top:2px; font-size:10px; font-weight:400; }
+.budgetly-v2 .sidebar-support-link:hover { background:#ffda69; }
+.support-prompt { position:fixed; right:24px; bottom:72px; z-index:45; width:320px; max-width:calc(100% - 32px); max-height:calc(100dvh - 160px); overflow:auto; padding:16px; border:1px solid var(--line); border-radius:8px; background:var(--surface); color:var(--text); box-shadow:0 8px 32px rgb(0 0 0 / .18); }
+.support-prompt-heading { display:flex; align-items:center; gap:10px; }
+.support-prompt-heading>svg { flex-shrink:0; color:var(--accent-text); }
+.support-prompt-heading h3 { flex:1; margin:0; min-width:0; overflow-wrap:anywhere; font-size:16px; line-height:1.4; }
+.support-prompt-heading .icon-button { flex-shrink:0; width:44px; min-width:44px; height:44px; }
+.support-prompt p { margin:8px 0 16px; font-size:14px; line-height:1.6; color:var(--muted); }
+.support-prompt-action { display:flex; align-items:center; justify-content:center; gap:10px; min-height:44px; padding:10px 16px; border-radius:6px; background:#ffe083; color:#302811; font-size:14px; font-weight:700; text-align:center; text-decoration:none; }
+.support-prompt-action:hover { background:#ffda69; }
+@media(min-width:821px) { .sidebar-collapsed .sidebar-support-link { justify-content:center; padding:10px; } .sidebar-collapsed .sidebar-support-link>span,.sidebar-collapsed .sidebar-support-link>svg:last-child { display:none; } }
+@media(max-width:820px) { .support-prompt { top:168px; bottom:auto; right:12px; max-width:calc(100% - 24px); max-height:calc(100dvh - 320px); padding:12px; } }
+@media(max-height:500px) and (max-width:820px) { .support-prompt { display:none; } }
+@media(prefers-reduced-motion:no-preference) { .support-prompt { animation:support-appear .3s ease-out; } @keyframes support-appear { from { opacity:0; translate:0 16px; } to { opacity:1; translate:0 0; } } }

@@ -1,4 +1,10 @@
 {
+  "6.2.6": [
+    {"title":"Support Budgetly, your way","detail":"A highlighted sidebar link keeps Ko-fi within reach. An optional sign-in prompt can be closed for the session and stays out of dialogs and data entry."}
+  ],
+  "6.2.5": [
+    {"title":"Support Budgetly","detail":"An optional Buy me a coffee section in Settings links to the creator's Ko-fi page. Payments stay outside Budgetly and never change app access."}
+  ],
   "6.2.4": [
     {"title":"A clearer Notes library","detail":"A phone-friendly folder drawer keeps folders in tidy rows, with counts and dedicated management controls."},
     {"title":"Find and organize notes","detail":"Browse the selected folder, sort by title or date, switch grid and list views, and search without losing your place."}
