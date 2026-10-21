@@ -149,7 +149,16 @@ def scheduled_transactions(request: Request, db=Depends(get_db)):
         db.rollback()
         record_job(db, 'scheduled-notification-delivery', 503)
         delivery = {'failed': True}
-    return {'ok': True, 'scheduled_transactions_posted': posted, 'notifications': delivery}
+    from .upcoming_reminders import dispatch_upcoming
+    try:
+        upcoming_delivery = dispatch_upcoming(db)
+        if upcoming_delivery.get('failed'):
+            record_job(db, 'upcoming-reminder-delivery', 503)
+    except Exception:
+        db.rollback()
+        record_job(db, 'upcoming-reminder-delivery', 503)
+        upcoming_delivery = {'failed': True}
+    return {'ok': True, 'scheduled_transactions_posted': posted, 'notifications': delivery, 'upcoming_notifications': upcoming_delivery}
 
 
 @router.post('/api/maintenance/updates')

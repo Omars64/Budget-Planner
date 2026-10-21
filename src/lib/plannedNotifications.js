@@ -3,6 +3,7 @@ import { api } from './api'
 import { isNativeApp } from './deviceNotifications'
 import { readNotificationSettings } from './notificationSettings'
 import { dateInput, instant, saveDate } from './time'
+import { upcomingPushActive } from './upcomingDelivery'
 
 const key = userId => `budgetly:upcoming-delivered:${userId}`
 let lastNativeSignature = ''
@@ -28,6 +29,7 @@ export async function cancelPlannedNotifications() {
 
 export function reminderAt(row, settings) {
   const due = instant(row.date)
+  if (settings.upcoming_reminder_mode === 'before') return new Date(due.getTime() - (settings.upcoming_reminder_minutes || 1440) * 60000)
   const day = dateInput(due).slice(0,10)
   const [year,month,date] = day.split('-').map(Number)
   const days = Number(settings.upcoming_reminder_days || 0)
@@ -38,39 +40,42 @@ export function reminderAt(row, settings) {
 
 export async function syncPlannedNotifications(userId) {
   if (!userId) return
-  const runGeneration = generation
+  const runGeneration = ++generation
   const settings = readNotificationSettings({},userId)
+  if (!settings.upcoming_reminders_enabled) return cancelPlannedNotifications()
   const rows = await api('/api/planned-transactions?space_id=')
-  const planner = await api('/api/planner/reminders?space_id=').catch(() => ({items:[]}))
+  const planner = await api('/api/planner/reminders?space_id=').catch(() => ({items:[], unavailable:true}))
   if (runGeneration !== generation) return
-  const current = [...rows,...(Array.isArray(planner?.items) ? planner.items : [])].filter(row => ['planned','scheduled'].includes(row.status) && row.type==='expense' && row.reminder_enabled)
+  const current = [...rows,...(Array.isArray(planner?.items) ? planner.items : [])].filter(row => ['planned','scheduled'].includes(row.status) && row.type==='expense' && row.reminder_enabled && instant(row.date).getTime()>Date.now())
   const now = Date.now()
   if (isNativeApp()) {
-    const signature = JSON.stringify([userId,settings.upcoming_reminders_enabled,settings.upcoming_reminder_days,settings.upcoming_reminder_time,current.map(row=>[row.id,row.date,row.description])])
+    const permission = await LocalNotifications.checkPermissions()
+    const signature = JSON.stringify([userId,permission.display,settings.upcoming_reminders_enabled,settings.upcoming_reminder_days,settings.upcoming_reminder_time,settings.upcoming_reminder_mode,settings.upcoming_reminder_minutes,current.map(row=>[row.id,row.date,row.description,row.wallet_name])])
     return enqueueNative(async () => {
       if (runGeneration !== generation) return
       if (lastNativeSignature===signature) return
       const pending = await LocalNotifications.getPending()
-      const old = pending.notifications.filter(item=>item.id>=200000&&item.id<1000000000).map(item=>({id:item.id}))
+      const old = pending.notifications.filter(item=>item.id>=200000&&item.id<1000000000 && (!planner.unavailable || item.id<400000000)).map(item=>({id:item.id}))
       if (old.length) await LocalNotifications.cancel({notifications:old})
       if (settings.upcoming_reminders_enabled) {
         const permission = await LocalNotifications.checkPermissions()
         if (permission.display==='granted') {
-          const notifications = current.map(row=>({row,at:reminderAt(row,settings)})).filter(item=>item.at.getTime()>now).sort((a,b)=>a.at-b.at).slice(0,60).map(({row,at})=>({id:row.notification_id || 200000+row.id,title:'Upcoming expense',body:`${row.description} · ${row.wallet_name}`,smallIcon:'flowbudget_notification',iconColor:'#0a4173',schedule:{at,allowWhileIdle:true},isExactNotification:false}))
+          const notifications = current.map(row=>({row,at:reminderAt(row,settings)})).filter(item=>item.at.getTime()>now).sort((a,b)=>a.at-b.at).slice(0,60).map(({row,at})=>({id:row.notification_id || 200000+row.id,title:`Upcoming: ${row.description}`,body:`Due ${dateInput(row.date).replace('T',' ')} (Kuwait)`,smallIcon:'flowbudget_notification',iconColor:'#0a4173',schedule:{at,allowWhileIdle:true},isExactNotification:false,extra:{route:'/upcoming'}}))
           if (notifications.length) await LocalNotifications.schedule({notifications})
         }
       }
-      lastNativeSignature=signature
+      if (!planner.unavailable) lastNativeSignature=signature
     })
   }
   if (!settings.upcoming_reminders_enabled || !('Notification' in window) || window.Notification.permission!=='granted') return
   let delivered = {}
   try { delivered = JSON.parse(localStorage.getItem(key(userId))||'{}') } catch { /* Use an in-memory attempt for private mode. */ }
   for (const row of current) {
+    if (typeof row.id === 'number' && upcomingPushActive(userId)) continue
     const when = reminderAt(row,settings).getTime()
     const receipt = `${row.id}:${when}`
     if (when<=now && when>now-6*3600000 && !delivered[receipt]) {
-      new window.Notification('Upcoming expense',{body:`${row.description} · ${row.wallet_name}`,icon:'/notification-wallet.svg',tag:`budgetly-upcoming-${row.id}`})
+      new window.Notification(`Upcoming: ${row.description}`,{body:`Due ${dateInput(row.date).replace('T',' ')} (Kuwait)`,icon:'/notification-wallet.svg',tag:`budgetly-upcoming-${row.id}`})
       delivered[receipt]=now
     }
   }

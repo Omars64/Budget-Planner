@@ -1,4 +1,8 @@
 {
+  "6.3.0": [
+    {"title":"Budgets that repeat","detail":"Choose Repeat every month explicitly. Monthly spending refreshes automatically, while existing single-month budgets and all transactions stay intact."},
+    {"title":"Upcoming expense reminders","detail":"Choose calendar days and a time, or a minute-based lead time. Notifications identify the expense. Android schedules local alerts; supported browsers can receive Web Push through the existing scheduler."}
+  ],
   "6.2.7": [
     {"title":"Support preferences","detail":"Choose whether the coffee popup appears after sign-in. Administrators can also hide the support link in their own sidebar without changing it for anyone else."}
   ],

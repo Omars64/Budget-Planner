@@ -3,6 +3,10 @@ import { Capacitor } from '@capacitor/core'
 export const notificationSettingsChangedEvent = 'budgetly:notification-settings-changed'
 const updatePreferenceKey = 'budgetly-update-notifications-v1'
 const scheduledPreferenceKey = 'budgetly-scheduled-notifications-v1'
+const upcomingPreferenceKey = 'budgetly-upcoming-notifications-v1'
+export function upcomingNotificationsEnabled() {
+  try { return localStorage.getItem(upcomingPreferenceKey) === 'true' } catch { return false }
+}
 export function scheduledNotificationsEnabled() {
   try { return localStorage.getItem(scheduledPreferenceKey) === 'true' } catch { return false }
 }
@@ -27,6 +31,8 @@ export const notificationSettingKeys = [
   'upcoming_reminders_enabled',
   'upcoming_reminder_days',
   'upcoming_reminder_time',
+  'upcoming_reminder_mode',
+  'upcoming_reminder_minutes',
 ]
 
 const allowedIntervals = [1, 2, 3, 4, 6, 8, 12, 24]
@@ -59,7 +65,9 @@ const normalize = (source = {}) => {
     quiet_end: typeof source.quiet_end === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(source.quiet_end) ? source.quiet_end : '08:00',
     reminder_topics: topics.length ? topics : ['daily'],
     upcoming_reminders_enabled: Boolean(source.upcoming_reminders_enabled),
-    upcoming_reminder_days: [0,1,2,3,7,14].includes(Number(source.upcoming_reminder_days)) ? Number(source.upcoming_reminder_days) : 1,
+    upcoming_reminder_days: Number.isInteger(Number(source.upcoming_reminder_days)) && Number(source.upcoming_reminder_days)>=0 && Number(source.upcoming_reminder_days)<=30 && source.upcoming_reminder_days!=='' ? Number(source.upcoming_reminder_days) : 1,
+    upcoming_reminder_mode: source.upcoming_reminder_mode === 'before' ? 'before' : 'calendar',
+    upcoming_reminder_minutes: Number.isInteger(Number(source.upcoming_reminder_minutes)) && Number(source.upcoming_reminder_minutes)>=1 && Number(source.upcoming_reminder_minutes)<=43200 ? Number(source.upcoming_reminder_minutes) : 1440,
     upcoming_reminder_time: typeof source.upcoming_reminder_time === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(source.upcoming_reminder_time) ? source.upcoming_reminder_time : '09:00',
   }
 }
@@ -74,9 +82,11 @@ export function readNotificationSettings(source, userId) {
     if (stored) {
       const next = normalize(JSON.parse(stored))
       window.localStorage.setItem(scheduledPreferenceKey,String(next.scheduled_notifications_enabled))
+      window.localStorage.setItem(upcomingPreferenceKey,String(next.upcoming_reminders_enabled))
       return next
     }
     window.localStorage.setItem(scheduledPreferenceKey,'false')
+    window.localStorage.setItem(upcomingPreferenceKey,String(fallback.upcoming_reminders_enabled))
     window.localStorage.setItem(notificationStorageKey(userId), JSON.stringify(fallback))
   } catch {
     // Storage can be unavailable in private browsing or a restricted WebView.
@@ -85,6 +95,7 @@ export function readNotificationSettings(source, userId) {
 }
 
 export function saveNotificationSettings(source, userId) {
+  localStorage.setItem(upcomingPreferenceKey, String(Boolean(source.upcoming_reminders_enabled)))
   localStorage.setItem(scheduledPreferenceKey, String(Boolean(source.scheduled_notifications_enabled)))
   saveUpdateNotifications(source.update_notifications_enabled !== false)
   const next = normalize(source)

@@ -1,9 +1,18 @@
 import { beforeEach, expect, it, vi } from 'vitest'
-import { notificationStorageKey, readNotificationSettings, saveNotificationSettings, stripNotificationSettings, scheduledNotificationsEnabled } from './notificationSettings'
+import { notificationStorageKey, readNotificationSettings, saveNotificationSettings, stripNotificationSettings, scheduledNotificationsEnabled, upcomingNotificationsEnabled } from './notificationSettings'
 
 vi.mock('@capacitor/core', () => ({ Capacitor: { getPlatform: () => 'browser' } }))
 
 beforeEach(() => window.localStorage.clear())
+
+it('persists custom upcoming timing per account and resets opt-in when switching accounts', () => {
+  saveNotificationSettings({upcoming_reminders_enabled:true,upcoming_reminder_mode:'before',upcoming_reminder_minutes:90,upcoming_reminder_days:5},42)
+  expect(upcomingNotificationsEnabled()).toBe(true)
+  expect(readNotificationSettings({},42)).toMatchObject({upcoming_reminder_mode:'before',upcoming_reminder_minutes:90,upcoming_reminder_days:5})
+  expect(stripNotificationSettings({currency:'USD',upcoming_reminder_mode:'before',upcoming_reminder_minutes:90})).toEqual({currency:'USD'})
+  readNotificationSettings({},43)
+  expect(upcomingNotificationsEnabled()).toBe(false)
+})
 
 it('keeps scheduled alerts independent and resets their opt-in when accounts change', () => {
   expect(scheduledNotificationsEnabled()).toBe(false)

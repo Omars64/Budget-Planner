@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Bell, CalendarClock, Check, ChevronDown, ListFilter, Pencil, Plus, Trash2 } from 'lucide-react'
 import { api, jsonBody, money } from '../lib/api'
+import { syncPlannedNotifications } from '../lib/plannedNotifications'
 import { categoryChoices } from '../lib/categoryChoices'
 import { dateInput, saveDate, showTime } from '../lib/time'
 import DateTimeField from '../components/DateTimeField'
@@ -90,12 +91,12 @@ export default function Upcoming() {
     setBusy(true); setError('')
     try {
       await api(draft.id ? `/api/planned-transactions/${draft.id}` : '/api/planned-transactions', { method: draft.id ? 'PUT' : 'POST', ...jsonBody({ status: draft.status === 'failed' ? 'planned' : draft.status, reminder_enabled: draft.reminder_enabled, transaction: { type: draft.type, amount: Number(draft.amount), description: draft.description.trim(), notes: draft.notes || '', date: saveDate(draft.date), reporting_month: draft.type === 'transfer' ? null : draft.reporting_month || null, wallet_id: Number(draft.wallet_id), transfer_wallet_id: draft.type === 'transfer' ? Number(draft.transfer_wallet_id) : null, category_id: draft.type === 'transfer' || !draft.category_id ? null : Number(draft.category_id), recurring_frequency: 'none', recurring_until: null } }) })
-      setDraft(null); await load(); notify('Upcoming entry saved')
+      setDraft(null); await load(); void syncPlannedNotifications(user.id).catch(() => {}); notify('Upcoming entry saved')
     } catch (err) { setError(err.message) } finally { setBusy(false) }
   }
   const remove = async row => {
     if (!await confirm(`Delete "${row.description}" from upcoming entries?`)) return
-    try { await api(`/api/planned-transactions/${row.id}`, { method: 'DELETE' }); await load(); notify('Upcoming entry deleted') } catch (err) { notify(err.message, 'error') }
+    try { await api(`/api/planned-transactions/${row.id}`, { method: 'DELETE' }); await load(); void syncPlannedNotifications(user.id).catch(() => {}); notify('Upcoming entry deleted') } catch (err) { notify(err.message, 'error') }
   }
 
   return <section className="upcoming-page">
@@ -133,6 +134,6 @@ export default function Upcoming() {
         <div className="upcoming-record-end"><strong className={`upcoming-amount ${row.type}`}>{row.type === 'expense' ? '-' : row.type === 'income' ? '+' : ''}{money(row.amount, settings.currency)}</strong>{row.can_edit && row.status !== 'posted' && <div className="button-row"><button type="button" className="icon-button" title="Edit entry" aria-label={`Edit ${row.description}`} onClick={() => start(row)}><Pencil size={17}/></button><button type="button" className="icon-button" title="Delete entry" aria-label={`Delete ${row.description}`} onClick={() => remove(row)}><Trash2 size={17}/></button></div>}</div>
       </article>)}
     </div>
-    <p className="muted upcoming-footnote"><CalendarClock size={15}/> Auto record runs on your next app visit after the due time, or during daily maintenance. Planned rows remain estimates until recorded.</p>
+    <p className="muted upcoming-footnote"><CalendarClock size={15}/> Auto record is processed automatically by the server, normally within a minute of the due time. Planned rows remain estimates until recorded.</p>
   </section>
 }

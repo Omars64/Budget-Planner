@@ -1,12 +1,15 @@
 /* Update delivery only: no page caching or financial records. */
 const preferenceStore = 'budgetly-push-preference-v1'
+self.addEventListener('install', () => self.skipWaiting())
+self.addEventListener('activate', event => event.waitUntil(self.clients.claim()))
 self.addEventListener('message', event => {
   if (event.data?.type !== 'budgetly-update-preference') return
   event.waitUntil((async () => {
     const store = await self.caches.open(preferenceStore)
     await store.put('/budgetly-push-enabled', new Response(String(Boolean(event.data.enabled))))
     await store.put('/budgetly-scheduled-enabled', new Response(String(Boolean(event.data.scheduled))))
-    event.ports[0]?.postMessage({saved:true})
+    await store.put('/budgetly-upcoming-enabled', new Response(String(Boolean(event.data.upcoming))))
+    event.ports[0]?.postMessage({saved:true,upcoming:Boolean(event.data.upcoming)})
     if (!event.data.enabled) {
       for (const tag of ['budgetly-update', 'budgetly-test']) {
         for (const notice of await self.registration.getNotifications({tag})) notice.close()
@@ -17,6 +20,11 @@ self.addEventListener('message', event => {
         if (notice.tag.startsWith('budgetly-scheduled-')) notice.close()
       }
     }
+    if (!event.data.upcoming) {
+      for (const notice of await self.registration.getNotifications()) {
+        if (notice.tag.startsWith('budgetly-upcoming-')) notice.close()
+      }
+    }
   })())
 })
 self.addEventListener('push', event => {
@@ -24,6 +32,15 @@ self.addEventListener('push', event => {
     const store = await self.caches.open(preferenceStore)
     let data
     try { data = event.data.json() } catch { return }
+    if (data.kind === 'upcoming') {
+      const enabled = await store.match('/budgetly-upcoming-enabled')
+      if (!enabled || await enabled.text() !== 'true' || !/^[a-f0-9]{64}$/.test(data.event)) return
+      await self.registration.showNotification('Upcoming expense', {
+        body: String(data.body || '').slice(0, 230), icon: '/notification-wallet.svg',
+        tag: `budgetly-upcoming-${data.event}`, data: {scheduled:true}
+      })
+      return
+    }
     const scheduled = data.kind === 'scheduled'
     const enabled = await store.match(scheduled ? '/budgetly-scheduled-enabled' : '/budgetly-push-enabled')
     if (scheduled ? !enabled || await enabled.text() !== 'true' : enabled && await enabled.text() === 'false') return

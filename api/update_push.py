@@ -7,6 +7,7 @@ import time
 from datetime import timedelta
 from urllib.parse import urlsplit
 from uuid import UUID
+from typing import Literal
 
 from cryptography.fernet import Fernet
 from fastapi import APIRouter, Depends, HTTPException, Response
@@ -40,6 +41,13 @@ class ScheduledPush(Base):
     created_at = Column(DateTime, nullable=False, default=utc_now)
     sent_at = Column(DateTime, index=True)
     __table_args__ = (UniqueConstraint('plan_id', 'device_id', name='uq_scheduled_push_plan_device'),)
+
+
+class UpcomingPushReceipt(Base):
+    __tablename__ = 'upcoming_push_receipts'
+    device_id = Column(ForeignKey('update_push_devices.id', ondelete='CASCADE'), primary_key=True)
+    occurrence = Column(String(64), primary_key=True)
+    sent_at = Column(DateTime, nullable=False, default=utc_now)
 
 
 def device_payload(row):
@@ -109,6 +117,14 @@ def push_config(response: Response):
     return {**ready, 'public_key': os.getenv('WEB_PUSH_PUBLIC_KEY', '') if ready['browser'] else ''}
 
 
+class UpcomingPreference(BaseModel):
+    enabled: bool = False
+    mode: Literal['calendar', 'before'] = 'calendar'
+    minutes: int = Field(default=1440, ge=1, le=43200)
+    days: int = Field(default=1, ge=0, le=30)
+    time: str = Field(default='09:00', pattern=r'^([01]\d|2[0-3]):[0-5]\d$')
+
+
 class PushIn(BaseModel):
     id: UUID
     platform: str = Field(pattern='^(android|browser)$')
@@ -117,6 +133,7 @@ class PushIn(BaseModel):
     subscription: dict | None = None
     updates: bool = True
     scheduled: bool = False
+    upcoming: UpcomingPreference = Field(default_factory=UpcomingPreference)
 
     @field_validator('subscription')
     @classmethod
@@ -157,11 +174,12 @@ def subscribe(payload: PushIn, user=Depends(current_user), db=Depends(get_db)):
         db.add(row)
     row.platform = payload.platform
     row.payload = cipher().encrypt(json.dumps({'credentials': payload.token if payload.platform == 'android' else payload.subscription,
-                                             'updates': payload.updates, 'scheduled': payload.scheduled}).encode()).decode()
+                                             'updates': payload.updates, 'scheduled': payload.scheduled,
+                                             'upcoming': payload.upcoming.model_dump()}).encode()).decode()
     row.installed_version = payload.version
     row.updated_at = utc_now()
     db.commit()
-    return {'enabled': True}
+    return {'enabled': True, 'upcoming': payload.platform == 'browser' and payload.upcoming.enabled}
 
 
 @router.delete('/api/app-updates/push-device/{device_id}', status_code=204)
@@ -188,7 +206,8 @@ def send_device(row, version, test=False, notice=None):
         try:
             webpush(value, json.dumps(notice or {'version': version, 'title': title, 'body': body, 'test': test}),
                     vapid_private_key=vapid,
-                    vapid_claims={'sub': os.environ['WEB_PUSH_SUBJECT']}, ttl=86400, timeout=5)
+                    vapid_claims={'sub': os.environ['WEB_PUSH_SUBJECT']}, ttl=86400,
+                    timeout=2 if notice and notice.get('kind') == 'upcoming' else 5)
             return 200
         except WebPushException as error:
             return error.response.status_code if error.response is not None else 503
