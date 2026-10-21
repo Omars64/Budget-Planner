@@ -1,7 +1,6 @@
-"""Shared workspaces retain the ledger and its original wallet-level grants."""
+"""Space membership authorizes shared records without changing ledger ownership."""
 import hashlib
 import json
-import re
 from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import Literal
@@ -21,7 +20,7 @@ SCOPED = (Wallet, Category, Budget, Goal, Debt, Note, NoteFolder)
 
 
 def migrate_shared_wallets(connection, owner_id=None):
-    """Only attach original wallets; never recreate financial records or broaden grants."""
+    """Attach original wallets and normalize retired roles without recreating records."""
     spaces, members, wallets, shares = Space.__table__, SpaceMember.__table__, Wallet.__table__, WalletShare.__table__
     all_shares = connection.execute(shares.select().order_by(shares.c.id)).mappings().all()
     grouped = {}
@@ -51,6 +50,13 @@ def migrate_shared_wallets(connection, owner_id=None):
                 for name, icon, color in entries:
                     connection.execute(Category.__table__.insert().values(user_id=group['owner'], space_id=space_id, name=name, kind=kind, icon=icon, color=color))
         connection.execute(wallets.update().where(wallets.c.id.in_(group['wallets']), wallets.c.space_id.is_(None)).values(space_id=space_id))
+    # Contributor retirement is an approved role upgrade, never a ledger migration.
+    space_ids = spaces.select().with_only_columns(spaces.c.id)
+    if owner_id is not None:
+        space_ids = space_ids.where(spaces.c.owner_id == owner_id)
+    connection.execute(members.update().where(members.c.role == 'add', members.c.space_id.in_(space_ids)).values(role='edit'))
+    connection.execute(shares.update().where(shares.c.permission == 'add', shares.c.wallet_id.in_(
+        wallets.select().with_only_columns(wallets.c.id).where(wallets.c.space_id.in_(space_ids)))).values(permission='edit'))
 
 
 def member_role(db, space, user):
@@ -59,7 +65,23 @@ def member_role(db, space, user):
     member = db.query(SpaceMember).filter(SpaceMember.space_id == space.id, or_(SpaceMember.member_user_id == user.id, SpaceMember.email == user.email.lower())).populate_existing().first()
     if not member:
         raise HTTPException(403, 'You no longer have access to this space.')
-    return member.role
+    role = 'edit' if member.role == 'add' else member.role
+    if role not in {'view', 'edit'}:
+        raise HTTPException(403, 'Invalid space role. Ask the owner to review this membership.')
+    return role
+
+
+def space_wallet_permission(db, wallet, user):
+    space = db.query(Space).filter_by(id=wallet.space_id).populate_existing().first()
+    if not space or wallet.user_id != space.owner_id:
+        raise HTTPException(403, 'This wallet is not available in the space.')
+    return 'edit' if member_role(db, space, user) in {'owner', 'edit'} else 'view'
+
+
+def space_wallet_ids(db, user):
+    memberships = db.query(SpaceMember.space_id).filter(or_(SpaceMember.member_user_id == user.id, SpaceMember.email == user.email.lower()))
+    return {row[0] for row in db.query(Wallet.id).join(Space, Wallet.space_id == Space.id).filter(
+        or_(Space.owner_id == user.id, Space.id.in_(memberships)))}
 
 
 def establish_scope(request, db, actor):
@@ -94,19 +116,10 @@ def establish_scope(request, db, actor):
             raise HTTPException(404, 'Space not found')
     role = member_role(db, space, actor)
     owned = db.query(Wallet).filter_by(space_id=space.id).all()
-    # Legacy clients can revoke individual wallet grants. Do not infer wider access
-    # from the migration's membership snapshot when a wallet grant has changed.
-    if role == 'owner':
-        wallet_ids = [w.id for w in owned]
-    else:
-        grants = {s.wallet_id: s.permission for s in db.query(WalletShare).filter(WalletShare.wallet_id.in_([w.id for w in owned]), or_(WalletShare.member_user_id == actor.id, WalletShare.invitee_email == actor.email.lower())).all()}
-        wallet_ids = list(grants)
-        if len(wallet_ids) != len(owned) or any(s != role for s in grants.values()):
-            raise HTTPException(409, 'Wallet permissions changed. Ask the owner to review this space membership.')
+    # Space membership is authoritative; WalletShare is only a compatibility mirror.
+    wallet_ids = [w.id for w in owned]
     if writing:
-        path = request.url.path.rstrip('/')
-        entry = path in {'/api/transactions', '/api/shared/transactions', '/api/planned-transactions'} or bool(re.fullmatch(r'/api/bank-inbox/\d+/(approve|ignore|restore)', path))
-        if role == 'view' or (role == 'add' and (request.method != 'POST' or not entry)):
+        if role == 'view':
             raise HTTPException(403, 'Your space role does not allow this change.')
         if '/shares' in request.url.path:
             raise HTTPException(403, 'Manage space members in the space menu.')
@@ -218,7 +231,7 @@ class SpaceIn(BaseModel):
 
 class MemberIn(BaseModel):
     email: str = Field(min_length=3, max_length=160, pattern=r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
-    role: Literal['view', 'add', 'edit'] = 'add'
+    role: Literal['view', 'edit'] = 'view'
 
     @field_validator('email')
     @classmethod
@@ -233,7 +246,7 @@ def serialize(db, space, actor):
     role = member_role(db, space, actor)
     owner = db.get(User, space.owner_id)
     members = db.query(SpaceMember).filter_by(space_id=space.id).order_by(SpaceMember.id).all()
-    return {'id': space.id, 'name': space.name, 'color': space.color, 'accent': PALETTE[space.color], 'currency': space.currency, 'role': role, 'owner_name': owner.username, 'owner_email': owner.email, 'members': [{'email': owner.email, 'name': owner.username, 'role': 'owner'}] + [{'email': m.email, 'role': m.role} for m in members], 'migrated': bool(space.migration_key)}
+    return {'id': space.id, 'name': space.name, 'color': space.color, 'accent': PALETTE[space.color], 'currency': space.currency, 'role': role, 'owner_name': owner.username, 'owner_email': owner.email, 'members': [{'email': owner.email, 'name': owner.username, 'role': 'owner'}] + [{'email': m.email, 'role': 'edit' if m.role == 'add' else m.role} for m in members], 'migrated': bool(space.migration_key)}
 
 
 @router.get('')

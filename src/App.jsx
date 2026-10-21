@@ -386,7 +386,7 @@ export default function App() {
   const value = useMemo(() => ({
     user: session.user, settings: viewSettings, accountSettings: settings, setSettings, appearance, setAppearance, ...spaceState,
     spaceKey: activeSpace ? `space:${activeSpace.id}` : 'personal',
-    canAdd: !activeSpace || activeSpace.role !== 'view', canManage: !activeSpace || ['owner', 'edit'].includes(activeSpace.role),
+    canAdd: !activeSpace || ['owner', 'edit'].includes(activeSpace.role), canManage: !activeSpace || ['owner', 'edit'].includes(activeSpace.role),
     refreshKey, refresh, notify, confirm, reloadSettings: loadSettings, reloadAppearance: loadAppearance, reloadUser, isGuest, requestSignIn, lock: isGuest ? () => setGuestSigningIn(true) : signOut,
   }), [session.user, settings, viewSettings, spaceState, activeSpace, appearance, refreshKey, refresh, notify, confirm, loadSettings, loadAppearance, reloadUser, signOut, isGuest, requestSignIn])
 

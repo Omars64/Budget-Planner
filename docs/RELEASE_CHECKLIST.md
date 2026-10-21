@@ -37,7 +37,7 @@ The `xcode` dependency has a scoped `uuid` override to 11.1.1 for GHSA-w5hq-g745
 - Fail a save, retain the draft, reconnect and retry without duplicates. Concurrent edits must produce a conflict, not overwrite silently.
 - New-entry drafts are stored per account on this device for up to seven days after session loss. Discard draft removes them; signing out clears transaction drafts. Templates remain device-local and account-scoped.
 - Delete then Undo; verify restored balances. A shared editor cannot access the owner's Trash.
-- Verify shared viewer/add/editor/owner permissions and revoked-access refresh.
+- Verify Space Viewer/Manager/Owner permissions, legacy Contributor upgrades, and revoked-access refresh.
 - Goals and debts explicitly track progress only, without silently moving wallet funds.
 - Verify tutorial skip/replay, notification permission, scheduled delivery with app closed, profile visibility and footer clearance.
 - Export owner and shared-viewer wallet statements for a selected date range in CSV, XLSX, PDF, and Word. Check opening/running balances and Android sharing. Confirm JSON restore remains separate.

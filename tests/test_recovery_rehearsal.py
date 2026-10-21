@@ -218,7 +218,7 @@ def test_account_restore_preserves_content_links_and_balances(rehearsal, fresh):
 
 
 @pytest.mark.parametrize('fresh', [False, True])
-@pytest.mark.parametrize('member,can_add,can_edit', [('viewer', False, False), ('adder', True, False), ('editor', True, True), ('outsider', False, False)])
+@pytest.mark.parametrize('member,can_add,can_edit', [('viewer', False, False), ('adder', True, True), ('editor', True, True), ('outsider', False, False)])
 def test_restored_space_enforces_roles(rehearsal, fresh, member, can_add, can_edit):
     r = rehearsal
     payload = archive(r)
@@ -293,7 +293,9 @@ def test_same_account_restore_reinstates_archived_space_membership(rehearsal, as
     if aspect == 'metadata':
         assert (recovered['name'], recovered['color'], recovered['currency']) == ('Synthetic home', 'green', 'KWD')
     else:
-        assert sorted(recovered['members'], key=lambda x: x['email']) == sorted(payload['spaces'][0]['members'], key=lambda x: x['email'])
+        expected = [{**member, 'role': 'edit' if member['role'] == 'add' else member['role']}
+                    for member in payload['spaces'][0]['members']]
+        assert sorted(recovered['members'], key=lambda x: x['email']) == sorted(expected, key=lambda x: x['email'])
 
 
 @pytest.mark.parametrize('missing_link', [None, 999999])

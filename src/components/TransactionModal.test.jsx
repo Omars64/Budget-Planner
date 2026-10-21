@@ -39,12 +39,13 @@ it('retains a historical category ID when editing a Space transaction', async ()
     {id:2,name:'Bills',kind:'expense',space_id:null},
     {id:3,name:'Bills',kind:'expense',space_id:7},
   ] : {}))
-  render(<TransactionModal open editing={{id:10,type:'expense',amount:2,description:'Bill',date:'2026-09-12T09:00:00Z',wallet_id:1,category_id:2,recurring_frequency:'none'}} onClose={vi.fn()} onSaved={vi.fn()}/>)
+  render(<TransactionModal open editing={{id:10,revision:'space-record-revision',type:'expense',amount:2,description:'Bill',date:'2026-09-12T09:00:00Z',wallet_id:1,category_id:2,recurring_frequency:'none'}} onClose={vi.fn()} onSaved={vi.fn()}/>)
   await waitFor(() => expect(screen.getByRole('button',{name:'Save changes'})).toBeEnabled())
   expect(screen.getByRole('option', { name: 'Bills' })).toHaveValue('2')
   fireEvent.click(screen.getByRole('button',{name:'Save changes'}))
   await waitFor(() => expect(api).toHaveBeenCalledWith('/api/transactions/10', expect.objectContaining({method:'PUT'})))
   expect(JSON.parse(api.mock.calls.find(([path]) => path === '/api/transactions/10')[1].body).category_id).toBe(2)
+  expect(JSON.parse(api.mock.calls.find(([path]) => path === '/api/transactions/10')[1].body).revision).toBe('space-record-revision')
 })
 it('keeps image selection under collapsed More options and submits it with the entry',async()=>{
   await mount()

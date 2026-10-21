@@ -127,6 +127,11 @@ def share_for_wallet(db: Session, user: User, wallet_id: int):
     wallet = db.query(Wallet).filter_by(id=wallet_id).populate_existing().first()
     if not wallet:
         raise HTTPException(404, "Wallet not found")
+    if wallet.space_id is not None:
+        from .spaces import space_wallet_permission
+        permission = space_wallet_permission(db, wallet, user)
+        remember_wallet_access(db, user, wallet, permission)
+        return wallet, permission, wallet.user_id == user.id
     if wallet.user_id == user.id:
         remember_wallet_access(db, user, wallet, 'edit')
         return wallet, "edit", True
@@ -147,9 +152,10 @@ def require_edit(db: Session, user: User, wallet_id: int, creating=False) -> Wal
 
 
 def shared_wallet_ids(db: Session, user: User) -> set[int]:
-    incoming = db.query(WalletShare.wallet_id).filter(or_(WalletShare.member_user_id == user.id, WalletShare.invitee_email == normalize_email(user.email))).all()
-    outgoing = db.query(WalletShare.wallet_id).filter(WalletShare.owner_id == user.id).all()
-    return {row[0] for row in [*incoming, *outgoing]}
+    from .spaces import space_wallet_ids
+    legacy = db.query(WalletShare.wallet_id).join(Wallet, Wallet.id == WalletShare.wallet_id).filter(
+        Wallet.space_id.is_(None), or_(WalletShare.owner_id == user.id, WalletShare.member_user_id == user.id, WalletShare.invitee_email == normalize_email(user.email)))
+    return {row[0] for row in legacy} | space_wallet_ids(db, user)
 
 
 def can_edit_wallet(db: Session, user: User, wallet_id: Optional[int]) -> bool:
@@ -158,6 +164,12 @@ def can_edit_wallet(db: Session, user: User, wallet_id: Optional[int]) -> bool:
     wallet = db.get(Wallet, wallet_id)
     if not wallet:
         return False
+    if wallet.space_id is not None:
+        from .spaces import space_wallet_permission
+        try:
+            return space_wallet_permission(db, wallet, user) == 'edit'
+        except HTTPException:
+            return False
     if wallet.user_id == user.id:
         return True
     return bool(db.query(WalletShare).filter(WalletShare.wallet_id == wallet_id, WalletShare.permission == "edit", or_(WalletShare.member_user_id == user.id, WalletShare.invitee_email == normalize_email(user.email))).first())
@@ -266,20 +278,18 @@ def update_appearance(payload: AppearanceIn, user: User = Depends(current_user),
 
 @router.get("/api/shared/wallets")
 def shared_wallets(user: User = Depends(workspace_actor), db: Session = Depends(get_db)):
-    email = normalize_email(user.email)
-    incoming = db.query(WalletShare).filter(or_(WalletShare.member_user_id == user.id, WalletShare.invitee_email == email)).all()
-    incoming_map = {s.wallet_id: s for s in incoming}
     outgoing = db.query(WalletShare).filter(WalletShare.owner_id == user.id).all(); outgoing_map = {}
     for s in outgoing: outgoing_map.setdefault(s.wallet_id, []).append(s)
-    ids = set(incoming_map) | set(outgoing_map); wallets = db.query(Wallet).filter(Wallet.id.in_(ids)).all() if ids else []
+    ids = shared_wallet_ids(db, user); wallets = db.query(Wallet).filter(Wallet.id.in_(ids)).all() if ids else []
     owners = {o.id: o for o in db.query(User).filter(User.id.in_({w.user_id for w in wallets})).all()} if wallets else {}
     totals = {(wallet_id, kind): amount for wallet_id, kind, amount in db.query(Transaction.wallet_id, Transaction.type, func.sum(Transaction.amount)).filter(Transaction.wallet_id.in_(ids)).group_by(Transaction.wallet_id, Transaction.type).all()} if ids else {}
     incoming_totals = dict(db.query(Transaction.transfer_wallet_id, func.sum(Transaction.amount)).filter(Transaction.type == "transfer", Transaction.transfer_wallet_id.in_(ids)).group_by(Transaction.transfer_wallet_id).all()) if ids else {}
     result = []
     for wallet in wallets:
-        owner = owners.get(wallet.user_id); is_owner = wallet.user_id == user.id; incoming_share = incoming_map.get(wallet.id); shares = outgoing_map.get(wallet.id, []) if is_owner else []
+        owner = owners.get(wallet.user_id); is_owner = wallet.user_id == user.id; shares = outgoing_map.get(wallet.id, []) if is_owner else []
+        permission = share_for_wallet(db, user, wallet.id)[1]
         balance = float(wallet.initial_balance) + float(totals.get((wallet.id, "income"), 0)) - float(totals.get((wallet.id, "expense"), 0)) - float(totals.get((wallet.id, "transfer"), 0)) + float(incoming_totals.get(wallet.id, 0))
-        result.append({"wallet_id": wallet.id, "name": wallet.name, "type": wallet.type, "color": wallet.color, "card_network": wallet.card_network or ("visa" if wallet.type in {"bank", "card"} else None), "balance": round(balance, 3), "owner_id": wallet.user_id, "owner_email": owner.email if owner else "", "owner_name": owner.username if owner else "", "is_owner": is_owner, "permission": "edit" if is_owner else incoming_share.permission, "can_edit": is_owner or incoming_share.permission == "edit", "can_add": is_owner or incoming_share.permission in {"edit","add"}, "shares": [{"id": s.id, "email": s.invitee_email, "permission": s.permission, "registered": bool(s.member_user_id)} for s in shares]})
+        result.append({"wallet_id": wallet.id, "name": wallet.name, "type": wallet.type, "color": wallet.color, "card_network": wallet.card_network or ("visa" if wallet.type in {"bank", "card"} else None), "balance": round(balance, 3), "owner_id": wallet.user_id, "owner_email": owner.email if owner else "", "owner_name": owner.username if owner else "", "is_owner": is_owner, "permission": permission, "can_edit": permission == "edit", "can_add": permission in {"edit","add"}, "shares": [{"id": s.id, "email": s.invitee_email, "permission": s.permission, "registered": bool(s.member_user_id)} for s in shares]})
     return sorted(result, key=lambda item: (not item["is_owner"], item["name"].lower()))
 
 
@@ -289,6 +299,7 @@ def share_wallet(wallet_id: int, payload: ShareIn, user: User = Depends(workspac
     lock_owners(db, user.id)
     wallet = db.query(Wallet).filter(Wallet.id == wallet_id, Wallet.user_id == user.id).first()
     if not wallet: raise HTTPException(404, "Wallet not found")
+    if wallet.space_id is not None: raise HTTPException(403, 'Manage access through Space members, not individual wallets.')
     email = clean_email(payload.email)
     if email == normalize_email(user.email): raise HTTPException(400, "You already own this wallet")
     member = db.query(User).filter(User.email == email, User.active.is_(True)).first()
@@ -309,6 +320,8 @@ def remove_share(share_id: int, user: User = Depends(workspace_actor), db: Sessi
     lock_owners(db, user.id)
     share = db.query(WalletShare).filter(WalletShare.id == share_id, WalletShare.owner_id == user.id).first()
     if not share: raise HTTPException(404, "Share not found")
+    wallet = db.get(Wallet, share.wallet_id)
+    if wallet and wallet.space_id is not None: raise HTTPException(403, 'Manage access through Space members, not individual wallets.')
     from .account_security import audit
     audit(db, user.id, user.id, 'Revoked wallet sharing', f'wallet:{share.wallet_id}')
     db.delete(share); db.commit(); return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -35,7 +35,8 @@ def trash(db, row, actor, kind):
         payload['budget_ids'] = [r[0] for r in db.query(Budget.id).filter_by(user_id=row.user_id,category_id=row.id)]
     item = TrashItem(user_id=row.user_id, kind=kind, label=getattr(row,'name',None) or getattr(row,'description',None) or getattr(row,'title','Item'), payload=json.dumps(payload))
     db.add(item)
-    audit(db,row.user_id,actor.id,'Moved to Trash',f'{kind}:{row.id}')
+    actor_id = db.info['space'].actor_id if db.info.get('space') else actor.id
+    audit(db,row.user_id,actor_id,'Moved to Trash',f'{kind}:{row.id}')
     db.flush()
     return item
 

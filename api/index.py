@@ -955,7 +955,8 @@ def update_transaction(item_id: int, payload: TransactionWriteIn, request: Reque
     check_revision(request, row)
     require_regular_transaction(row)
     from .account_security import audit
-    audit(db, user.id, user.id, 'Edited transaction', f'transaction:{row.id}')
+    actor_id = db.info['space'].actor_id if db.info.get('space') else user.id
+    audit(db, user.id, actor_id, 'Edited transaction', f'transaction:{row.id}')
     validate_transaction_references(db, user.id, payload)
     for k, v in payload.model_dump(exclude={'receipt'}).items(): setattr(row, k, v)
     if payload.receipt:
@@ -1290,7 +1291,7 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
             validated = SpaceIn.model_validate({key: space[key] for key in ('name', 'color', 'currency')})
             if not isinstance(space['id'], int) or space['id'] <= 0 or space['id'] in archived_spaces or not isinstance(space.get('members', []), list) or len(space.get('members', [])) > 50:
                 raise ValueError('Invalid space archive')
-            members = [MemberIn.model_validate(m) for m in space.get('members', [])]
+            members = [MemberIn.model_validate({**m, 'role': 'edit' if m.get('role') == 'add' else m.get('role')}) for m in space.get('members', [])]
             if len({m.email for m in members}) != len(members) or any(m.email == user.email.lower() for m in members):
                 raise ValueError('Invalid members')
             archived_spaces[space['id']] = (validated, members)

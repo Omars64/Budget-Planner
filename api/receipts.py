@@ -34,6 +34,14 @@ def validate_image(value):
 def owned(db,user,transaction_id,shared=False,write=False):
     row=lock_record(db, Transaction, transaction_id)
     if not row:raise HTTPException(404,'Transaction not found')
+    context = db.info.get('space')
+    if context and context.id is not None:
+        from .extensions import can_edit_wallet
+        if row.wallet_id not in context.wallet_ids or (row.transfer_wallet_id and row.transfer_wallet_id not in context.wallet_ids):
+            raise HTTPException(404,'Transaction not found')
+        if write and not can_edit_wallet(db,user,row.wallet_id):
+            raise HTTPException(403,'You do not have edit access to this transaction')
+        return row
     if shared:
         from .extensions import shared_wallet_ids, can_edit_wallet
         visible=shared_wallet_ids(db,user)

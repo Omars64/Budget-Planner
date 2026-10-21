@@ -6,7 +6,7 @@ import { SPACE_COLORS } from '../lib/spaces'
 import Modal from './Modal'
 import CurrencyField from './CurrencyField'
 
-const roleNames = { owner: 'Owner', edit: 'Manager', add: 'Contributor', view: 'Viewer' }
+const roleNames = { owner: 'Owner', edit: 'Manager', add: 'Manager', view: 'Viewer' }
 const fresh = currency => ({ name: '', color: 'green', currency })
 
 export default function SpaceSwitcher() {
@@ -15,7 +15,7 @@ export default function SpaceSwitcher() {
   const [editing, setEditing] = useState(null)
   const [manage, setManage] = useState(false)
   const [form, setForm] = useState(() => fresh(settings.currency))
-  const [member, setMember] = useState({ email: '', role: 'add' })
+  const [member, setMember] = useState({ email: '', role: 'view' })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   useEffect(() => { setOpen(false); setManage(false) }, [activeSpace?.id])
@@ -25,7 +25,7 @@ export default function SpaceSwitcher() {
     setEditing(null); setForm(fresh(settings.currency)); setError(''); setOpen(false); setManage(true)
   }
   const show = () => {
-    setEditing(activeSpace); setForm({ name: activeSpace.name, color: activeSpace.color, currency: activeSpace.currency }); setMember({email:'',role:'add'}); setError(''); setOpen(false); setManage(true)
+    setEditing(activeSpace); setForm({ name: activeSpace.name, color: activeSpace.color, currency: activeSpace.currency }); setMember({email:'',role:'view'}); setError(''); setOpen(false); setManage(true)
   }
   const save = async event => {
     event.preventDefault()
@@ -45,7 +45,7 @@ export default function SpaceSwitcher() {
     setBusy(true); setError('')
     try {
       const result = await api(`/api/spaces/${editing.id}/members`, {method:'PUT',...jsonBody(member)})
-      setEditing(result); setMember({email:'',role:'add'}); await reloadSpaces(); notify('Membership saved')
+      setEditing(result); setMember({email:'',role:'view'}); await reloadSpaces(); notify('Membership saved')
     } catch (err) { setError(err.message) } finally { setBusy(false) }
   }
   const remove = async email => {
@@ -75,8 +75,8 @@ export default function SpaceSwitcher() {
           {!editing && <CurrencyField scope="space" value={form.currency} onChange={currency => setForm({...form,currency})}/>}
           <div className="modal-actions"><button type="button" className="button ghost" onClick={() => setManage(false)}>Cancel</button><button className="button primary" disabled={busy}>{busy ? 'Saving...' : editing ? 'Save changes' : 'Create space'}</button></div>
         </form> : <p className="muted">{editing.owner_name} manages this space. Your role: {roleNames[editing.role]}.</p>}
-        {editing && <section className="space-members"><h3>Members</h3>{editing.members.map(person => <div className="space-member" key={person.email}><span>{person.name || person.email}<small>{person.name && person.email} {roleNames[person.role]}</small></span>{editing.role === 'owner' && person.role !== 'owner' && <div className="button-row"><button className="icon-button" title="Change role" aria-label={`Change role for ${person.email}`} disabled={busy} onClick={() => setMember({email:person.email,role:person.role})}><Settings2 size={17}/></button><button className="icon-button danger" title="Remove member" aria-label={`Remove ${person.email}`} disabled={busy} onClick={() => remove(person.email)}><Trash2 size={17}/></button></div>}</div>)}</section>}
-        {editing?.role === 'owner' && <form onSubmit={grant} className="stack gap-16"><h3>Add or update member</h3><label className="field"><span>Email</span><input type="email" required value={member.email} onChange={e => setMember({...member,email:e.target.value})}/></label><label className="field"><span>Role</span><select value={member.role} onChange={e => setMember({...member,role:e.target.value})}><option value="view">Viewer · read only</option><option value="add">Contributor · add transactions</option><option value="edit">Manager · manage records</option></select></label><button className="button primary" disabled={busy}>Save membership</button></form>}
+        {editing && <section className="space-members"><h3>Members</h3>{editing.members.map(person => <div className="space-member" key={person.email}><span>{person.name || person.email}<small>{person.name && person.email} {roleNames[person.role]}</small></span>{editing.role === 'owner' && person.role !== 'owner' && <div className="button-row"><button className="icon-button" title="Change role" aria-label={`Change role for ${person.email}`} disabled={busy} onClick={() => setMember({email:person.email,role:person.role==='add'?'edit':person.role})}><Settings2 size={17}/></button><button className="icon-button danger" title="Remove member" aria-label={`Remove ${person.email}`} disabled={busy} onClick={() => remove(person.email)}><Trash2 size={17}/></button></div>}</div>)}</section>}
+        {editing?.role === 'owner' && <form onSubmit={grant} className="stack gap-16"><h3>Add or update member</h3><label className="field"><span>Email</span><input type="email" required value={member.email} onChange={e => setMember({...member,email:e.target.value})}/></label><label className="field"><span>Role</span><select value={member.role} onChange={e => setMember({...member,role:e.target.value})}><option value="view">Viewer · read only</option><option value="edit">Manager · manage records</option></select></label><button className="button primary" disabled={busy}>Save membership</button></form>}
       </div>
     </Modal>
   </div>

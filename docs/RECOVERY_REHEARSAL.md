@@ -72,7 +72,7 @@ retains IDs, credentials and actor attribution rather than remapping them.
   transaction stay completed and do not post again.
 - Personal and Space planner settings, bill wallet/plan/payment remapping,
   restored transaction creation timestamps, revisions, reserve and price history.
-- Restored Space view/add/edit grants and outsider denial through real wallet,
+- Restored Space Viewer/Manager grants (including legacy Contributor upgrades) and outsider denial through real wallet,
   transaction and budget endpoints, on both restore paths.
 - Preflight rejection without account replacement for foreign wallet/Space/
   receipt/planner references, unsupported version, duplicate transaction IDs,

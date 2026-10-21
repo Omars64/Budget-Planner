@@ -1,4 +1,8 @@
 {
+  "6.3.1": [
+    {"title":"Consistent Space roles","detail":"Managers can add, edit and delete Space transactions and upcoming entries, and manage wallets, budgets and categories, including records created by the owner. Viewers remain read-only."},
+    {"title":"Simpler membership","detail":"Space owners now choose Viewer or Manager. Existing Contributors become Managers, with financial records and membership preserved."}
+  ],
   "6.3.0": [
     {"title":"Budgets that repeat","detail":"Choose Repeat every month explicitly. Monthly spending refreshes automatically, while existing single-month budgets and all transactions stay intact."},
     {"title":"Upcoming expense reminders","detail":"Choose calendar days and a time, or a minute-based lead time. Notifications identify the expense. Android schedules local alerts; supported browsers can receive Web Push through the existing scheduler."}

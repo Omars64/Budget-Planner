@@ -99,6 +99,13 @@ def post_due(db: Session, limit=100):
         share = db.query(WalletShare).filter_by(wallet_id=row.wallet_id, member_user_id=row.created_by_id).first() if creator and row.created_by_id != row.owner_id else None
         destination_share = db.query(WalletShare).filter_by(wallet_id=row.transfer_wallet_id, member_user_id=row.created_by_id).first() if creator and row.transfer_wallet_id and row.created_by_id != row.owner_id else None
         allowed = bool(creator and creator.active and (creator.id == row.owner_id or share and share.permission in {'add', 'edit'}) and (not row.transfer_wallet_id or creator.id == row.owner_id or destination_share and destination_share.permission in {'add', 'edit'}))
+        if source and source.space_id is not None and creator and creator.active:
+            from .spaces import space_wallet_permission
+            try:
+                allowed = space_wallet_permission(db, source, creator) == 'edit' and (
+                    not row.transfer_wallet_id or bool(destination and destination.space_id == source.space_id and space_wallet_permission(db, destination, creator) == 'edit'))
+            except HTTPException:
+                allowed = False
         if not allowed or not source or source.user_id != row.owner_id or source.archived or (row.transfer_wallet_id and (not destination or destination.user_id != row.owner_id or destination.archived)) or (row.category_id and (not category or category.user_id != row.owner_id or category.kind != row.type)):
             row.status = 'failed'; row.error = 'Wallet, category, or access changed. Review and reschedule this entry.'
             continue

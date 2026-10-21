@@ -152,6 +152,15 @@ def _refresh_access(db, owners):
             raise HTTPException(409, 'Wallet changed. Refresh and try again.')
         if actor_id == owner_id:
             continue
+        space_id = connection.execute(select(Wallet.space_id).where(Wallet.id == wallet_id)).scalar_one_or_none()
+        if space_id is not None:
+            current = connection.execute(select(SpaceMember.role).where(
+                SpaceMember.space_id == space_id,
+                or_(SpaceMember.member_user_id == actor_id, SpaceMember.email == email))).scalar_one_or_none()
+            current = 'edit' if current == 'add' else current
+            if current != permission:
+                raise HTTPException(403, 'Space permissions changed. Refresh and try again.')
+            continue
         current = connection.execute(select(WalletShare.permission).where(
             WalletShare.wallet_id == wallet_id,
             or_(WalletShare.member_user_id == actor_id, WalletShare.invitee_email == email)).limit(1)).scalar_one_or_none()

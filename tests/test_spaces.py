@@ -115,7 +115,8 @@ def test_roles_palette_revocation_and_no_admin_bypass(spaces):
     assert client.get(f"/api/wallets?space_id={ids['space']}").status_code == 403
     actor['id'] = ids['owner']
     assert client.put(f"/api/spaces/{ids['space']}",json={'name':'Home Expense','color':'#123456','currency':'KWD'}).status_code == 422
-    for role in ('view', 'add', 'edit'):
+    assert client.put(f"/api/spaces/{ids['space']}/members", json={'email':'omarsolanki35@gmail.com','role':'add'}).status_code == 422
+    for role in ('view', 'edit'):
         result = client.put(f"/api/spaces/{ids['space']}/members", json={'email':'omarsolanki35@gmail.com','role':role})
         assert result.status_code == 200, result.text
         actor['id'] = ids['member']
@@ -135,7 +136,7 @@ def test_new_space_starts_empty_and_new_wallet_copies_members(spaces):
     assert response.status_code == 201, response.text
     new_id = response.json()['id']
     assert client.get(f'/api/wallets?space_id={new_id}').json() == []
-    assert client.put(f'/api/spaces/{new_id}/members',json={'email':'omarsolanki35@gmail.com','role':'add'}).status_code == 200
+    assert client.put(f'/api/spaces/{new_id}/members',json={'email':'omarsolanki35@gmail.com','role':'edit'}).status_code == 200
     wallet = client.post(f'/api/wallets?space_id={new_id}',json={'name':'Trip card','type':'bank','initial_balance':25,'color':'#3158aa','card_network':'mastercard'})
     assert wallet.status_code == 201, wallet.text
     actor['id'] = ids['member']
