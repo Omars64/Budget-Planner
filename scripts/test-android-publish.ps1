@@ -17,6 +17,19 @@ if ((Get-BudgetlyFileSha256 $hashFixture) -ne 'ba7816bf8f01cfea414140de5dae2223b
     throw 'Portable SHA-256 check failed'
 }
 $passed++
+$logFixture = Join-Path $root 'native-output.log'
+$null = Start-Transcript -LiteralPath $logFixture
+try {
+foreach ($exitCode in @(0, 7)) {
+    $result = Invoke-BudgetlyNativeCommand powershell.exe @('-NoProfile', '-Command', "[Console]::Error.WriteLine('Synthetic warning, not a failure'); Write-Output 'Synthetic stdout'; exit $exitCode")
+    if ($result.ExitCode -ne $exitCode -or ($result.Output -join "`n") -notmatch 'Synthetic warning' -or
+        ($result.Output -join "`n") -notmatch 'Synthetic stdout') { throw 'Native runner lost output or process exit code' }
+    $passed++
+}
+} finally { $null = Stop-Transcript }
+$recorded = Get-Content -LiteralPath $logFixture -Raw
+if ($recorded -notmatch 'Synthetic warning' -or $recorded -notmatch 'Synthetic stdout') { throw 'Diagnostic log lost native output' }
+$passed++
 $testSource = ((Get-Content -LiteralPath $PSCommandPath | ForEach-Object { '+' + $_ }) -join "`n")
 foreach ($case in @('success','unchanged','check','secret-file','secret-content','release-test-source','push-failure','build-failure','upload-failure','existing-published','draft-retry','bad-hash','deployment-failure','quality-failure')) {
     $state = @{Case=$case;Calls=[System.Collections.Generic.List[string]]::new()}
@@ -55,7 +68,7 @@ foreach ($case in @('success','unchanged','check','secret-file','secret-content'
     if($failed -ne $shouldFail){throw "Unexpected outcome: $case. Calls: $($state.Calls -join '; ')"}
     $calls=$state.Calls -join "`n"
     if($shouldFail -and $calls -match 'release edit'){throw "Published failed case: $case"}
-    if($case -eq 'build-failure' -and $calls -match 'git.exe (add|commit|push)'){throw 'Failed build changed Git or deployed unverified source'}
+    if($case -in @('build-failure', 'bad-hash') -and $calls -match 'git.exe (add|commit|push)'){throw 'Failed build validation changed Git or deployed unverified source'}
     if($case -eq 'check' -and $calls -match 'git.exe (add|commit|push)|release (create|edit)'){throw 'CheckOnly caused mutations'}
     if($case -eq 'unchanged' -and $calls -match 'git.exe commit'){throw 'Empty commit created'}
     if($case -eq 'success'){

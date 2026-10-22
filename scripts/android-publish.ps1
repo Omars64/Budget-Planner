@@ -1,3 +1,22 @@
+function Invoke-BudgetlyNativeCommand([string]$Program, [string[]]$Arguments) {
+    $showOutput = $Program -eq 'powershell.exe' -or
+        ($Program -eq 'git.exe' -and $Arguments[0] -in @('commit', 'push')) -or
+        ($Program -eq 'gh.exe' -and $Arguments[0] -eq 'release' -and $Arguments[1] -in @('create', 'upload', 'edit'))
+    $output = [System.Collections.Generic.List[string]]::new()
+    $previousPreference = $ErrorActionPreference
+    try {
+        # Native stderr includes normal warnings. Only exit codes decide failure.
+        $ErrorActionPreference = 'Continue'
+        & $Program @Arguments 2>&1 | ForEach-Object {
+            $line = $_.ToString()
+            $output.Add($line)
+            if ($showOutput) { Write-Host $line }
+        }
+        $code = $LASTEXITCODE
+    } finally { $ErrorActionPreference = $previousPreference }
+    [pscustomobject]@{ ExitCode = $code; Output = $output }
+}
+
 function Get-BudgetlyFileSha256([string]$Path) {
     $stream = [System.IO.File]::OpenRead($Path)
     $sha = [System.Security.Cryptography.SHA256]::Create()
@@ -30,23 +49,7 @@ function Invoke-BudgetlyRelease {
         [switch]$CheckOnly,
         [scriptblock]$Runner = {
             param($Program, $Arguments)
-            $showOutput = $Program -eq 'powershell.exe' -or
-                ($Program -eq 'git.exe' -and $Arguments[0] -in @('commit', 'push')) -or
-                ($Program -eq 'gh.exe' -and $Arguments[0] -eq 'release' -and $Arguments[1] -in @('create', 'upload', 'edit'))
-            $output = [System.Collections.Generic.List[string]]::new()
-            $previousPreference = $ErrorActionPreference
-            try {
-                # Native tools use stderr for warnings as well as failures. Keep
-                # both streams visible, but let the process exit code decide.
-                $ErrorActionPreference = 'Continue'
-                & $Program @Arguments 2>&1 | ForEach-Object {
-                    $line = $_.ToString()
-                    $output.Add($line)
-                    if ($showOutput) { Write-Host $line }
-                }
-                $code = $LASTEXITCODE
-            } finally { $ErrorActionPreference = $previousPreference }
-            [pscustomobject]@{ ExitCode = $code; Output = $output }
+            Invoke-BudgetlyNativeCommand $Program $Arguments
         }
     )
     function Run([string]$Program, [string[]]$Arguments) {
@@ -87,6 +90,17 @@ function Invoke-BudgetlyRelease {
 
         Write-Host 'Building and testing locally before making any Git or production changes...' -ForegroundColor Cyan
         $null = Run powershell.exe $BuildArguments
+        $directory = Join-Path $Root 'android/app/build/outputs/apk/release'
+        $apk = Join-Path $directory "Budgetly-$version.apk"
+        $manifestPath = Join-Path $directory 'update.json'
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+        $file = Get-Item -LiteralPath $apk
+        if ($manifest.version -ne $version -or $manifest.versionCode -ne $pkg.androidVersionCode -or
+            $manifest.packageId -ne 'com.flowbudget.app' -or $manifest.size -ne $file.Length -or
+            $manifest.sha256 -ne (Get-BudgetlyFileSha256 $apk) -or
+            $manifest.url -ne "https://github.com/$repo/releases/download/$tag/Budgetly-$version.apk") {
+            throw 'APK and update manifest do not match. Nothing will be pushed or published.'
+        }
         $null = Run git.exe @('add', '.')
         $patch = Run git.exe @('diff', '--cached', '--no-color')
         if ($patch -match '(?m)^\+(?!\+).*?(-----BEGIN [A-Z ]*PRIVATE KEY-----|GOCSPX-[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-proj-[A-Za-z0-9_-]{20,})') {
@@ -108,17 +122,6 @@ function Invoke-BudgetlyRelease {
         $commit = Run git.exe @('rev-parse', 'HEAD')
         $null = Run git.exe @('diff', '--exit-code')
         $null = Run git.exe @('diff', '--cached', '--exit-code')
-        $directory = Join-Path $Root 'android/app/build/outputs/apk/release'
-        $apk = Join-Path $directory "Budgetly-$version.apk"
-        $manifestPath = Join-Path $directory 'update.json'
-        $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-        $file = Get-Item -LiteralPath $apk
-        if ($manifest.version -ne $version -or $manifest.versionCode -ne $pkg.androidVersionCode -or
-            $manifest.packageId -ne 'com.flowbudget.app' -or $manifest.size -ne $file.Length -or
-            $manifest.sha256 -ne (Get-BudgetlyFileSha256 $apk) -or
-            $manifest.url -ne "https://github.com/$repo/releases/download/$tag/Budgetly-$version.apk") {
-            throw 'APK and update manifest do not match. Nothing will be published.'
-        }
         Write-Host 'Verifying Vercel deployment and GitHub quality gates for this exact commit before publication...'
         $deadline = [DateTime]::UtcNow.AddMinutes(20)
         do {

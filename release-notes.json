@@ -1,4 +1,7 @@
 {
+  "6.4.1": [
+    {"title":"More reliable Android builds","detail":"The release launcher shows live progress, saves local diagnostic logs, prevents overlapping builds and verifies the signed build before pushing source changes. Failed commands retain useful error details without treating normal warnings as build failures."}
+  ],
   "6.4.0": [
     {"title":"A clearer Settings experience","detail":"Find account, appearance, currency, notifications, bank capture and recovery controls in distinct category pages. Stronger dividers and larger subheaders make each setting easier to recognize."},
     {"title":"Motion throughout Budgetly","detail":"Deliberate page, dialog and item transitions work across browser and Android, with reduced-motion and motion-off support."},
