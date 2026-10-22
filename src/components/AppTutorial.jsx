@@ -8,14 +8,20 @@ import { useScrollLock } from '../lib/scrollLock'
 import Modal from './Modal'
 import { effectiveMotion } from '../lib/comfort'
 
+function isVisibleTarget(element) {
+  if (element.closest('[hidden], [data-settings-group][aria-hidden="true"]')) return false
+  const style = window.getComputedStyle(element)
+  return element.getClientRects().length > 0 && style.visibility !== 'hidden' && style.visibility !== 'collapse'
+}
+
 function targetFor(step) {
   if (step.section) {
-    const exact = [...document.querySelectorAll('.page-wrap .settings-section summary[data-tour-section]')].find(el => el.dataset.tourSection === step.section)
+    const exact = [...document.querySelectorAll('.page-wrap [data-tour-section]')].find(el => el.dataset.tourSection === step.section && isVisibleTarget(el))
     if (exact) return exact
     const normalize = value => String(value || '').trim().replace(/\s+/g, ' ').toLowerCase()
-    return [...document.querySelectorAll('.page-wrap .settings-section summary')].find(el => normalize(el.textContent) === normalize(step.section))
+    return [...document.querySelectorAll('.page-wrap .settings-section summary')].find(el => normalize(el.textContent) === normalize(step.section) && isVisibleTarget(el))
   }
-  return [...document.querySelectorAll(step.selector)].find(el => el.getClientRects().length && window.getComputedStyle(el).visibility !== 'hidden')
+  return [...document.querySelectorAll(step.selector)].find(isVisibleTarget)
 }
 
 // Routes are lazy-loaded. Wait for the actual target rather than spotlighting a stale page.
@@ -28,7 +34,12 @@ function waitForTarget(step, signal) {
     const tick = () => {
       if (signal.aborted) return finish(false)
       const page = document.querySelector('.page-wrap')
-      if (page?.dataset.tourPage === step.route && targetFor(step)) return finish(true)
+      if (page?.dataset.tourPage === step.route) {
+        if (step.route === '/settings' && step.section) {
+          window.dispatchEvent(new window.CustomEvent('budgetly:settings-open', { detail: { section: step.section } }))
+        }
+        if (targetFor(step)) return finish(true)
+      }
       if (window.performance.now() > deadline) return finish(false)
       frame = window.requestAnimationFrame(tick)
     }

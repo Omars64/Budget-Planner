@@ -1,4 +1,5 @@
 import SettingsSection from '../components/SettingsSection'
+import SettingsWorkspace from '../components/SettingsWorkspace'
 import SupportBudgetly from '../components/SupportBudgetly'
 import UpcomingReminderPreferences from '../components/UpcomingReminderPreferences'
 import BankNotificationSetup from '../components/BankNotificationSetup'
@@ -30,6 +31,7 @@ import AccentPicker from '../components/AccentPicker'
 import ComfortSettings from '../components/ComfortSettings'
 import WorkspacePreferences from '../components/WorkspacePreferences'
 import { DateField, TimeField } from '../components/DateTimeField'
+import { mergeSettingsDraft } from '../lib/settingsDraft'
 
 const imageData = async (file, maxBytes, label) => {
   if (!file) throw new Error(`Choose a ${label.toLowerCase()} first`)
@@ -50,6 +52,10 @@ const imageData = async (file, maxBytes, label) => {
 export default function Settings(){
   const {user,settings,setSettings,appearance,setAppearance,reloadSettings,refresh,notify,lock,confirm}=useApp()
   const [form,setForm]=useState(settings)
+  const previousSettings=useRef(settings)
+  const [savingPreferences,setSavingPreferences]=useState(false)
+  const preferenceLock=useRef(false)
+  const [preferenceStatus,setPreferenceStatus]=useState({})
   const [notificationForm,setNotificationForm]=useState(() => readNotificationSettings(settings, user?.id))
   const [appearanceBusy,setAppearanceBusy]=useState(false)
   const [cats,setCats]=useState([])
@@ -74,11 +80,19 @@ export default function Settings(){
   const inputRef=useRef(null)
   const profileRef=useRef(null)
   const wallpaperRef=useRef(null)
-  useEffect(()=>setForm(settings),[settings])
+  useEffect(()=>{const previous=previousSettings.current;previousSettings.current=settings;setForm(current=>mergeSettingsDraft(current,previous,settings))},[settings])
   useEffect(()=>setNotificationForm(readNotificationSettings(settings, user?.id)),[settings,user?.id])
   useEffect(()=>{api('/api/categories').then(setCats)},[])
   useEffect(()=>{api('/api/backup/statement/wallets').then(setStatementWallets).catch(()=>{})},[])
-  const save=async e=>{e.preventDefault();try{const updated=await api('/api/settings',{method:'PUT',...jsonBody(stripNotificationSettings(form))});setSettings({...settings,...updated});notify('Settings saved')}catch(err){notify(err.message,'error')}}
+  const save=async e=>{
+    e.preventDefault()
+    if(preferenceLock.current)return
+    const section=e.currentTarget.dataset.preferencesForm
+    preferenceLock.current=true;setSavingPreferences(true);setPreferenceStatus(current=>({...current,[section]:''}))
+    try{const updated=await api('/api/settings',{method:'PUT',...jsonBody(stripNotificationSettings(form))});setSettings(current=>({...current,...updated}));setPreferenceStatus(current=>({...current,[section]:'Preferences saved.'}));notify('Settings saved')}
+    catch(err){notify(err.message,'error')}
+    finally{preferenceLock.current=false;setSavingPreferences(false)}
+  }
   const saveNotifications=async e=>{
     e.preventDefault()
     try {
@@ -124,25 +138,26 @@ export default function Settings(){
   const enableBiometric=async()=>{if(passkeyBusy)return;setPasskeyBusy(true);try{await setupBiometric(user.email,passkeyPassword);setBiometric(true);setPasskeyPassword('');notify('Passkey registered')}catch(err){notify(err.name==='NotAllowedError'?'Passkey setup cancelled':err.message,'error')}finally{setPasskeyBusy(false)}}
   const disableDeviceSignIn=async()=>{if(passkeyBusy)return;setPasskeyBusy(true);try{await disableBiometric();setBiometric(false);notify('All passkeys revoked')}catch(err){notify(err.message,'error')}finally{setPasskeyBusy(false)}}
 
-  return <div className="settings-grid">
+  return <SettingsWorkspace>
     {restorePreview && <RestorePreview preview={restorePreview} onClose={()=>setRestorePreview(null)} onRestore={confirmRestore}/>}
-    <GuestRecords/>
-    <SupportBudgetly/>
-    <AccountSecurity/>
-    <TrashPanel/>
+    <GuestRecords settingsId="backup" settingsOrder={30}/>
+    <SupportBudgetly settingsId="support"/>
+    <AccountSecurity settingsId="account" settingsOrder={20}/>
+    <TrashPanel settingsId="backup" settingsOrder={20}/>
     <SettingsSection title="Smart Bank Inbox"><BankNotificationSetup/></SettingsSection>
-    <SettingsSection title="Personal preferences" className=""><ComfortSettings/><WorkspacePreferences/><form onSubmit={save} className="stack gap-16">
+    <SettingsSection title="Personal preferences" className=""><h4>Motion & feedback</h4><ComfortSettings/><h4>Appearance</h4><form onSubmit={save} data-preferences-form="appearance" aria-busy={savingPreferences} onChangeCapture={()=>setPreferenceStatus(current=>({...current,appearance:''}))} className="stack gap-16">
       <label className="field"><span>Appearance</span><select aria-label="Appearance" value={form.theme || 'light'} onChange={e => setForm({...form, theme:e.target.value})}><option value="light">Light</option><option value="dark">Dark</option><option value="system">Match device</option></select></label>
       <label className="field"><span>Font</span><select aria-label="Font" value={form.font_family || 'system'} onChange={e => setForm({...form, font_family:e.target.value})}><option value="system">System</option><option value="arial">Arial</option><option value="georgia">Georgia</option><option value="verdana">Verdana</option></select></label>
       <label className="field"><span>Text colour</span><select aria-label="Text colour" value={form.text_color || 'ink'} onChange={e => setForm({...form, text_color:e.target.value})}><option value="ink">Ink</option><option value="charcoal">Charcoal</option><option value="forest">Forest</option></select></label>
       <AccentPicker value={form.accent_color || '#0a4173'} onChange={color => setForm(current => ({...current, accent_color:color}))}/>
-      <button className="button primary"><Save/>Save preferences</button>
+      <button className="button primary" disabled={savingPreferences}><Save/>{savingPreferences?'Saving...':'Save preferences'}</button><p className="settings-save-status" role="status">{preferenceStatus.appearance}</p>
     </form></SettingsSection>
-    <CurrencyConfiguration/>
-    <SettingsSection title="Display & locale" className=""><form onSubmit={save} className="stack gap-16"><label className="field"><span>Budget name</span><input value={form.display_name||''} onChange={e=>setForm({...form,display_name:e.target.value})}/></label><label className="field"><span>Week starts on</span><select value={form.week_starts_on||'sunday'} onChange={e=>setForm({...form,week_starts_on:e.target.value})}><option value="sunday">Sunday</option><option value="monday">Monday</option></select></label><label className="check-row"><input type="checkbox" checked={!!form.compact_numbers} onChange={e=>setForm({...form,compact_numbers:e.target.checked})}/><span>Use compact large numbers where possible</span></label><button className="button primary self-start"><Save/>Save preferences</button></form></SettingsSection>
-    <SettingsSection title="Notifications" className=""><p className="muted">Configure this {isNativeApp() ? 'Android device' : 'browser'} separately. Delivery depends on notification permissions and background restrictions.</p><form onSubmit={saveNotifications} className="stack gap-16"><label className="check-row"><input type="checkbox" checked={!!notificationForm.reminders_enabled} onChange={e => setNotificationForm({...notificationForm, reminders_enabled:e.target.checked})}/><span>Transaction reminders</span></label>{notificationForm.reminders_enabled && <><label className="field"><span>Repeat every</span><select value={notificationForm.reminder_interval_hours || 4} onChange={e=>setNotificationForm({...notificationForm,reminder_interval_hours:Number(e.target.value)})}>{[1,2,3,4,6,8,12,24].map(hours=><option key={hours} value={hours}>{hours===24?'Once a day':`${hours} hour${hours===1?'':'s'}`}</option>)}</select></label><TimeField label="First reminder (Kuwait)" value={notificationForm.reminder_time || '20:00'} onChange={value => setNotificationForm({...notificationForm, reminder_time:value})}/></>}<NotificationPreferences form={notificationForm} setForm={setNotificationForm}/><UpcomingReminderPreferences form={notificationForm} setForm={setNotificationForm}/><button className="button primary self-start"><Save/><span>Save notifications</span></button></form></SettingsSection>
+    <CurrencyConfiguration settingsId="money"/>
+    <SettingsSection title="Transaction entry"><WorkspacePreferences/></SettingsSection>
+<SettingsSection title="Display & locale" className=""><form onSubmit={save} data-preferences-form="locale" aria-busy={savingPreferences} onChangeCapture={()=>setPreferenceStatus(current=>({...current,locale:''}))} className="stack gap-16"><label className="field"><span>Budget name</span><input value={form.display_name||''} onChange={e=>setForm({...form,display_name:e.target.value})}/></label><label className="field"><span>Week starts on</span><select value={form.week_starts_on||'sunday'} onChange={e=>setForm({...form,week_starts_on:e.target.value})}><option value="sunday">Sunday</option><option value="monday">Monday</option></select></label><label className="check-row"><input type="checkbox" checked={!!form.compact_numbers} onChange={e=>setForm({...form,compact_numbers:e.target.checked})}/><span>Use compact large numbers where possible</span></label><button className="button primary self-start" disabled={savingPreferences}><Save/>{savingPreferences?'Saving...':'Save preferences'}</button><p className="settings-save-status" role="status">{preferenceStatus.locale}</p></form></SettingsSection>
+<SettingsSection title="Notifications" heading="Updates & reminders" className=""><p className="muted">Configure this {isNativeApp() ? 'Android device' : 'browser'} separately. Delivery depends on notification permissions and background restrictions.</p><form onSubmit={saveNotifications} className="stack gap-16"><label className="check-row"><input type="checkbox" role="switch" checked={!!notificationForm.reminders_enabled} onChange={e => setNotificationForm({...notificationForm, reminders_enabled:e.target.checked})}/><span>Transaction reminders</span></label>{notificationForm.reminders_enabled && <><label className="field"><span>Repeat every</span><select value={notificationForm.reminder_interval_hours || 4} onChange={e=>setNotificationForm({...notificationForm,reminder_interval_hours:Number(e.target.value)})}>{[1,2,3,4,6,8,12,24].map(hours=><option key={hours} value={hours}>{hours===24?'Once a day':`${hours} hour${hours===1?'':'s'}`}</option>)}</select></label><TimeField label="First reminder (Kuwait)" value={notificationForm.reminder_time || '20:00'} onChange={value => setNotificationForm({...notificationForm, reminder_time:value})}/></>}<NotificationPreferences form={notificationForm} setForm={setNotificationForm}/><UpcomingReminderPreferences form={notificationForm} setForm={setNotificationForm}/><button className="button primary self-start"><Save/><span>Save notifications</span></button></form></SettingsSection>
 
-    <section className="panel glass"><div className="panel-head"><div><p className="eyebrow">Account</p><h3>Profile & session</h3></div><ShieldCheck className="muted-icon"/></div><div className="security-card"><div className="profile-account-row">{appearance.profile_image?<img className="settings-avatar" src={appearance.profile_image} alt="Profile"/>:<span className="settings-avatar fallback"><Mountain/></span>}<div><strong>{user?.username}</strong><p className="muted">{user?.email} · {user?.role === 'admin' ? 'Administrator' : 'User'} access</p></div></div><div className="button-row"><button className="button ghost small" onClick={()=>profileRef.current?.click()}><Camera/>Change photo</button>{appearance.profile_image&&<button className="button ghost small" onClick={()=>clearAppearance('profile_image')}><X/>Remove</button>}<button className="button ghost small" onClick={lock}>Sign out</button></div><input ref={profileRef} hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={pickProfile}/></div></section>
+<section data-settings-id="account" data-settings-order={0} className="settings-profile"><div className="panel-head"><div><p className="eyebrow">Account</p><h3>Profile & session</h3></div><ShieldCheck className="muted-icon"/></div><div className="security-card"><div className="profile-account-row">{appearance.profile_image?<img className="settings-avatar" src={appearance.profile_image} alt="Profile"/>:<span className="settings-avatar fallback"><Mountain/></span>}<div><strong>{user?.username}</strong><p className="muted">{user?.email} · {user?.role === 'admin' ? 'Administrator' : 'User'} access</p></div></div><div className="button-row"><button className="button ghost small" onClick={()=>profileRef.current?.click()}><Camera/>Change photo</button>{appearance.profile_image&&<button className="button ghost small" onClick={()=>clearAppearance('profile_image')}><X/>Remove</button>}<button className="button ghost small" onClick={lock}>Sign out</button></div><input ref={profileRef} hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={pickProfile}/></div></section>
 <SettingsSection title="Biometric sign-in" className=""><p className="muted">Use Face ID, Touch ID, Windows Hello, or your device passkey to unlock this device faster. Your password remains available as a fallback.</p><div className="stack gap-12"><DeviceSignInPreference disabled={passkeyBusy} onChange={setPasswordOnly}/>{!passwordOnly && <label className="field"><span>Confirm password to register a passkey</span><PasswordInput autoComplete="current-password" value={passkeyPassword} onChange={e=>setPasskeyPassword(e.target.value)}/></label>}{biometric && <button className="button ghost" disabled={passkeyBusy} onClick={disableDeviceSignIn}>Revoke all passkeys</button>}{<button className="button primary" disabled={!biometricSupported() || passkeyBusy || passkeyPassword.length < 8} onClick={enableBiometric}><Fingerprint/>{passkeyBusy ? 'Registering...' : biometric ? 'Register another passkey' : 'Enable biometric sign-in'}</button>}</div>{!biometricSupported()&&<small className="muted">{passwordOnly ? 'Password-only sign-in is enabled for this device.' : 'Passkeys require a supported browser and HTTPS.'}</small>}</SettingsSection>
     <SettingsSection title="Delete account" className="danger-zone"><p className="muted">Permanently removes your account, wallets, transactions, notes, feedback, and settings. Connected Google permissions are removed first; your Google account and existing Drive backup files are not deleted.</p><button className="button danger" onClick={deleteAccount}><Trash2/>Delete my account</button></SettingsSection>
 
@@ -157,5 +172,5 @@ export default function Settings(){
 
     <Modal open={catOpen} onClose={()=>setCatOpen(false)} title={editingCat?'Edit category':'Add category'}><form onSubmit={saveCat} className="stack gap-16"><label className="field"><span>Name</span><input required value={cat.name} onChange={e=>setCat({...cat,name:e.target.value})}/></label><div className="form-grid two"><label className="field"><span>Type</span><select value={cat.kind} onChange={e=>setCat({...cat,kind:e.target.value})}><option value="expense">Expense</option><option value="income">Income</option></select></label><label className="field"><span>Accent</span><input type="color" value={cat.color} onChange={e=>setCat({...cat,color:e.target.value})}/></label></div><div className="modal-actions"><button type="button" className="button ghost" onClick={()=>setCatOpen(false)}>Cancel</button><button className="button primary">{editingCat?'Save category':'Add category'}</button></div></form></Modal>
     <Modal open={clearOpen} onClose={()=>setClearOpen(false)} title="Reset workspace"><form onSubmit={clearWorkspace} className="stack gap-16"><p className="muted">This only affects your account. Type <strong>CLEAR</strong> to confirm. Categories are never removed by this action. Recovery copy will be available in Settings.</p>{clearPreview&&<div className="muted"><p>{clearPreview.transactions} transactions, {clearPreview.budgets} budgets, {clearPreview.goals} goals and {clearPreview.debts} debts will be cleared. Main Wallet will be zeroed; extra wallets will be removed. {clearPreview.categories_preserved} categories will remain.</p>{clearScope==='workspace'&&<p>{clearPreview.notes} notes will also be removed.</p>}<button type="button" className="button ghost" onClick={exportBackup}><Download size={16}/>Export before clearing</button></div>}<label className="field"><span>What should be cleared?</span><select value={clearScope} onChange={e=>setClearScope(e.target.value)}><option value="budget">Budget data and extra wallets</option><option value="workspace">Budget data, extra wallets, and Notes</option></select></label><label className="field"><span>Confirmation</span><input required value={clearConfirm} onChange={e=>setClearConfirm(e.target.value)} placeholder="Type CLEAR" autoComplete="off"/></label><div className="modal-actions"><button type="button" className="button ghost" onClick={()=>setClearOpen(false)}>Cancel</button><button className="button danger" disabled={clearConfirm !== 'CLEAR'}>Reset workspace</button></div></form></Modal>
-  </div>
+  </SettingsWorkspace>
 }

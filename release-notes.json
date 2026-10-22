@@ -1,4 +1,10 @@
 {
+  "6.4.0": [
+    {"title":"A clearer Settings experience","detail":"Find account, appearance, currency, notifications, bank capture and recovery controls in distinct category pages. Stronger dividers and larger subheaders make each setting easier to recognize."},
+    {"title":"Motion throughout Budgetly","detail":"Deliberate page, dialog and item transitions work across browser and Android, with reduced-motion and motion-off support."},
+    {"title":"Manage Spaces directly","detail":"Open workspace management from your Spaces list without switching into it. Space details and member permissions save independently, with clear confirmation beside each action."},
+    {"title":"More readable wallet cards","detail":"Visa and Mastercard marks are larger across Personal and Space wallets, with responsive sizing that keeps card contents readable."}
+  ],
   "6.3.2": [
     {"title":"Deployment reliability","detail":"A smaller server bundle restores deployment compatibility. Release checks now verify the deployed backend and quality gates before publishing an Android update."},
     {"title":"Consistent Space access checks","detail":"Concurrent permission tests follow Space membership, verifying that actual removal and Viewer downgrades block further changes."}

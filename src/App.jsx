@@ -6,6 +6,7 @@ import { api, auth, flushOfflineTransactions, jsonBody } from './lib/api'
 import {installMoneyInputDefaults} from './lib/moneyInputs'
 import { rememberOfflineSession, restoreOfflineSession, setOfflineUser } from './lib/offlineSync'
 import AppShell from './components/AppShell'
+import RouteMotion from './components/RouteMotion'
 import './spaces.css'
 import useSpaces from './lib/useSpaces'
 import { rememberSpaceSelection, setApiSpace } from './lib/spaces'
@@ -397,9 +398,9 @@ export default function App() {
   return <AppContext.Provider value={value}>
     {!isGuest && <Experience />}
     <div className="ambient" aria-hidden="true"><i/><i/><i/></div>
-    <AppShell key={`${session.user.id}:${activeSpace?.id || 'personal'}:${activeSpace?.role || 'owner'}`}>
+    <RouteMotion key={`${session.user.id}:${activeSpace?.id || 'personal'}:${activeSpace?.role || 'owner'}`}>{routeLocation => <AppShell>
       <Suspense fallback={<div role="status">Loading page...</div>}>
-      {isGuest && !guestRoutes.has(currentLocation.pathname) ? <GuestGate/> : <Routes>
+      {isGuest && !guestRoutes.has(routeLocation.pathname) ? <GuestGate/> : <Routes>
         <Route path="/" element={<Overview />} />
         <Route path="/ask-ai" element={activeSpace ? <Navigate to="/" replace /> : <AskAI />} />
         <Route path="/transactions" element={<Transactions />} />
@@ -420,7 +421,7 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>}
       </Suspense>
-    </AppShell>
+    </AppShell>}</RouteMotion>
     {!isGuest && <FeedbackPrompt signoutRequested={signoutRequested} onSignoutComplete={finishSignOut}/>}
     <GuestAccess feature={guestFeature} onClose={() => setGuestFeature('')} onContinue={() => { setGuestFeature(''); setGuestSigningIn(true) }}/>
     {importGuest && !isGuest && <GuestImport user={session.user} onDone={message => {setImportGuest(false);refresh();if(message)notify(message)}}/>}

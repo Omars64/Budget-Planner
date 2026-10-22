@@ -1,43 +1,74 @@
-/* Keep movement brief and limited to entrances and deliberate interactions. */
-@keyframes budgetly-reveal {
-  from { opacity:0; transform:translateY(10px); }
-  to { opacity:1; transform:translateY(0); }
-}
+/* One route owner; no transform containing block around sticky/fixed toolbars. */
+@property --budgetly-route-opacity { syntax:'<number>'; inherits:false; initial-value:1; }
+.route-motion-root { display:contents; }
+.route-motion-root .page-wrap { transform:none!important; opacity:var(--budgetly-route-opacity)!important; }
+.route-motion-root[data-route-exiting] .page-wrap { pointer-events:none; }
+.modal-layer[data-closing] { pointer-events:none; }
+
 @keyframes budgetly-fade {
   from { opacity:0; }
   to { opacity:1; }
 }
-@keyframes budgetly-progress {
-  from { transform:scaleX(0); }
-  to { transform:scaleX(1); }
+
+@keyframes budgetly-lateral {
+  from { opacity:0; translate:16px 0; }
+  to { opacity:1; translate:none; }
 }
-@keyframes budgetly-logo {
-  0%,100% { transform:translateY(0); }
-  50% { transform:translateY(-4px); }
-}
+
+/* Replace local entrances only where the shared leaf animation owns movement. */
+.budgetly-v2 .page-wrap .overview-page .overview-metrics.month-reveal,
+.budgetly-v2 .page-wrap .ai-workspace .ai-turn { animation:none; }
+
+/* Only safe surfaces: never workspace roots, sticky toolbars or fixed controls.
+   Backwards fill ends with the animation, leaving no lasting containing block. */
 @media(prefers-reduced-motion:no-preference) {
-  .cards-grid>article,.wallet-grid>.wallet-card,.metric-grid>.metric-card,.ledger-entry,.message-row {
-    animation:budgetly-reveal .38s cubic-bezier(.22,1,.36,1) backwards;
+  :root:not([data-motion=reduced]):not([data-motion=off]) .budgetly-v2 .page-wrap
+  :is(
+    .cards-grid>article,.wallet-grid>.wallet-card,.metric-grid>.metric-card,
+    .ledger-entry,.workspace-list>.message-row,.note-collection>.note-row,
+    .overview-metrics>a,.overview-wallets>a,.upcoming-records>.upcoming-record,
+    .ai-welcome-prompts>button,.day-panel .day-tx
+  ):nth-child(-n+4):not(.just-saved),
+  :root:not([data-motion=reduced]):not([data-motion=off]) .budgetly-v2 .page-wrap
+  :is(
+    .overview-page>.overview-balance,.overview-page .overview-shared,
+    .overview-columns>.overview-section,.overview-recent>.panel-head,
+    .notes-workspace .workspace-reader>.reader-empty,
+    .ai-workspace .ai-welcome>h2,.ai-messages>.ai-turn:nth-of-type(-n+4),
+    .calendar-layout>.calendar-panel
+  ) {
+    animation:budgetly-lateral .46s cubic-bezier(.22,.75,.25,1) backwards;
+    animation-delay:0ms;
   }
-  :is(.cards-grid,.wallet-grid,.metric-grid)>:nth-child(2) { animation-delay:45ms; }
-  :is(.cards-grid,.wallet-grid,.metric-grid)>:nth-child(3) { animation-delay:90ms; }
-  :is(.cards-grid,.wallet-grid,.metric-grid)>:nth-child(n+4) { animation-delay:135ms; }
-  .settings-section,.panel,.workspace,.auth-card form { animation:budgetly-fade .3s ease-out; }
-  .settings-section[open]>.settings-section-body,.form-options[open]>div { animation:budgetly-reveal .24s ease-out; }
-  .progress>span,.mini-track>i { animation:budgetly-progress .6s cubic-bezier(.22,1,.36,1); transform-origin:left; }
-  .auth-card .brand-logo { animation:budgetly-logo 3.5s ease-in-out 2; }
-  .nav-item.active svg,.mobile-nav .active svg { animation:budgetly-reveal .25s ease-out; }
-  .button,.icon-button,.row-icon,.transaction-fab,.ledger-entry,.message-row,.nav-item {
-    transition:background-color .18s,color .18s,border-color .18s,box-shadow .18s,scale .18s;
+  :root:not([data-motion=reduced]):not([data-motion=off]) .budgetly-v2 .page-wrap
+  :is(.cards-grid,.wallet-grid,.metric-grid,.ledger-list,.note-collection,.overview-metrics,.overview-wallets,.overview-columns,.upcoming-records,.ai-welcome-prompts,.ai-messages,.day-panel .stack)>:nth-child(2) { animation-delay:40ms; }
+  :root:not([data-motion=reduced]):not([data-motion=off]) .budgetly-v2 .page-wrap
+  :is(.cards-grid,.wallet-grid,.metric-grid,.ledger-list,.note-collection,.overview-metrics,.overview-wallets,.upcoming-records,.ai-welcome-prompts,.ai-messages,.day-panel .stack)>:nth-child(3) { animation-delay:80ms; }
+  :root:not([data-motion=reduced]):not([data-motion=off]) .budgetly-v2 .page-wrap
+  :is(.cards-grid,.wallet-grid,.metric-grid,.ledger-list,.note-collection,.overview-metrics,.overview-wallets,.upcoming-records,.ai-welcome-prompts,.ai-messages,.day-panel .stack)>:nth-child(4) { animation-delay:120ms; }
+  :is(.button,.icon-button,.row-icon,.transaction-fab,.nav-item) {
+    transition:background-color .14s,color .14s,border-color .14s,box-shadow .14s,scale .12s;
   }
-  :is(.button,.icon-button,.row-icon,.transaction-fab):active:not(:disabled) { scale:.97; }
-  .field input,.field select,.field textarea,.pin-field,.password-input { transition:border-color .18s,box-shadow .18s,background-color .18s; }
-  .settings-section>summary>svg { transition:transform .2s ease; }
+  :is(.button,.icon-button,.row-icon,.transaction-fab):active:not(:disabled) { scale:.98; }
+  :is(.field input,.field select,.field textarea,.pin-field,.password-input) {
+    transition:border-color .14s,box-shadow .14s,background-color .14s;
+  }
 }
-@media(hover:hover) and (prefers-reduced-motion:no-preference) {
-  .button:hover:not(:disabled),.card-top .row-icon:hover:not(:disabled) { scale:1.025; }
-  .transaction-fab:hover { scale:1.06; }
+@media(hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference) {
+  :is(.button,.icon-button,.row-icon,.transaction-fab):hover:not(:disabled) { scale:1.015; }
+  :is(.button,.icon-button,.row-icon,.transaction-fab):active:not(:disabled) { scale:.98; }
 }
+
+/* Decorative movement never repeats; functional status spinners remain. */
+.ambient i,.auth-card .brand-logo,.app-loading .pulse,.wallet-orbit { animation:none!important; }
+
+:root:is([data-motion=reduced],[data-motion=off]) *,
+:root:is([data-motion=reduced],[data-motion=off]) *::before,
+:root:is([data-motion=reduced],[data-motion=off]) *::after {
+  animation:none!important; transition:none!important; scroll-behavior:auto!important;
+}
+:root:is([data-motion=reduced],[data-motion=off]) :is(button,a) { scale:1!important; }
 @media(prefers-reduced-motion:reduce) {
-  *,*::before,*::after { animation:none !important; transition:none !important; scroll-behavior:auto !important; }
+  *,*::before,*::after { animation:none!important; transition:none!important; scroll-behavior:auto!important; }
+  :is(button,a) { scale:1!important; }
 }

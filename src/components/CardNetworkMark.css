@@ -1,0 +1,37 @@
+/* Extra specificity keeps sizing stable when shared wallet styles load later. */
+.card-network-mark.wallet-network-mark {
+  flex: 0 0 62.5px;
+  width: 62.5px;
+  height: 37.5px;
+  line-height: 1;
+}
+
+.card-network-mark.wallet-network-mark.visa {
+  font-size: 25px;
+}
+
+.card-network-mark.wallet-network-mark.mastercard i {
+  flex: 0 0 28.75px;
+  width: 28.75px;
+  height: 28.75px;
+}
+
+.card-network-mark.wallet-network-mark.mastercard i:first-child {
+  margin-right: -10px;
+}
+
+/* Reserve the bottom-right mark's height and width even beside a short name. */
+.wallet-tile:has(> .wallet-card > .wallet-network-mark) {
+  container-type: inline-size;
+}
+
+.wallet-tile > .wallet-card:has(> .wallet-network-mark) {
+  aspect-ratio: auto;
+  height: max-content;
+  min-height: max(200px, calc(100cqw / 1.586));
+}
+
+.wallet-card:has(> .wallet-network-mark) .wallet-card-balance strong {
+  min-height: 40px;
+  max-width: calc(100% - 76px);
+}

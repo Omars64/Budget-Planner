@@ -7,7 +7,7 @@ import UpdateDelivery from './UpdateDelivery'
 
 export default function NotificationPreferences({form,setForm}) {
   const {isGuest}=useApp()
-  return <><label className="check-row"><input type="checkbox" checked={form.update_notifications_enabled !== false} onChange={event => setForm({...form, update_notifications_enabled:event.target.checked})}/><span>New Budgetly updates</span></label>{!isGuest && <><label className="check-row"><input type="checkbox" checked={!!form.scheduled_notifications_enabled} onChange={event=>setForm({...form,scheduled_notifications_enabled:event.target.checked})}/><span>Scheduled entries recorded</span></label><UpdateDelivery/></>}<ReminderPreferences form={form} setForm={setForm}/></>
+return <><h4>App updates</h4><label className="check-row"><input type="checkbox" role="switch" aria-label="New Budgetly updates" checked={form.update_notifications_enabled !== false} onChange={event => setForm({...form, update_notifications_enabled:event.target.checked})}/><span>New Budgetly updates<small className="settings-control-description">Know when a new version is ready to install.</small></span></label>{!isGuest && <><h4>Scheduled transactions</h4><label className="check-row"><input type="checkbox" role="switch" aria-label="Scheduled entries recorded" checked={!!form.scheduled_notifications_enabled} onChange={event=>setForm({...form,scheduled_notifications_enabled:event.target.checked})}/><span>Scheduled entries recorded<small className="settings-control-description">A short confirmation after an entry is posted.</small></span></label><UpdateDelivery/></>}<ReminderPreferences form={form} setForm={setForm}/></>
 }
 function ReminderPreferences({form,setForm}){
   const {notify}=useApp()

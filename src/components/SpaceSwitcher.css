@@ -1,0 +1,62 @@
+.space-switcher-dialog .space-option-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 42%);
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px;
+}
+.space-switcher-dialog .space-option-row.selected { background: var(--accent-soft); }
+.space-switcher-dialog .space-option-choose,
+.space-switcher-dialog .space-option-manage {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  min-width: 0;
+  padding: 8px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.space-switcher-dialog .space-option-choose > span { display: grid; gap: 5px; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.space-switcher-dialog .space-option-row svg { flex: none; }
+.space-switcher-dialog .space-option-manage { font-size: 12px; font-weight: 650; overflow-wrap: anywhere; }
+.space-switcher-dialog .space-option-manage > span { min-width: 0; }
+.space-switcher-dialog .space-option-row button:hover { background: var(--accent-soft); }
+.space-switcher-dialog button:focus-visible { outline: 3px solid var(--accent-text, var(--accent)); outline-offset: 2px; }
+.space-switcher-dialog .space-management { min-width: 0; overflow-wrap: anywhere; }
+.space-switcher-dialog .space-management-views { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+.space-switcher-dialog .space-management-views button {
+  flex: 1;
+  min-height: 44px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+.space-switcher-dialog .space-management-views button[aria-pressed=true] { color: var(--text); border-bottom-color: var(--accent); }
+.space-switcher-dialog .space-form-fields { min-width: 0; margin: 0; padding: 0; border: 0; }
+.space-switcher-dialog .space-form-fields:disabled { opacity: .7; }
+.space-switcher-dialog .space-member-form { margin-top: 22px; }
+.space-switcher-dialog .space-save-row { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.space-switcher-dialog .space-save-row .button { min-height: 44px; white-space: normal; }
+.space-switcher-dialog .space-save-row [role=status] { font-size: 13px; color: var(--muted); }
+.space-switcher-dialog .space-save-row .form-error { flex-basis: 100%; margin: 0; }
+.space-switcher-dialog .space-member .icon-button { min-width: 44px; min-height: 44px; }
+.space-switcher-dialog .space-readonly-details { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; margin: 0; }
+.space-switcher-dialog .space-readonly-details dt { color: var(--muted); }
+.space-switcher-dialog .space-readonly-details dd { margin: 0; }
+@media (max-width: 540px) {
+  .space-switcher-dialog .space-option-row { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .space-switcher-dialog .space-option-manage { border-top: 1px solid var(--line); border-radius: 0; }
+  .space-switcher-dialog .space-management-views button { padding: 8px; }
+  .space-switcher-dialog .space-member .button-row { flex: none; }
+}

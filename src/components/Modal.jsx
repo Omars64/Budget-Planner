@@ -3,34 +3,33 @@ import { X } from 'lucide-react'
 import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useScrollLock } from '../lib/scrollLock'
-import { comfortEvent, effectiveMotion } from '../lib/comfort'
+import { deliberateTransition, useAppMotion } from '../lib/appMotion'
 
 const activeDialogs = []
 
 export default function Modal({ open, onClose, title, subtitle, children, footer, size = 'medium', layerClass = '', preserveDraft = false, protectChanges = false, isDirty, slowEntrance = false }) {
-  const [reducedMotion, setReducedMotion] = useState(() => effectiveMotion() !== 'full')
+  const mode = useAppMotion()
+  const reducedMotion = mode !== 'full'
+  const [retained, setRetained] = useState(open)
+  const present = open || retained
   useEffect(() => {
-    const update = () => setReducedMotion(effectiveMotion() !== 'full')
-    const media = window.matchMedia?.('(prefers-reduced-motion: reduce)')
-    window.addEventListener(comfortEvent, update)
-    media?.addEventListener?.('change', update)
-    return () => { window.removeEventListener(comfortEvent, update); media?.removeEventListener?.('change', update) }
-  }, [])
+    if (open) setRetained(true)
+  }, [open])
   const dirty = useRef(false)
   const [discard, setDiscard] = useState(false)
-  useEffect(() => { dirty.current = false; setDiscard(false) }, [open])
+  useEffect(() => { if (open) { dirty.current = false; setDiscard(false) } }, [open])
   const changed = isDirty ?? dirty.current
-  const requestClose = () => { if ((isDirty ?? dirty.current) && protectChanges && !preserveDraft) setDiscard(true); else onClose() }
+  const requestClose = () => { if (!open) return; if ((isDirty ?? dirty.current) && protectChanges && !preserveDraft) setDiscard(true); else onClose() }
   const titleId = useId()
   const dialog = useRef(null)
   useEffect(() => { if (discard) dialog.current?.querySelector('[role="alert"] button')?.focus() }, [discard])
   const backdrop = useRef(null)
   const close = useRef(onClose)
   close.current = requestClose
-  useScrollLock(open)
+  useScrollLock(present)
   useEffect(() => {
     const viewport = window.visualViewport
-    if (!open || !viewport) return
+    if (!present || !viewport) return
     let frame
     const update = () => {
       backdrop.current?.style.setProperty('--dialog-height', `${viewport.height}px`)
@@ -46,9 +45,9 @@ export default function Modal({ open, onClose, title, subtitle, children, footer
     viewport.addEventListener('scroll', update)
     document.addEventListener('focusin', update)
     return () => { viewport.removeEventListener('resize', update); viewport.removeEventListener('scroll', update); document.removeEventListener('focusin', update); window.cancelAnimationFrame(frame) }
-  }, [open])
+  }, [present])
   useEffect(() => {
-    if (!open) return
+    if (!present) return
     activeDialogs.push(dialog)
     const previous = document.activeElement
     const frame = window.requestAnimationFrame(() => dialog.current?.focus())
@@ -68,11 +67,23 @@ export default function Modal({ open, onClose, title, subtitle, children, footer
       event.preventDefault(); close.current()
     }
     window.addEventListener('budgetly:back', back)
-    return () => { activeDialogs.splice(activeDialogs.indexOf(dialog), 1); window.cancelAnimationFrame(frame); document.removeEventListener('keydown', keydown); window.removeEventListener('budgetly:back', back); if (previous?.isConnected) previous.focus({ preventScroll: true }) }
-  }, [open])
-  return createPortal(<div className={`budgetly-v2 modal-layer ${layerClass}`}><AnimatePresence>
-    {open && <motion.div ref={backdrop} className="modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={e => e.target === e.currentTarget && requestClose()}>
-      <motion.div ref={dialog} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} className={`modal glass modal-${size}${footer ? ' modal-has-footer' : ''}`} initial={{ opacity: 0, scale: slowEntrance ? 1 : .99, y: reducedMotion ? 0 : slowEntrance ? 110 : 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 1, y: reducedMotion ? 0 : 8, transition: { duration: reducedMotion ? 0 : .15 } }} transition={{ duration: reducedMotion ? 0 : slowEntrance ? 1.1 : .2, ease: slowEntrance ? [.22,.61,.36,1] : 'easeOut' }}>
+    return () => {
+      const ownedFocus = activeDialogs.at(-1) === dialog
+      const index = activeDialogs.indexOf(dialog)
+      if (index >= 0) activeDialogs.splice(index, 1)
+      window.cancelAnimationFrame(frame)
+      document.removeEventListener('keydown', keydown)
+      window.removeEventListener('budgetly:back', back)
+      if (!ownedFocus) return
+      const parent = activeDialogs.at(-1)?.current
+      if (parent && (!previous?.isConnected || !parent.contains(previous))) parent.focus({ preventScroll: true })
+      else if (previous?.isConnected) previous.focus({ preventScroll: true })
+    }
+  }, [present])
+  const transition = deliberateTransition(mode, slowEntrance ? 'popup' : 'dialog')
+  return createPortal(<div className={`budgetly-v2 modal-layer ${layerClass}`} data-closing={!open ? '' : undefined}><AnimatePresence onExitComplete={() => { if (!open) setRetained(false) }}>
+    {open && <motion.div ref={backdrop} className="modal-backdrop" initial={{ opacity: reducedMotion ? 1 : 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ ...transition, duration: reducedMotion ? 0 : .16 }} onMouseDown={e => e.target === e.currentTarget && requestClose()}>
+      <motion.div ref={dialog} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} className={`modal glass modal-${size}${footer ? ' modal-has-footer' : ''}`} initial={{ opacity: reducedMotion ? 1 : 0, y: reducedMotion ? 0 : slowEntrance ? 110 : 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: reducedMotion ? 0 : 10, transition: { ...transition, duration: reducedMotion ? 0 : .14 } }} transition={slowEntrance ? { ...transition, ease: [.22, .61, .36, 1] } : transition}>
         <div className="modal-head"><div><h3 id={titleId}>{title}</h3>{subtitle && <p className="muted">{subtitle}</p>}</div><button className="icon-button" aria-label="Close dialog" onClick={requestClose}><X size={18}/></button></div>
         <div className="modal-body" onChangeCapture={() => { dirty.current = true }} onClickCapture={event => {
           const button = event.target.closest('button')

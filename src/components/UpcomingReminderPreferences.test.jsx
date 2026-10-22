@@ -17,6 +17,6 @@ it('supports calendar days and a minute-based lead time without losing the calen
   fireEvent.change(screen.getByLabelText('Minutes before'),{target:{value:'90'}})
   fireEvent.change(screen.getByLabelText('Reminder timing'),{target:{value:'calendar'}})
   expect(screen.getByLabelText('Days before')).toHaveValue(2)
-  fireEvent.click(screen.getByRole('checkbox',{name:'Remind me about planned expenses'}))
+  fireEvent.click(screen.getByRole('switch',{name:'Remind me about planned expenses'}))
   expect(screen.queryByLabelText('Reminder timing')).not.toBeInTheDocument()
 })
