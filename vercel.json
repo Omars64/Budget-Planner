@@ -1,5 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "api/app.py": {
+      "excludeFiles": "{node_modules/**,src/**,dist/**,public/**,docs/**,scripts/**,tests/**,android/**,ios/**,.verification/**,.android-signing/**,.github/**}"
+    }
+  },
   "crons": [
     {"path":"/api/maintenance/daily","schedule":"0 1 * * *"},
     {"path":"/api/maintenance/update-check","schedule":"10 1 * * *"}

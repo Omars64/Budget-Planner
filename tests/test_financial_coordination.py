@@ -159,6 +159,9 @@ def test_scope_reads_permissions_after_owner_claim(api, ledger, change):
             pid.append(db.scalar(text('SELECT pg_backend_pid()'))); started.set()
             try:
                 api.spaces.establish_scope(request(f'/api/transactions/{ledger.tx}?space_id={ledger.space}'), db, actor)
+                if change == 'legacy':
+                    # A compatibility mirror is not Space membership revocation.
+                    return 200
                 pytest.fail('revoked or downgraded actor passed write authorization')
             except HTTPException as error:
                 return error.status_code
@@ -178,7 +181,7 @@ def test_scope_reads_permissions_after_owner_claim(api, ledger, change):
             wait(started); blocked(api.engine, pid[0], blocker)
         finally:
             db.commit()
-        assert future.result(timeout=5) == (409 if change == 'legacy' else 403)
+        assert future.result(timeout=5) == (200 if change == 'legacy' else 403)
 
 
 def test_authorized_write_finishes_before_revocation(api, ledger):
@@ -325,6 +328,7 @@ def test_wallet_permission_proof_is_rechecked_after_commit(api, ledger):
         stale.commit()
         with Session(api.engine, autoflush=False) as db:
             api.c.lock_owners(db, ledger.owner)
+            db.query(api.m.SpaceMember).filter_by(space_id=ledger.space).update({'role': 'view'})
             db.query(api.m.WalletShare).filter_by(wallet_id=ledger.wallet).update({'permission': 'view'})
             db.commit()
         stale.add(api.m.WalletBalanceCheck(wallet_id=ledger.wallet, checked_by_id=ledger.member,
@@ -464,6 +468,7 @@ def test_scheduled_post_rechecks_revoked_access(api, ledger):
     with Session(api.engine, autoflush=False) as db, ThreadPoolExecutor(max_workers=1) as pool:
         api.c.lock_owners(db, ledger.owner)
         blocker = db.scalar(text('SELECT pg_backend_pid()'))
+        db.query(api.m.SpaceMember).filter_by(space_id=ledger.space).delete()
         db.query(api.m.WalletShare).filter_by(wallet_id=ledger.wallet).delete()
         future = pool.submit(post)
         try:

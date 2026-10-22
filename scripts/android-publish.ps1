@@ -9,6 +9,19 @@ function Get-BudgetlyFileSha256([string]$Path) {
     }
 }
 
+function Get-BudgetlyReleaseGate([object]$Status, [object[]]$Runs) {
+    $deployment = @($Status.statuses | Where-Object { $_.context -eq 'Vercel' } | Select-Object -First 1)
+    $quality = @($Runs | Sort-Object databaseId -Descending | Select-Object -First 1)
+    if ($deployment.Count -and $deployment[0].state -in @('failure', 'error')) {
+        throw "Vercel deployment failed: $($deployment[0].target_url). No Android update will be published."
+    }
+    if ($quality.Count -and $quality[0].status -eq 'completed' -and $quality[0].conclusion -ne 'success') {
+        throw "GitHub quality gates did not pass ($($quality[0].conclusion)): $($quality[0].url). No Android update will be published."
+    }
+    return ($deployment.Count -gt 0 -and $deployment[0].state -eq 'success' -and
+        $quality.Count -gt 0 -and $quality[0].status -eq 'completed' -and $quality[0].conclusion -eq 'success')
+}
+
 function Invoke-BudgetlyRelease {
     param(
         [string]$Root,
@@ -90,6 +103,16 @@ function Invoke-BudgetlyRelease {
             $manifest.url -ne "https://github.com/$repo/releases/download/$tag/Budgetly-$version.apk") {
             throw 'APK and update manifest do not match. Nothing will be published.'
         }
+        Write-Host 'Verifying Vercel deployment and GitHub quality gates for this exact commit before publication...'
+        $deadline = [DateTime]::UtcNow.AddMinutes(20)
+        do {
+            $deploymentStatus = Run gh.exe @('api', "repos/$repo/commits/$commit/status") | ConvertFrom-Json
+            $qualityRuns = Run gh.exe @('run', 'list', '--repo', $repo, '--workflow', 'quality.yml', '--commit', $commit,
+                '--event', 'push', '--limit', '10', '--json', 'databaseId,status,conclusion,url') | ConvertFrom-Json
+            if (Get-BudgetlyReleaseGate $deploymentStatus @($qualityRuns)) { break }
+            if ([DateTime]::UtcNow -ge $deadline) { throw 'Timed out waiting for deployment/quality checks. APK remains local; fix checks and rerun this version.' }
+            Start-Sleep -Seconds 10
+        } while ($true)
         if ($existing) {
             $draft = Run gh.exe @('release', 'view', $tag, '--repo', $repo, '--json', 'targetCommitish') | ConvertFrom-Json
             if ($draft.targetCommitish -ne $commit) { throw "Existing draft $tag targets a different commit. Resolve it manually before retrying." }
@@ -107,6 +130,6 @@ function Invoke-BudgetlyRelease {
                 Write-Host "Update push: $($result.sent) accepted by providers, $($result.failed) pending retry. Receipt on devices is not confirmed."
             } catch { Write-Warning 'Release published, but immediate push could not complete. Daily maintenance will retry; check deployment and push configuration.' }
         }
-        Write-Host 'Vercel deployment is triggered by Git push; this launcher does not wait for its result.'
+        Write-Host 'Vercel deployment and GitHub quality gates passed for the released commit.'
     } finally { Pop-Location }
 }

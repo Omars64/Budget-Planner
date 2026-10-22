@@ -18,7 +18,7 @@ if ((Get-BudgetlyFileSha256 $hashFixture) -ne 'ba7816bf8f01cfea414140de5dae2223b
 }
 $passed++
 $testSource = ((Get-Content -LiteralPath $PSCommandPath | ForEach-Object { '+' + $_ }) -join "`n")
-foreach ($case in @('success','unchanged','check','secret-file','secret-content','release-test-source','push-failure','build-failure','upload-failure','existing-published','draft-retry','bad-hash')) {
+foreach ($case in @('success','unchanged','check','secret-file','secret-content','release-test-source','push-failure','build-failure','upload-failure','existing-published','draft-retry','bad-hash','deployment-failure','quality-failure')) {
     $state = @{Case=$case;Calls=[System.Collections.Generic.List[string]]::new()}
     $runner = {
         param($program,$arguments)
@@ -39,6 +39,8 @@ foreach ($case in @('success','unchanged','check','secret-file','secret-content'
             'git.exe push*' { if($state.Case -eq 'push-failure'){$exitCode=1} }
             'gh.exe release list*' { $output=if($state.Case -eq 'existing-published'){'[{"tagName":"v1.2.3","isDraft":false}]'}elseif($state.Case -eq 'draft-retry'){'[{"tagName":"v1.2.3","isDraft":true}]'}else{'[]'} }
             'gh.exe release view*' { $output='{"targetCommitish":"abc123"}' }
+            'gh.exe api repos/*/commits/*/status' { $output=if($state.Case -eq 'deployment-failure'){'{"statuses":[{"context":"Vercel","state":"failure","target_url":"https://vercel.com/test"}]}'}else{'{"statuses":[{"context":"Vercel","state":"success"}]}'} }
+            'gh.exe run list*' { $output=if($state.Case -eq 'quality-failure'){'[{"databaseId":1,"status":"completed","conclusion":"failure","url":"https://github.com/test"}]'}else{'[{"databaseId":1,"status":"completed","conclusion":"success"}]'} }
             'gh.exe release create*' { if($state.Case -eq 'upload-failure'){$exitCode=1} }
             'powershell.exe*' { if($state.Case -eq 'build-failure' -and $arguments -notcontains '-CheckOnly'){$exitCode=1} }
         }
@@ -49,7 +51,7 @@ foreach ($case in @('success','unchanged','check','secret-file','secret-content'
     $failed=$false
     try { Invoke-BudgetlyRelease -Root $root -BuildArguments @('build') -Runner $runner -CheckOnly:($case -eq 'check') }
     catch { $failed=$true }
-    $shouldFail=$case -in @('secret-file','secret-content','push-failure','build-failure','upload-failure','existing-published','bad-hash')
+    $shouldFail=$case -in @('secret-file','secret-content','push-failure','build-failure','upload-failure','existing-published','bad-hash','deployment-failure','quality-failure')
     if($failed -ne $shouldFail){throw "Unexpected outcome: $case. Calls: $($state.Calls -join '; ')"}
     $calls=$state.Calls -join "`n"
     if($shouldFail -and $calls -match 'release edit'){throw "Published failed case: $case"}
@@ -67,4 +69,7 @@ foreach ($case in @('success','unchanged','check','secret-file','secret-content'
     if($case -eq 'draft-retry' -and ($calls -notmatch 'release upload' -or $calls -match 'release create')){throw 'Draft retry failed'}
     $passed++
 }
+if (Get-BudgetlyReleaseGate ([pscustomobject]@{statuses=@()}) @()) { throw 'Missing deployment/checks must not pass' }
+if (Get-BudgetlyReleaseGate ([pscustomobject]@{statuses=@([pscustomobject]@{context='Vercel';state='pending'})}) @([pscustomobject]@{databaseId=1;status='in_progress'})) { throw 'Pending checks must not pass' }
+$passed += 2
 Write-Host "$passed release workflow tests passed. All Git/GitHub/build commands were mocked; nothing was pushed or published."

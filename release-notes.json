@@ -1,4 +1,8 @@
 {
+  "6.3.2": [
+    {"title":"Deployment reliability","detail":"A smaller server bundle restores deployment compatibility. Release checks now verify the deployed backend and quality gates before publishing an Android update."},
+    {"title":"Consistent Space access checks","detail":"Concurrent permission tests follow Space membership, verifying that actual removal and Viewer downgrades block further changes."}
+  ],
   "6.3.1": [
     {"title":"Consistent Space roles","detail":"Managers can add, edit and delete Space transactions and upcoming entries, and manage wallets, budgets and categories, including records created by the owner. Viewers remain read-only."},
     {"title":"Simpler membership","detail":"Space owners now choose Viewer or Manager. Existing Contributors become Managers, with financial records and membership preserved."}
