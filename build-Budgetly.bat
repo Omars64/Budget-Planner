@@ -8,5 +8,5 @@ set "BUILD_EXIT=%ERRORLEVEL%"
 if not "%BUILD_EXIT%"=="0" echo Release stopped. Read the error above; do not distribute an incomplete release.
 popd
 echo.
-pause
+if not "%BUDGETLY_NO_PAUSE%"=="1" pause
 exit /b %BUILD_EXIT%

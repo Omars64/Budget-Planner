@@ -55,6 +55,7 @@ foreach ($case in @('success','unchanged','check','secret-file','secret-content'
     if($failed -ne $shouldFail){throw "Unexpected outcome: $case. Calls: $($state.Calls -join '; ')"}
     $calls=$state.Calls -join "`n"
     if($shouldFail -and $calls -match 'release edit'){throw "Published failed case: $case"}
+    if($case -eq 'build-failure' -and $calls -match 'git.exe (add|commit|push)'){throw 'Failed build changed Git or deployed unverified source'}
     if($case -eq 'check' -and $calls -match 'git.exe (add|commit|push)|release (create|edit)'){throw 'CheckOnly caused mutations'}
     if($case -eq 'unchanged' -and $calls -match 'git.exe commit'){throw 'Empty commit created'}
     if($case -eq 'success'){
@@ -62,7 +63,7 @@ foreach ($case in @('success','unchanged','check','secret-file','secret-content'
         $build=$state.Calls.FindIndex([Predicate[string]]{param($line)$line -eq 'powershell.exe build'})
         $create=$state.Calls.FindIndex([Predicate[string]]{param($line)$line -like 'gh.exe release create*'})
         $publish=$state.Calls.FindIndex([Predicate[string]]{param($line)$line -like 'gh.exe release edit*'})
-        if(!($push -lt $build -and $build -lt $create -and $create -lt $publish)){throw 'Incorrect release order'}
+        if(!($build -lt $push -and $push -lt $create -and $create -lt $publish)){throw 'Incorrect release order'}
         if($calls -notmatch 'commit -m Budgetly 1.2.3: update authentication'){throw 'Automatic message missing'}
         if($calls -notmatch '--draft' -or $calls -notmatch '--draft=false --latest'){throw 'Draft publication guard missing'}
     }

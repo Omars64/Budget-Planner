@@ -30,18 +30,33 @@ function Invoke-BudgetlyRelease {
         [switch]$CheckOnly,
         [scriptblock]$Runner = {
             param($Program, $Arguments)
-            $output = @(& $Program @Arguments)
-            $code = $LASTEXITCODE
             $showOutput = $Program -eq 'powershell.exe' -or
                 ($Program -eq 'git.exe' -and $Arguments[0] -in @('commit', 'push')) -or
                 ($Program -eq 'gh.exe' -and $Arguments[0] -eq 'release' -and $Arguments[1] -in @('create', 'upload', 'edit'))
-            if ($showOutput) { foreach ($line in $output) { Write-Host $line } }
+            $output = [System.Collections.Generic.List[string]]::new()
+            $previousPreference = $ErrorActionPreference
+            try {
+                # Native tools use stderr for warnings as well as failures. Keep
+                # both streams visible, but let the process exit code decide.
+                $ErrorActionPreference = 'Continue'
+                & $Program @Arguments 2>&1 | ForEach-Object {
+                    $line = $_.ToString()
+                    $output.Add($line)
+                    if ($showOutput) { Write-Host $line }
+                }
+                $code = $LASTEXITCODE
+            } finally { $ErrorActionPreference = $previousPreference }
             [pscustomobject]@{ ExitCode = $code; Output = $output }
         }
     )
     function Run([string]$Program, [string[]]$Arguments) {
         $result = & $Runner $Program $Arguments
-        if ($result.ExitCode -ne 0) { throw "$Program $($Arguments[0]) failed (exit $($result.ExitCode))." }
+        if ($result.ExitCode -ne 0) {
+            if ($Program -eq 'gh.exe' -or ($Program -eq 'git.exe' -and $Arguments[0] -in @('push', 'fetch', 'commit'))) {
+                foreach ($line in @($result.Output | Select-Object -Last 12)) { Write-Host $line }
+            }
+            throw "$Program $($Arguments[0]) failed (exit $($result.ExitCode)). See the command output above."
+        }
         return ($result.Output -join "`n").Trim()
     }
     Push-Location $Root
@@ -70,6 +85,8 @@ function Invoke-BudgetlyRelease {
         $null = Run powershell.exe ($BuildArguments + '-CheckOnly' | Select-Object -Unique)
         if ($CheckOnly) { Write-Host 'Release checks passed. No commit, push, build, or publication performed.'; return }
 
+        Write-Host 'Building and testing locally before making any Git or production changes...' -ForegroundColor Cyan
+        $null = Run powershell.exe $BuildArguments
         $null = Run git.exe @('add', '.')
         $patch = Run git.exe @('diff', '--cached', '--no-color')
         if ($patch -match '(?m)^\+(?!\+).*?(-----BEGIN [A-Z ]*PRIVATE KEY-----|GOCSPX-[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-proj-[A-Za-z0-9_-]{20,})') {
@@ -89,7 +106,6 @@ function Invoke-BudgetlyRelease {
         } else { Write-Host 'No staged changes; using the current commit.' }
         $null = Run git.exe @('push', 'origin', 'main')
         $commit = Run git.exe @('rev-parse', 'HEAD')
-        $null = Run powershell.exe $BuildArguments
         $null = Run git.exe @('diff', '--exit-code')
         $null = Run git.exe @('diff', '--cached', '--exit-code')
         $directory = Join-Path $Root 'android/app/build/outputs/apk/release'
