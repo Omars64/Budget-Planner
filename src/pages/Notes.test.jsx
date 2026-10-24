@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import Notes from './Notes'
 import { api } from '../lib/api'
+import { updateResourcePolicy } from '../lib/resourcePolicy'
 
 const state=vi.hoisted(()=>({notify:vi.fn(), activeSpace:null}))
 vi.mock('../App', () => ({ useApp: () => ({ user: { id: 901 }, activeSpace: state.activeSpace, notify: state.notify, confirm: vi.fn(async () => true) }) }))
@@ -30,7 +31,30 @@ it('undoes a note move without discarding content edits', async () => {
   expect(screen.getByLabelText('Note folder')).toHaveValue('')
   expect(screen.getByLabelText('Note content')).toHaveValue('Keep this edit')
 })
-afterEach(() => { cleanup(); vi.clearAllMocks() })
+afterEach(() => { cleanup(); vi.clearAllMocks(); vi.useRealTimers(); vi.restoreAllMocks(); updateResourcePolicy({client_poll_seconds:60}) })
+
+it('protects edits made during a background read and keeps autosave immediate while hidden', async () => {
+  vi.useFakeTimers()
+  const visibility = vi.spyOn(document,'visibilityState','get').mockReturnValue('visible')
+  render(<Notes/> )
+  await act(async () => vi.advanceTimersByTimeAsync(0))
+  fireEvent.click(screen.getByText('Plan'))
+  await act(async () => vi.advanceTimersByTimeAsync(0))
+  let finish
+  api.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+  await act(async () => vi.advanceTimersByTimeAsync(60000))
+  const reads = () => api.mock.calls.filter(([path])=>path==='/api/notes').length
+  expect(reads()).toBe(2)
+  fireEvent.change(screen.getByLabelText('Note content'),{target:{value:'Keep my draft'}})
+  await act(async () => vi.advanceTimersByTimeAsync(0))
+  expect(reads()).toBe(2)
+  await act(async () => finish([{...note,content:'Remote edit'}]))
+  expect(screen.getByLabelText('Note content')).toHaveValue('Keep my draft')
+  visibility.mockReturnValue('hidden'); document.dispatchEvent(new Event('visibilitychange'))
+  await act(async () => vi.advanceTimersByTimeAsync(1200))
+  expect(api).toHaveBeenCalledWith('/api/notes/1',expect.objectContaining({method:'PUT'}))
+  expect(note.content).toBe('Keep my draft')
+})
 
 it('opens a folder drawer, selects a folder and closes without changing saved notes', async () => {
   render(<Notes/> )

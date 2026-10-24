@@ -1,4 +1,9 @@
 {
+  "6.5.0": [
+    {"title":"Smarter background resource use","detail":"Idle scheduler checks can skip the financial database while scheduled entries and reminders retain their due-time checks. User records remain in the same database."},
+    {"title":"Administrator resource controls","detail":"Adjust client refresh, idle recovery rescans and database health probes from Admin, with validation and protection against conflicting changes."},
+    {"title":"Quieter, more efficient syncing","detail":"Background reads pause while Budgetly is hidden or offline and avoid overlapping requests. Manual saving and refreshing remain available."}
+  ],
   "6.4.1": [
     {"title":"More reliable Android builds","detail":"The release launcher shows live progress, saves local diagnostic logs, prevents overlapping builds and verifies the signed build before pushing source changes. Failed commands retain useful error details without treating normal warnings as build failures."}
   ],

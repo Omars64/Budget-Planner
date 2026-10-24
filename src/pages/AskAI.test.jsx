@@ -1,17 +1,47 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import AskAI from './AskAI'
 import { api } from '../lib/api'
+import { updateResourcePolicy } from '../lib/resourcePolicy'
 
 vi.mock('../App', () => ({ useApp: () => ({ notify: vi.fn(), confirm: vi.fn(), refresh: vi.fn() }) }))
 vi.mock('../lib/api', () => ({ api: vi.fn(), jsonBody: data => ({ body: JSON.stringify(data) }) }))
-afterEach(cleanup)
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); updateResourcePolicy({client_poll_seconds:60}) })
 beforeEach(() => {
   window.localStorage.clear(); vi.clearAllMocks()
   window.matchMedia = vi.fn(() => ({ matches: false }))
   window.Element.prototype.scrollTo = vi.fn()
   api.mockImplementation(path => Promise.resolve(path === '/api/ai/config' ? { wallets: [], shared_wallets: [], ai_available: false } : { items: [], has_more: false }))
+})
+
+it('uses fast reads only during generation and pauses them when hidden or offline', async () => {
+  vi.useFakeTimers()
+  let status = 'pending'
+  const visibility = vi.spyOn(document,'visibilityState','get').mockReturnValue('visible')
+  const connectivity = vi.spyOn(navigator,'onLine','get').mockReturnValue(true)
+  api.mockImplementation(path => Promise.resolve(path === '/api/ai/config' ? {wallets:[],shared_wallets:[]}
+    : path === '/api/ai/chats/chat-1' ? {id:'chat-1',scope:'personal',turns:[{id:'turn-1',question:'Question',status,answer:status==='completed'?'Done':'',sources:[]}]}
+      : {items:[],has_more:false}))
+  render(<MemoryRouter initialEntries={['/ask-ai?chat=chat-1']}><AskAI/></MemoryRouter>)
+  const reads = () => api.mock.calls.filter(([path]) => path === '/api/ai/chats/chat-1').length
+  await act(async () => vi.advanceTimersByTimeAsync(0))
+  expect(reads()).toBe(1)
+  act(() => updateResourcePolicy({client_poll_seconds:300}))
+  await act(async () => vi.advanceTimersByTimeAsync(3000))
+  expect(reads()).toBe(2)
+  visibility.mockReturnValue('hidden'); document.dispatchEvent(new Event('visibilitychange'))
+  await act(async () => vi.advanceTimersByTimeAsync(30000))
+  expect(reads()).toBe(2)
+  connectivity.mockReturnValue(false); visibility.mockReturnValue('visible'); document.dispatchEvent(new Event('visibilitychange'))
+  await act(async () => vi.advanceTimersByTimeAsync(30000))
+  expect(reads()).toBe(2)
+  status='completed'; connectivity.mockReturnValue(true)
+  window.dispatchEvent(new Event('online')); window.dispatchEvent(new Event('focus'))
+  await act(async () => vi.advanceTimersByTimeAsync(0))
+  expect(reads()).toBe(3)
+  await act(async () => vi.advanceTimersByTimeAsync(3000))
+  expect(reads()).toBe(3)
 })
 it('has one new-chat button, expandable history and a compact composer', async () => {
   const { container } = render(<MemoryRouter><AskAI/></MemoryRouter>)

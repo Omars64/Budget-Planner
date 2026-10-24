@@ -2,6 +2,7 @@ import { showTime } from '../lib/time'
 import { useEffect, useState } from 'react'
 import { ArrowLeft, Inbox, MessageSquare, Plus, Search, Send } from 'lucide-react'
 import { api, jsonBody } from '../lib/api'
+import { startReadPolling } from '../lib/resourcePolicy'
 import { useApp } from '../App'
 import Modal from '../components/Modal'
 
@@ -27,9 +28,9 @@ export default function Feedback() {
       try { const result = await api('/api/feedback'); if (!cancelled) { setRows(result); setLoading(false) } }
       catch (err) { if (!cancelled) { setError(err.message); setLoading(false) } }
     }
-    sync(); const timer = setInterval(sync, 15000)
-    return () => { cancelled = true; clearInterval(timer) }
-  }, [])
+    const stop = startReadPolling(sync)
+    return () => { cancelled = true; stop() }
+  }, [user.id])
   const current = rows.find(r => r.id === selected)
   const visible = rows.filter(r => (filter === 'all' || r.status === filter) && `${r.subject} ${r.content} ${r.sender_name} ${r.sender_email}`.toLowerCase().includes(search.toLowerCase()))
   const open = async row => {

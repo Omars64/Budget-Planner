@@ -3,10 +3,11 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { api } from './api'
 import useLedger from './useLedger'
 import { defaultLedgerFilters } from '../components/LedgerFilters'
+import { updateResourcePolicy } from './resourcePolicy'
 
 vi.mock('./api', () => ({ api: vi.fn(), readCached: () => undefined }))
 beforeEach(() => vi.clearAllMocks())
-afterEach(cleanup)
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); updateResourcePolicy({client_poll_seconds:60}) })
 
 test('restores the page for the same account and filter after navigating away', async () => {
   sessionStorage.clear()
@@ -56,4 +57,46 @@ test('keeps the current records on a temporary refresh failure and allows retry'
   act(() => result.current.retry())
   await waitFor(() => expect(result.current.rows).toEqual([{id: 2}]))
   expect(result.current.error).toBe('')
+})
+
+test('adapts recurring ledger reads without focus storms and refreshes filters and retries immediately', async () => {
+  vi.useFakeTimers()
+  api.mockResolvedValue([{id:1}])
+  const { result, rerender } = renderHook(({filters, refresh}) => useLedger('/api/shared/transactions', filters, refresh, true), {initialProps:{filters:defaultLedgerFilters,refresh:0}})
+  await act(async () => vi.advanceTimersByTimeAsync(180))
+  expect(api).toHaveBeenCalledTimes(1)
+  act(() => updateResourcePolicy({client_poll_seconds:15}))
+  await act(async () => vi.advanceTimersByTimeAsync(15000))
+  expect(api).toHaveBeenCalledTimes(2)
+  for (let i=0;i<10;i++) window.dispatchEvent(new Event('focus'))
+  await act(async () => vi.advanceTimersByTimeAsync(0))
+  expect(api).toHaveBeenCalledTimes(2)
+  rerender({filters:{...defaultLedgerFilters,wallet:'2'},refresh:0})
+  await act(async () => vi.advanceTimersByTimeAsync(180))
+  expect(api).toHaveBeenCalledTimes(3)
+  rerender({filters:{...defaultLedgerFilters,wallet:'2'},refresh:1})
+  await act(async () => vi.advanceTimersByTimeAsync(180))
+  expect(api).toHaveBeenCalledTimes(4)
+  act(() => result.current.retry())
+  await act(async () => vi.advanceTimersByTimeAsync(180))
+  expect(api).toHaveBeenCalledTimes(5)
+})
+
+test('clears permission-denied records instead of preserving a previous successful result', async () => {
+  api.mockResolvedValueOnce([{id:'private'}]).mockRejectedValue(Object.assign(new Error('Forbidden'),{status:403}))
+  const { result, rerender } = renderHook(({refresh}) => useLedger('/api/shared/transactions', defaultLedgerFilters, refresh, true),{initialProps:{refresh:0}})
+  await waitFor(() => expect(result.current.rows).toHaveLength(1))
+  rerender({refresh:1})
+  await waitFor(() => expect(result.current.error).toBe('Forbidden'))
+  expect(result.current.rows).toEqual([])
+})
+
+test('does not retain another account view while the same endpoint reloads', async () => {
+  api.mockResolvedValueOnce([{id:'account-one'}]).mockRejectedValue(new Error('Unavailable'))
+  const { result, rerender } = renderHook(({view}) => useLedger('/api/shared/transactions',defaultLedgerFilters,0,true,view),{initialProps:{view:'shared:1'}})
+  await waitFor(() => expect(result.current.rows).toHaveLength(1))
+  rerender({view:'shared:2'})
+  expect(result.current.rows).toEqual([])
+  await waitFor(() => expect(result.current.error).toBe('Unavailable'))
+  expect(result.current.rows).toEqual([])
 })

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowUp, ChevronDown, Plus, Settings2, Square, X } from 'lucide-react'
 import { api, jsonBody } from '../lib/api'
+import { startReadPolling } from '../lib/resourcePolicy'
 import { dateInput } from '../lib/time'
 import { useApp } from '../App'
 import Modal from '../components/Modal'
@@ -41,6 +42,7 @@ export default function AskAI() {
   const selection = useRef(chatId)
   const requestRef = useRef(null)
   const listRequest = useRef(0)
+  const chatReads = useRef(new Map())
   const mounted = useRef(true)
   const messages = useRef(null)
   const composer = useRef(null)
@@ -57,21 +59,24 @@ export default function AskAI() {
     setHasChats(data.has_more)
   }, [selectedGroup])
   const loadChat = useCallback(async id => {
-    const data = await api('/api/ai/chats/' + id)
-    if (mounted.current && selection.current === id) setChat(data)
-    return data
+    const request = api('/api/ai/chats/' + id).then(data => {
+      if (mounted.current && selection.current === id && chatReads.current.get(id) === request) setChat(data)
+      return data
+    }).finally(() => { if (chatReads.current.get(id) === request) chatReads.current.delete(id) })
+    chatReads.current.set(id, request)
+    return request
   }, [])
   useEffect(() => {
     mounted.current = true
     const loadConfig = () => api('/api/ai/config').then(data => { if (mounted.current) setConfig(data) }).catch(err => { if (mounted.current) setError(err.message) })
-    void loadConfig()
-    window.addEventListener('focus', loadConfig)
-    const configTimer = window.setInterval(loadConfig, 60000)
-    void loadChats().catch(err => setError(err.message))
+    const stopConfig = startReadPolling(loadConfig)
     const resize = () => document.documentElement.style.setProperty('--ai-viewport', (window.visualViewport?.height || window.innerHeight) + 'px')
     resize()
     window.visualViewport?.addEventListener('resize', resize)
-    return () => { mounted.current = false; window.clearInterval(configTimer); window.removeEventListener('focus', loadConfig); window.visualViewport?.removeEventListener('resize', resize); document.documentElement.style.removeProperty('--ai-viewport') }
+    return () => { mounted.current = false; stopConfig(); window.visualViewport?.removeEventListener('resize', resize); document.documentElement.style.removeProperty('--ai-viewport') }
+  }, [])
+  useEffect(() => {
+    void loadChats().catch(err => { if (mounted.current) setError(err.message) })
   }, [loadChats])
   useEffect(() => {
     selection.current = chatId
@@ -86,7 +91,7 @@ export default function AskAI() {
     if (!chatId) return
     let checking = false
     const sync = async () => {
-      if (checking || document.visibilityState === 'hidden') return
+      if (checking || chatReads.current.has(chatId) || document.visibilityState === 'hidden') return
       checking = true
       try { await loadChat(chatId) } catch (err) {
         if (selection.current === chatId) {
@@ -95,9 +100,8 @@ export default function AskAI() {
         }
       } finally { checking = false }
     }
-    const timer = window.setInterval(sync, pending ? 3000 : 30000)
-    window.addEventListener('focus', sync)
-    return () => { window.clearInterval(timer); window.removeEventListener('focus', sync) }
+    const stop = startReadPolling(sync, { immediate: false, intervalMs: pending ? 3000 : undefined })
+    return stop
   }, [chatId, pending, loadChat])
   const lastTurn = chat?.turns?.at(-1)
   useEffect(() => {

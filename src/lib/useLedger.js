@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, readCached } from './api'
 import { readView, writeView } from './viewState'
+import { startReadPolling } from './resourcePolicy'
 
 const PAGE_SIZE = 100
 
@@ -25,7 +26,7 @@ export default function useLedger(endpoint, filters, refreshKey, poll = false, v
   const offset = pagination.key === filterKey ? pagination.offset : 0
   useEffect(() => { if (viewKey) writeView(`${viewKey}:page`, {key:filterKey,offset}) }, [viewKey, filterKey, offset])
   const path = `${endpoint}?${ledgerQuery(filters, offset)}`
-  const [result, setResult] = useState(() => ({ path, rows: readCached(path), error: '' }))
+  const [result, setResult] = useState(() => ({ path, viewKey, rows: readCached(path), error: '' }))
   const [retry, setRetry] = useState(0)
   const [busy, setBusy] = useState(true)
 
@@ -33,39 +34,35 @@ export default function useLedger(endpoint, filters, refreshKey, poll = false, v
     const controller = new AbortController()
     let pending = false
     const sync = async () => {
-      if (pending || document.visibilityState === 'hidden') return
+      if (pending) return
       pending = true
       setBusy(true)
       try {
         const rows = await api(path, { signal: controller.signal })
-        if (!controller.signal.aborted) setResult({ path, rows, error: '', updatedAt: Date.now() })
+        if (!controller.signal.aborted) setResult({ path, viewKey, rows, error: '', updatedAt: Date.now() })
       } catch (error) {
-        if (!controller.signal.aborted) setResult(previous => ({ path, rows: previous.path === path && ![401, 403].includes(error.status) ? previous.rows : undefined, updatedAt: previous.path === path ? previous.updatedAt : undefined, error: error.message }))
+        if (!controller.signal.aborted) setResult(previous => {
+          const retain = previous.path === path && previous.viewKey === viewKey && ![401, 403].includes(error.status)
+          return { path, viewKey, rows: retain ? previous.rows : undefined, updatedAt: retain ? previous.updatedAt : undefined, error: error.message }
+        })
       } finally {
         pending = false
         if (!controller.signal.aborted) setBusy(false)
       }
     }
-    const timer = setTimeout(sync, 180)
-    const interval = poll ? setInterval(sync, 5000) : null
-    window.addEventListener('focus', sync)
-    window.addEventListener('online', sync)
-    document.addEventListener('visibilitychange', sync)
+    const stop = startReadPolling(sync, { initialDelay: 180, recurring: poll })
     return () => {
       controller.abort()
-      clearTimeout(timer)
-      if (interval) clearInterval(interval)
-      window.removeEventListener('focus', sync)
-      window.removeEventListener('online', sync)
-      document.removeEventListener('visibilitychange', sync)
+      stop()
     }
-  }, [path, refreshKey, retry, poll])
+  }, [path, refreshKey, retry, poll, viewKey])
 
-  const current = result.path === path ? result : { rows: readCached(path), error: '' }
+  const sameView = result.path === path && result.viewKey === viewKey
+  const current = sameView ? result : { rows: readCached(path), error: '' }
   return {
     rows: (current.rows || []).slice(0, PAGE_SIZE),
     loading: !current.rows && !current.error,
-    busy: busy || result.path !== path,
+    busy: busy || !sameView,
     error: current.error,
     updatedAt: current.updatedAt,
     hasMore: (current.rows?.length || 0) > PAGE_SIZE,

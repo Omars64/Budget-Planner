@@ -1,4 +1,4 @@
-/* global Image, FileReader, crypto, navigator, setInterval, clearInterval, setTimeout */
+/* global Image, FileReader, crypto, navigator, setTimeout */
 import { showTime } from '../lib/time'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -7,6 +7,7 @@ import {
   Search, Share2, Trash2, X, Settings2, LayoutGrid, List
 } from 'lucide-react'
 import { api, jsonBody } from '../lib/api'
+import { startReadPolling } from '../lib/resourcePolicy'
 import { useApp } from '../App'
 import Modal from '../components/Modal'
 import NotesFolders from '../components/NotesFolders'
@@ -71,14 +72,17 @@ export default function Notes() {
     return () => window.removeEventListener('keydown', close)
   }, [])
   draftRef.current = draft
+  const dirtyRef = useRef(dirty)
+  dirtyRef.current = dirty
 
   useEffect(() => { try { if (dirty && draft) sessionStorage.setItem(draftKey, JSON.stringify(draft)); else sessionStorage.removeItem(draftKey) } catch { /* Draft protection is best effort. */ } }, [draftKey, dirty, draft])
   const load = async () => { const [n, f] = await Promise.all([api('/api/notes'), api('/api/note-folders')]); setNotes(n); setFolders(f); setLoading(false); return n }
   useEffect(() => {
     let cancelled = false
-    const sync = async () => { if (document.visibilityState === 'hidden') return; try { const [n, f] = await Promise.all([api('/api/notes'), api('/api/note-folders')]); if (cancelled) return; setNotes(n); setFolders(f); setLoading(false); if (!dirty) setDraft(current => current?.id ? n.find(item => item.id === current.id) || null : current) } catch (err) { if (!cancelled) { setError(err.message); setLoading(false) } } }
-    sync(); const timer = setInterval(sync, 10000); window.addEventListener('focus', sync); return () => { cancelled = true; clearInterval(timer); window.removeEventListener('focus', sync) }
-  }, [dirty])
+    const sync = async () => { try { const [n, f] = await Promise.all([api('/api/notes'), api('/api/note-folders')]); if (cancelled) return; setNotes(n); setFolders(f); setLoading(false); if (!dirtyRef.current) setDraft(current => current?.id ? n.find(item => item.id === current.id) || null : current) } catch (err) { if (!cancelled) { setError(err.message); setLoading(false) } } }
+    const stop = startReadPolling(sync)
+    return () => { cancelled = true; stop() }
+  }, [user.id, activeSpace?.id])
   const visible = useMemo(() => notes.filter(note => { const inFolder = folder === 'shared' ? !activeSpace && !note.is_owner : (activeSpace || note.is_owner) && (folder === 'all' || (folder === 'pinned' ? note.pinned : String(note.folder_id) === folder)); const haystack = `${note.title} ${note.content} ${(note.checklist || []).map(item => item.text).join(' ')}`.toLowerCase(); return inFolder && haystack.includes(search.toLowerCase()) }), [notes, folder, search, activeSpace])
   const leave = async () => !dirty || await save()
   const select = async note => { if (!await leave()) return; setError(''); setToolsOpen(false); setOptionsOpen(false); if (!note) { setDraft(null); setDirty(false); return } try { setDraft(note.id ? await api(`/api/notes/${note.id}`) : note); setDirty(false) } catch (err) { setError(err.message) } }

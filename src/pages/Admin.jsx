@@ -5,6 +5,7 @@ import PasswordInput from '../components/PasswordInput'
 import { useApp } from '../App'
 import Modal from '../components/Modal'
 import OperationsPanel from '../components/OperationsPanel'
+import ResourcePolicyPanel from '../components/ResourcePolicyPanel'
 import EmptyState from '../components/EmptyState'
 import SettingsSection from '../components/SettingsSection'
 import AssistantSettings from '../components/AssistantSettings'
@@ -84,6 +85,7 @@ export default function Admin() {
   return <div className="settings-grid admin-settings">
     {error && !open && <div className="form-error" role="alert">{error}<button className="button ghost small" onClick={()=>load().catch(err=>setError(err.message))}>Retry</button></div>}
     <SettingsSection title="Service health"><OperationsPanel/></SettingsSection>
+    <SettingsSection title="Database usage"><ResourcePolicyPanel/></SettingsSection>
     <SettingsSection title="Ask Budgetly"><AssistantSettings/></SettingsSection>
     <SettingsSection title="User management">
     <section className="section-intro glass">

@@ -4,7 +4,7 @@ import gzip
 import json
 import os
 import secrets
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from fastapi.encoders import jsonable_encoder
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, text
@@ -122,6 +122,10 @@ def scheduled_transactions(request: Request, db=Depends(get_db)):
     secret = os.getenv('SCHEDULE_RUNNER_SECRET', '')
     if not secret or not hmac.compare_digest(request.headers.get('Authorization', ''), 'Bearer ' + secret):
         raise HTTPException(401, 'Unauthorized')
+    claim = getattr(request.state, 'resource_claim', None)
+    coordinated = bool(claim and claim.get('action') == 'run')
+    if coordinated:
+        request.state.resource_scheduler_success = False
     from .planned import post_due
     from .models import PlannedTransaction
     from .timekeeping import now as ledger_now
@@ -158,6 +162,11 @@ def scheduled_transactions(request: Request, db=Depends(get_db)):
         db.rollback()
         record_job(db, 'upcoming-reminder-delivery', 503)
         upcoming_delivery = {'failed': True}
+    if coordinated:
+        from .resource_schedule import next_scheduler_wake
+        wake = next_scheduler_wake(db, datetime.now(timezone.utc))
+        request.state.resource_next_epoch = wake.timestamp() if wake is not None else None
+        request.state.resource_scheduler_success = not (delivery.get('failed') or upcoming_delivery.get('failed'))
     return {'ok': True, 'scheduled_transactions_posted': posted, 'notifications': delivery, 'upcoming_notifications': upcoming_delivery}
 
 

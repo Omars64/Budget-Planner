@@ -28,6 +28,7 @@ from . import update_push
 from . import planner
 from . import receipts
 from . import diagnostics
+from . import resource_runtime
 from .email_service import send_verification_code, smtp_status
 
 # Route signup verification through the hardened email transport. Keeping this
@@ -57,6 +58,7 @@ app.include_router(update_push.router)
 app.include_router(planner.router)
 app.include_router(receipts.router)
 app.include_router(diagnostics.router)
+app.include_router(resource_runtime.router)
 
 
 @app.get("/api/health/email")

@@ -1,6 +1,7 @@
 """Operational signals contain no account records, credentials or request bodies."""
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 import os
+from . import resource_control
 from .models import PlannedTransaction, utc_now
 from .reliability_models import ServiceEvent
 from .timekeeping import now as ledger_now
@@ -26,6 +27,24 @@ def job_status(db):
         fresh = bool(row and row.status == 200 and row.created_at >= utc_now() - timedelta(minutes=minutes))
         result[name] = {'configured': configured, 'healthy': fresh if configured else None,
                         'last_run': row.created_at.isoformat() + 'Z' if row else None}
+    if result['scheduler']['configured'] and resource_control.configured():
+        scheduler = result['scheduler']
+        scheduler.update(healthy=False, last_run=None)
+        try:
+            state = resource_control.read_state()
+            if state['coordination']['healthy']:
+                status = state['status']
+                tick = status.get('last_tick')
+                failure = status.get('last_failure')
+                success = status.get('last_success')
+                now_epoch = utc_now().replace(tzinfo=timezone.utc).timestamp()
+                scheduler['healthy'] = bool(tick is not None and 0 <= now_epoch - tick <= 300 and
+                    (failure is None or (success is not None and failure <= success)))
+                last_run = status.get('last_run')
+                if last_run is not None:
+                    scheduler['last_run'] = datetime.fromtimestamp(last_run, timezone.utc).replace(tzinfo=None).isoformat() + 'Z'
+        except Exception:
+            scheduler.update(healthy=False, last_run=None)
     backup_keys = ('BACKUP_S3_BUCKET', 'BACKUP_S3_REGION', 'BACKUP_S3_ACCESS_KEY_ID',
                    'BACKUP_S3_SECRET_ACCESS_KEY', 'BACKUP_ENCRYPTION_KEY')
     configured = any(os.getenv(key) for key in backup_keys)

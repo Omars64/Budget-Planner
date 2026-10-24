@@ -1,8 +1,9 @@
-import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowLeft, RefreshCw } from 'lucide-react'
 import { api, auth, flushOfflineTransactions, jsonBody } from './lib/api'
+import { startReadPolling, startResourcePolicySession } from './lib/resourcePolicy'
 import {installMoneyInputDefaults} from './lib/moneyInputs'
 import { rememberOfflineSession, restoreOfflineSession, setOfflineUser } from './lib/offlineSync'
 import AppShell from './components/AppShell'
@@ -215,6 +216,7 @@ export default function App() {
   const [settings, setSettings] = useState(() => ({ ...readDeviceAppearance(), currency: 'KWD', display_name: 'Budgetly', week_starts_on: 'sunday', compact_numbers: false }))
   const [appearance, setAppearance] = useState({ profile_image: '', wallpaper_image: '' })
   const [refreshKey, setRefreshKey] = useState(0)
+  const plannedRead = useRef(null)
   const [toast, setToast] = useState(null)
   const [signoutRequested, setSignoutRequested] = useState(false)
   const [guestFeature, setGuestFeature] = useState('')
@@ -249,6 +251,10 @@ export default function App() {
     return () => window.clearTimeout(timer)
   }, [toast])
   const refresh = useCallback(() => setRefreshKey(v => v + 1), [])
+  useEffect(() => {
+    if (!session.user || isGuest) return
+    return startResourcePolicySession()
+  }, [session.user?.id, isGuest])
   useEffect(() => {
     if (!bankNotificationsAvailable() || session.loading) return
     if (!session.user || isGuest) { void suspendBankCapture().catch(() => {}); return }
@@ -291,13 +297,17 @@ export default function App() {
   useEffect(() => { if (session.user && auth.token) void rememberOfflineSession(session.user, settings, auth.token) }, [session.user, settings])
   useEffect(() => {
     if (!session.user || isGuest) return undefined
-    const sync = () => { if (document.visibilityState !== 'hidden') void syncPlannedNotifications(session.user.id).catch(console.error) }
-    sync()
-    const timer = window.setInterval(sync, 60000)
-    window.addEventListener('focus',sync)
-    window.addEventListener(notificationSettingsChangedEvent,sync)
-    return () => {window.clearInterval(timer);window.removeEventListener('focus',sync);window.removeEventListener(notificationSettingsChangedEvent,sync)}
-  }, [session.user?.id, refreshKey])
+    const sync = () => syncPlannedNotifications(session.user.id).catch(console.error)
+    const stop = startReadPolling(sync)
+    plannedRead.current = stop
+    window.addEventListener(notificationSettingsChangedEvent, stop.refresh)
+    return () => {
+      stop()
+      plannedRead.current = null
+      window.removeEventListener(notificationSettingsChangedEvent, stop.refresh)
+    }
+  }, [session.user?.id, isGuest])
+  useEffect(() => { plannedRead.current?.refresh() }, [refreshKey])
 
   const loadSettings = useCallback(async () => {
     try { setSettings(await api('/api/settings')); return true } catch (err) {

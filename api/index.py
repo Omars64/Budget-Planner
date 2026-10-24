@@ -10,6 +10,7 @@ import os
 import secrets
 import time
 import re
+import threading
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta
 from typing import Optional
@@ -131,8 +132,37 @@ def ensure_indexes(connection):
         connection.execute(text(statement))
 
 
-@asynccontextmanager
-async def lifespan(application: FastAPI):
+_storage_lock = threading.Lock()
+
+
+def initialize_storage(application: FastAPI):
+    """Bootstrap once per process; leave failed starts retryable without a stampede."""
+    with _storage_lock:
+        if getattr(application.state, 'storage_ready', False):
+            return True
+        if time.monotonic() < getattr(application.state, 'storage_retry_at', 0):
+            return False
+        from . import resource_control
+        token = None
+        if resource_control.configured():
+            try:
+                token = resource_control.begin_change()
+            except resource_control.CoordinationUnavailable:
+                application.state.storage_retry_at = time.monotonic() + 5
+                return False
+        try:
+            ready = _initialize_storage(application)
+        finally:
+            if token:
+                try:
+                    resource_control.end_change(token)
+                except resource_control.CoordinationUnavailable:
+                    logging.getLogger('flowbudget').warning('Storage initialization confirmation pending')
+        application.state.storage_retry_at = 0 if ready else time.monotonic() + 5
+        return ready
+
+
+def _initialize_storage(application: FastAPI):
     from .passkeys import migrate_passkeys
     application.state.storage_ready = False
     try:
@@ -153,8 +183,20 @@ async def lifespan(application: FastAPI):
                 migrate_passkeys(db)
                 db.commit()
         application.state.storage_ready = True
+        return True
     except Exception:
         logging.getLogger("flowbudget").exception("Database initialization failed")
+        return False
+
+
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    from starlette.concurrency import run_in_threadpool
+    from .resource_control import configured
+    application.state.storage_ready = False
+    application.state.storage_retry_at = 0
+    if not configured():
+        await run_in_threadpool(initialize_storage, application)
     yield
 
 
@@ -164,8 +206,11 @@ app.include_router(spaces_router)
 
 @app.middleware("http")
 async def storage_readiness(request: Request, call_next):
+    from starlette.concurrency import run_in_threadpool
     if not getattr(app.state, "storage_ready", False):
-        return JSONResponse(status_code=503, content={"detail": "The service is temporarily unavailable. Please try again shortly.", "code": "STORAGE_UNAVAILABLE"}, headers={"Retry-After": "30", "Cache-Control": "no-store"})
+        ready = await run_in_threadpool(initialize_storage, app)
+        if not ready:
+            return JSONResponse(status_code=503, content={"detail": "The service is temporarily unavailable. Please try again shortly.", "code": "STORAGE_UNAVAILABLE"}, headers={"Retry-After": "30", "Cache-Control": "no-store"})
     started=time.monotonic()
     request_id = secrets.token_hex(8)
     try:
@@ -177,7 +222,6 @@ async def storage_readiness(request: Request, call_next):
     duration=int((time.monotonic()-started)*1000)
     if response.status_code>=500 or duration>=2000:
         from .service_events import record_event
-        from starlette.concurrency import run_in_threadpool
         area=getattr(request.scope.get('route'), 'path', '/unmatched')[:100]
         logging.getLogger('flowbudget').warning('request id=%s route=%s status=%d duration_ms=%d',request_id,area,response.status_code,duration)
         try:
@@ -189,6 +233,8 @@ async def storage_readiness(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "same-origin"
     return response
+from .resource_runtime import ResourceMiddleware
+app.add_middleware(ResourceMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173,https://localhost").split(",") if o.strip()],

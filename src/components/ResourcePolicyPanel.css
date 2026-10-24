@@ -1,0 +1,17 @@
+.resource-policy { min-width: 0; }
+.resource-policy-heading, .resource-policy-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.resource-policy-heading h3 { margin: 0; }
+.resource-policy p { overflow-wrap: anywhere; }
+.resource-policy-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; padding: 16px 0; margin: 0; border: 0; min-width: 0; }
+.resource-policy-fields legend { padding: 0; font-weight: 600; }
+.resource-policy-field { min-width: 0; }
+.resource-policy-field label { display: block; font-weight: 600; margin-bottom: 8px; }
+.resource-policy-input { display: flex; align-items: center; gap: 8px; }
+.resource-policy-input input { width: 100%; min-width: 0; max-width: 140px; min-height: 44px; }
+.resource-policy-input span { flex-shrink: 0; }
+.resource-policy-field p { font-size: 0.875rem; line-height: 1.5; margin: 8px 0 0; }
+.resource-policy-actions { margin-top: 16px; }
+@media (max-width: 760px) {
+  .resource-policy-fields { grid-template-columns: minmax(0, 1fr); }
+  .resource-policy-actions .button { flex: 1 1 160px; white-space: normal; }
+}

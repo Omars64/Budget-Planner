@@ -1,8 +1,9 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import SharedTransactions from './SharedTransactions'
 import { api } from '../lib/api'
+import { updateResourcePolicy } from '../lib/resourcePolicy'
 
 const wallet = {wallet_id:11,name:'Household',balance:50,can_add:true,can_edit:true,owner_name:'Owner',owner_email:'owner@example.test',shares:[]}
 const ledger = vi.hoisted(() => ({rows:[]}))
@@ -14,13 +15,31 @@ beforeAll(() => {
   window.HTMLDialogElement.prototype.showModal = function () { this.open = true }
   window.HTMLDialogElement.prototype.close = function () { this.open = false }
 })
-afterEach(cleanup)
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); updateResourcePolicy({client_poll_seconds:60}) })
 beforeEach(() => {
   vi.clearAllMocks()
   sessionStorage.clear()
   localStorage.clear()
   ledger.rows = []
   api.mockImplementation(path=>Promise.resolve(path==='/api/shared/wallets'?[wallet]:[]))
+})
+
+it('adapts shared wallet polling to policy and suppresses focus bursts and hidden reads',async()=>{
+  vi.useFakeTimers()
+  const visibility=vi.spyOn(document,'visibilityState','get').mockReturnValue('visible')
+  render(<MemoryRouter><SharedTransactions/></MemoryRouter>)
+  const reads=()=>api.mock.calls.filter(([path])=>path==='/api/shared/wallets').length
+  await act(async()=>vi.advanceTimersByTimeAsync(0))
+  expect(reads()).toBe(1)
+  act(()=>updateResourcePolicy({client_poll_seconds:15}))
+  await act(async()=>vi.advanceTimersByTimeAsync(15000))
+  expect(reads()).toBe(2)
+  for(let i=0;i<10;i++) window.dispatchEvent(new Event('focus'))
+  await act(async()=>vi.advanceTimersByTimeAsync(0))
+  expect(reads()).toBe(2)
+  visibility.mockReturnValue('hidden');document.dispatchEvent(new Event('visibilitychange'))
+  await act(async()=>vi.advanceTimersByTimeAsync(60000))
+  expect(reads()).toBe(2)
 })
 
 it('attaches a shared reference inside collapsed More options and saves it atomically',async()=>{

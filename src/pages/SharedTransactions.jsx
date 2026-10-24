@@ -15,6 +15,7 @@ import DateTimeField from '../components/DateTimeField'
 import LedgerFilters, { defaultLedgerFilters } from '../components/LedgerFilters'
 import LedgerPagination from '../components/LedgerPagination'
 import useLedger from '../lib/useLedger'
+import { startReadPolling } from '../lib/resourcePolicy'
 import LedgerRow, { LedgerDateHeader, TransactionDetails } from '../components/LedgerRow'
 import VoiceInputButton from '../components/VoiceInputButton'
 import { parseVoiceTransaction, applyVoiceTransaction } from '../lib/voiceInput'
@@ -115,18 +116,12 @@ export default function SharedTransactions() {
         pending = false
       }
     }
-    const timer = window.setTimeout(sync, 0)
-    const interval = window.setInterval(sync, 5000)
-    window.addEventListener('focus', sync)
-    document.addEventListener('visibilitychange', sync)
+    const stop = startReadPolling(sync)
     return () => {
       controller.abort()
-      window.clearTimeout(timer)
-      window.clearInterval(interval)
-      window.removeEventListener('focus', sync)
-      document.removeEventListener('visibilitychange', sync)
+      stop()
     }
-  }, [refreshKey])
+  }, [refreshKey, user?.id])
 
   useEffect(() => {
     if (!draft.wallet_id) { setCategories([]); return }
