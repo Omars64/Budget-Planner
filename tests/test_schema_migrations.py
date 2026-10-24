@@ -9,7 +9,7 @@ from api.database import Base
 from api.index import ensure_note_columns
 from api.schema_migrations import apply_migrations
 
-LATEST_REVISION = 'f51c703ad829'
+LATEST_REVISION = 'f62a810bc943'
 
 
 def test_new_and_existing_schemas_reach_baseline_without_losing_rows():
@@ -21,6 +21,7 @@ def test_new_and_existing_schemas_reach_baseline_without_losing_rows():
         assert 'google_revocation_credentials' in inspect(connection).get_table_names()
         assert 'update_push_devices' in inspect(connection).get_table_names()
         assert 'scheduled_push_outbox' in inspect(connection).get_table_names()
+        assert 'upcoming_push_receipts' in inspect(connection).get_table_names()
         assert 'bank_transaction_candidates' in inspect(connection).get_table_names()
         assert 'bank_source_mappings' in inspect(connection).get_table_names()
         assert 'bank_merchant_memory' in inspect(connection).get_table_names()
@@ -79,3 +80,22 @@ def test_startup_migrations_keep_application_diagnostics_enabled():
         assert logger.disabled is False
     finally:
         engine.dispose()
+
+
+def test_existing_database_gains_reminder_receipts_without_changing_records():
+    engine = create_engine('sqlite://')
+    config = Config(str(Path(__file__).resolve().parents[1] / 'alembic.ini'))
+    with engine.begin() as connection:
+        config.attributes['connection'] = connection
+        command.upgrade(config, 'f51c703ad829')
+        assert 'upcoming_push_receipts' not in inspect(connection).get_table_names()
+        connection.execute(text("INSERT INTO users (id, username, email, password_hash, role, active) VALUES (1, 'Kept', 'kept@migration.test', 'hash', 'user', 1)"))
+        connection.execute(text("INSERT INTO update_push_devices (id, user_id, platform, payload, installed_version, updated_at) VALUES ('device', 1, 'browser', 'unchanged-encrypted-payload', '6.5.0', '2026-10-24 09:00:00')"))
+        before = connection.execute(text('SELECT * FROM update_push_devices')).all()
+        command.upgrade(config, 'head')
+        assert connection.execute(text('SELECT * FROM update_push_devices')).all() == before
+        assert connection.execute(text('SELECT username FROM users')).scalar_one() == 'Kept'
+        connection.execute(text("INSERT INTO upcoming_push_receipts VALUES ('device', 'occurrence', '2026-10-24 09:00:00')"))
+        command.upgrade(config, 'head')
+        assert connection.execute(text('SELECT COUNT(*) FROM upcoming_push_receipts')).scalar_one() == 1
+    engine.dispose()

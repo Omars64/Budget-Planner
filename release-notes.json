@@ -1,6 +1,6 @@
 {
   "6.5.1": [
-    {"title":"Reminder delivery reliability","detail":"Improved operational diagnostics identify reminder delivery faults without exposing notification contents or financial records."}
+    {"title":"Reminder delivery reliability","detail":"Adds the missing reminder receipt table safely to existing databases, restoring background reminder checks and allowing idle database checks to pause. Existing records and notification preferences are preserved."}
   ],
   "6.5.0": [
     {"title":"Smarter background resource use","detail":"Idle scheduler checks can skip the financial database while scheduled entries and reminders retain their due-time checks. User records remain in the same database."},
