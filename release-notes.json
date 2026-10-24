@@ -1,4 +1,7 @@
 {
+  "6.5.1": [
+    {"title":"Reminder delivery reliability","detail":"Improved operational diagnostics identify reminder delivery faults without exposing notification contents or financial records."}
+  ],
   "6.5.0": [
     {"title":"Smarter background resource use","detail":"Idle scheduler checks can skip the financial database while scheduled entries and reminders retain their due-time checks. User records remain in the same database."},
     {"title":"Administrator resource controls","detail":"Adjust client refresh, idle recovery rescans and database health probes from Admin, with validation and protection against conflicting changes."},

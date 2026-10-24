@@ -1,5 +1,6 @@
 """Closed-browser expense reminders. Android uses its existing local alarm scheduler."""
 import hashlib
+import logging
 import time
 from datetime import datetime, timedelta
 
@@ -31,12 +32,16 @@ def dispatch_upcoming(db):
     for device in query.all():
         if time.monotonic() >= deadline:
             break
+        stage = 'profile'
         try:
             preference = push.UpcomingPreference.model_validate(push.device_payload(device).get('upcoming', {}))
+            stage = 'account'
             user = db.get(User, device.user_id)
             if not preference.enabled or not user or not user.active:
                 continue
+            stage = 'access'
             wallet_ids = shared_wallet_ids(db, user) | {row[0] for row in db.query(Wallet.id).filter_by(user_id=user.id, archived=False)}
+            stage = 'plans'
             plans = db.query(PlannedTransaction).join(Wallet, PlannedTransaction.wallet_id == Wallet.id).filter(
                 PlannedTransaction.wallet_id.in_(wallet_ids), Wallet.archived.is_(False),
                 PlannedTransaction.status.in_(['planned', 'scheduled']), PlannedTransaction.type == 'expense',
@@ -46,6 +51,7 @@ def dispatch_upcoming(db):
             for plan in plans:
                 if time.monotonic() >= deadline:
                     break
+                stage = 'timing'
                 when = reminder_at(plan.due_at, preference)
                 if not now - timedelta(hours=6) < when <= now:
                     continue
@@ -54,8 +60,10 @@ def dispatch_upcoming(db):
                     continue
                 notice = {'kind': 'upcoming', 'event': occurrence, 'version': push.VERSION,
                           'title': 'Upcoming expense', 'body': f'{plan.description[:160]} - due {plan.due_at:%d %b, %H:%M} (Kuwait)'}
+                stage = 'provider'
                 status = push.send_device(device, push.VERSION, notice=notice)
                 if 200 <= status < 300:
+                    stage = 'receipt'
                     db.add(push.UpcomingPushReceipt(device_id=device.id, occurrence=occurrence))
                     db.flush()
                     sent += 1
@@ -64,9 +72,11 @@ def dispatch_upcoming(db):
                     db.delete(device)
                     break
                 else:
+                    logging.getLogger('flowbudget').warning('upcoming_reminder_failure stage=provider status=%d', status)
                     failed += 1
                     break
-        except Exception:
+        except Exception as error:
+            logging.getLogger('flowbudget').warning('upcoming_reminder_failure stage=%s type=%s', stage, type(error).__name__)
             failed += 1
     db.commit()
     return {'sent': sent, 'failed': failed, 'configured': True}

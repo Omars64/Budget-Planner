@@ -2,6 +2,7 @@
 import hmac
 import gzip
 import json
+import logging
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -158,9 +159,10 @@ def scheduled_transactions(request: Request, db=Depends(get_db)):
         upcoming_delivery = dispatch_upcoming(db)
         if upcoming_delivery.get('failed'):
             record_job(db, 'upcoming-reminder-delivery', 503)
-    except Exception:
+    except Exception as error:
         db.rollback()
         record_job(db, 'upcoming-reminder-delivery', 503)
+        logging.getLogger('flowbudget').warning('upcoming_reminder_failure stage=dispatcher type=%s', type(error).__name__)
         upcoming_delivery = {'failed': True}
     if coordinated:
         from .resource_schedule import next_scheduler_wake

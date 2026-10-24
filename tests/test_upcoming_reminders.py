@@ -38,6 +38,29 @@ def test_closed_browser_subject_retry_and_deduplication(workspace, monkeypatch):
     assert reminders.dispatch_upcoming(db)['sent'] == 1
 
 
+def test_failure_logs_identify_stage_without_private_payload(workspace, monkeypatch, caplog):
+    client, db, user = workspace
+    setup_plan(client, db, user, monkeypatch)
+    def fail(*args, **kwargs):
+        raise ValueError('private-token private-financial-description')
+    monkeypatch.setattr(push, 'send_device', fail)
+    with caplog.at_level('WARNING', logger='flowbudget'):
+        assert reminders.dispatch_upcoming(db)['failed'] == 1
+    assert 'stage=provider type=ValueError' in caplog.text
+    for private in ('private-token', 'private-financial-description', 'Rent payment', user.email):
+        assert private not in caplog.text
+
+
+def test_provider_failure_log_contains_only_numeric_status(workspace, monkeypatch, caplog):
+    client, db, user = workspace
+    setup_plan(client, db, user, monkeypatch)
+    monkeypatch.setattr(push, 'send_device', lambda *args, **kwargs: 503)
+    with caplog.at_level('WARNING', logger='flowbudget'):
+        assert reminders.dispatch_upcoming(db)['failed'] == 1
+    assert 'stage=provider status=503' in caplog.text
+    assert 'Rent payment' not in caplog.text and user.email not in caplog.text
+
+
 @pytest.mark.parametrize('change', ['disabled','posted','past','inactive','unrelated','revoked'])
 def test_never_sends_ineligible_or_inaccessible_entries(workspace, monkeypatch, change):
     client, db, user = workspace
