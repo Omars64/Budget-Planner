@@ -7,7 +7,7 @@ vi.mock('../lib/api',()=>({api:vi.fn()}))
 vi.mock('../lib/updatePush',()=>({syncUpdatePush:vi.fn()}))
 beforeEach(()=>{localStorage.clear();vi.clearAllMocks();api.mockResolvedValue({devices:[{id:'phone',platform:'android',installed_version:'5.12.5'}]});syncUpdatePush.mockResolvedValue({enabled:true})})
 afterEach(cleanup)
-async function open(){render(<UpdateDelivery/>);const details=screen.getByText('Update delivery').closest('details');details.open=true;fireEvent(details,new Event('toggle'));await screen.findByRole('option',{name:/Android 1/})}
+async function open(){render(<UpdateDelivery/>);const details=screen.getByText('Update delivery').closest('details');details.open=true;await screen.findByRole('option',{name:/Android 1/});await waitFor(()=>expect(screen.getByRole('button',{name:'Reconnect this device'})).toBeEnabled())}
 test('registration diagnostics remain collapsed until requested',()=>{render(<UpdateDelivery/>);expect(api).not.toHaveBeenCalled()})
 test('sends a test to the selected owned device and reports acceptance, not receipt',async()=>{
   await open();api.mockResolvedValue({accepted:true,message:'Accepted by provider; check your phone.'})

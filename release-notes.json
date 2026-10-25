@@ -1,4 +1,9 @@
 {
+  "6.5.2": [
+    {"title":"Clearer update messages","detail":"Update and What's new popups now show changes relevant to your account."},
+    {"title":"Administrative release details","detail":"Administrators see the full release notes, including operational changes hidden from regular account popups.","audience":"admin"},
+    {"title":"User sign-in ledger","detail":"Open each user's sign-in history in Admin to see recorded sign-in times, last activity, device labels and session status. No location or IP tracking is added.","audience":"admin"}
+  ],
   "6.5.1": [
     {"title":"Reminder delivery reliability","detail":"Adds the missing reminder receipt table safely to existing databases, restoring background reminder checks and allowing idle database checks to pause. Existing records and notification preferences are preserved."}
   ],

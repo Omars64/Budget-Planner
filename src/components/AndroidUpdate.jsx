@@ -11,7 +11,7 @@ import Modal from './Modal'
 import { version } from '../../package.json'
 import { hasSeenRelease, markReleaseSeen, releaseNotes } from '../lib/releaseNotes'
 
-export default function AndroidUpdate({ authentication = false, userId, guest = false }) {
+export default function AndroidUpdate({ authentication = false, userId, guest = false, role = 'user' }) {
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const [alerts, setAlerts] = useState(updateNotificationsEnabled)
@@ -30,7 +30,7 @@ export default function AndroidUpdate({ authentication = false, userId, guest = 
   const native = androidUpdatesAvailable()
   const enabled = !authentication && !guest && userId != null
   const settings = enabled && pathname === '/settings'
-  const currentNotes = releaseNotes(version)
+  const currentNotes = releaseNotes(version, undefined, role)
 
   useEffect(() => {
     if (authentication || guest || userId == null || hasSeenRelease(userId, version) || !currentNotes.length) return
@@ -132,7 +132,8 @@ export default function AndroidUpdate({ authentication = false, userId, guest = 
 
   const downloading = status === 'downloading'
   const availableOpen = enabled && native && !!release && !whatsNew && !pendingNotes && (manualOpen || (alerts && !dismissed))
-  const notes = release ? releaseNotes(release.version, release.notes) : []
+  const publishedNotes = role === 'admin' && release?.adminNotes?.length ? release.adminNotes : release?.notes
+  const notes = release ? releaseNotes(release.version, publishedNotes, role) : []
   const renderNotes = items => <ul className="release-change-list">{items.map(item => <li key={item.title}><Check size={17} aria-hidden="true"/><div><strong>{item.title}</strong><p>{item.detail}</p></div></li>)}</ul>
   return <>
     {settings && <section className="update-settings-controls" aria-label="App updates">

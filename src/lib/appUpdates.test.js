@@ -7,6 +7,12 @@ afterEach(() => vi.unstubAllGlobals())
 test('accepts the official release and strips unrelated fields', () => {
   expect(validateRelease({ ...valid, token: 'not-used' })).toEqual(valid)
 })
+
+test('preserves separate bounded admin notes for role-aware clients', () => {
+  const notes = [{title:'Fix',detail:'User summary'}]
+  const adminNotes = [...notes, {title:'Admin',detail:'Full details',audience:'admin'}]
+  expect(validateRelease({...valid,notes,adminNotes})).toEqual({...valid,notes,adminNotes})
+})
 test.each([
   ['schema', 2], ['packageId', 'other.app'], ['versionCode', -1], ['version', 'next'], ['size', 268435457],
   ['sha256', 'bad'], ['url', 'https://evil.example/update.apk'], ['url', valid.url.replace('https:', 'http:')],

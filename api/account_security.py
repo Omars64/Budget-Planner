@@ -3,7 +3,7 @@ import hashlib
 import json
 import secrets
 from datetime import timedelta
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import case
@@ -139,6 +139,34 @@ def activity(user=Depends(current_user), db=Depends(get_db)):
     rows = db.query(Activity).filter_by(user_id=user.id).order_by(Activity.id.desc()).limit(100).all()
     actors = {r.id: r.username for r in db.query(User).filter(User.id.in_({r.actor_id for r in rows})).all()}
     return [{'id':r.id, 'action':r.action, 'resource':r.resource, 'actor':actors.get(r.actor_id, 'Former user'), 'created_at':r.created_at.isoformat()+'Z'} for r in rows]
+
+
+def session_device(label):
+    # Only coarse client labels; never expose raw user agents or session IDs.
+    value = (label or '').lower()
+    platform = next((name for marker, name in (
+        ('android', 'Android'), ('iphone', 'iPhone'), ('ipad', 'iPad'),
+        ('windows', 'Windows'), ('macintosh', 'Mac'), ('linux', 'Linux')) if marker in value), None)
+    browser = next((name for marker, name in (
+        ('edg/', 'Edge'), ('samsungbrowser/', 'Samsung Internet'), ('firefox/', 'Firefox'),
+        ('chrome/', 'Chrome'), ('safari/', 'Safari')) if marker in value), None)
+    return ' · '.join(part for part in (platform, browser) if part) or 'Device not recorded'
+
+
+@router.get('/api/admin/users/{user_id}/signins')
+def admin_signins(user_id: int, response: Response, offset: int = Query(0, ge=0, le=100000),
+                  user=Depends(admin_user), db=Depends(get_db)):
+    if not db.get(User, user_id):
+        raise HTTPException(404, 'User not found')
+    response.headers['Cache-Control'] = 'no-store'
+    rows = db.query(AccountSession).filter_by(user_id=user_id).order_by(
+        AccountSession.created_at.desc(), AccountSession.id.desc()).offset(offset).limit(51).all()
+    now = utc_now()
+    return {'items': [{'signed_in_at': row.created_at.isoformat()+'Z',
+                       'last_active_at': row.last_seen.isoformat()+'Z',
+                       'device': session_device(row.label),
+                       'status': 'Ended' if row.revoked else 'Expired' if row.created_at <= now-timedelta(days=1) else 'Active'}
+                      for row in rows[:50]], 'has_more': len(rows) > 50}
 
 
 def send_reset(db, target, actor_id):

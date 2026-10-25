@@ -1,0 +1,6 @@
+.signin-entry{padding:14px 0;border-bottom:1px solid var(--line);min-width:0}
+.signin-entry .panel-head{gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.signin-entry dl{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:0}
+.signin-entry dt{font-size:13px;color:var(--muted);margin-bottom:4px}
+.signin-entry dd{margin:0;overflow-wrap:anywhere}
+@media(max-width:480px){.signin-entry dl{grid-template-columns:1fr}}

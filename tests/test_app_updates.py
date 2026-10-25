@@ -12,6 +12,15 @@ RELEASE = {'schema': 1, 'packageId': 'com.flowbudget.app', 'version': '5.8.0', '
            'url': 'https://github.com/Omars64/Budget-Planner/releases/download/v5.8.0/Budgetly-5.8.0.apk'}
 
 
+def test_manifest_preserves_valid_audiences_without_promoting_unknown_audiences():
+    shared = {'title':'Fix','detail':'For everyone'}
+    admin = {'title':'Operations','detail':'For admins','audience':'admin'}
+    invalid = {'title':'Unknown','detail':'Must not become public','audience':'unknown'}
+    value = updates.validate_release({**RELEASE,'notes':[shared],'adminNotes':[shared,admin,invalid]})
+    assert value['notes']==[shared]
+    assert value['adminNotes']==[shared,admin]
+
+
 @pytest.fixture
 def client(monkeypatch):
     monkeypatch.setattr(updates, '_cache', {'until': 0, 'release': None})

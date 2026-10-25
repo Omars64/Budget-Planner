@@ -38,13 +38,16 @@ def validate_release(value):
             or '%2f' in url.path.lower()):
         raise ValueError('Invalid release')
     result = {key: value[key] for key in ('schema', 'packageId', 'version', 'versionCode', 'size', 'sha256', 'url')}
-    notes = value.get('notes')
-    if isinstance(notes, list) and len(notes) <= 12:
-        result['notes'] = [
-            {'title': item['title'], 'detail': item['detail']} for item in notes
-            if isinstance(item, dict) and isinstance(item.get('title'), str) and 0 < len(item['title'].strip()) <= 100
-            and isinstance(item.get('detail'), str) and 0 < len(item['detail'].strip()) <= 350
-        ]
+    for field in ('notes', 'adminNotes'):
+        notes = value.get(field)
+        if isinstance(notes, list) and len(notes) <= 12:
+            result[field] = [
+                {'title': item['title'], 'detail': item['detail'],
+                 **({'audience': 'admin'} if item.get('audience') == 'admin' else {})} for item in notes
+                if isinstance(item, dict) and isinstance(item.get('title'), str) and 0 < len(item['title'].strip()) <= 100
+                and isinstance(item.get('detail'), str) and 0 < len(item['detail'].strip()) <= 350
+                and item.get('audience', 'all') in ('all', 'admin')
+            ]
     return result
 
 

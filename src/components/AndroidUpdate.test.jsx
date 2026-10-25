@@ -5,7 +5,11 @@ import AndroidUpdate from './AndroidUpdate'
 import { version } from '../../package.json'
 import { hasSeenRelease, markReleaseSeen } from '../lib/releaseNotes'
 
-const mock = vi.hoisted(() => ({ enabled:true, info:vi.fn(), fetch:vi.fn(), download:vi.fn(), install:vi.fn(), listener:vi.fn(), remove:vi.fn() }))
+const mock = vi.hoisted(() => ({ enabled:true, installedNotes:null, info:vi.fn(), fetch:vi.fn(), download:vi.fn(), install:vi.fn(), listener:vi.fn(), remove:vi.fn() }))
+vi.mock('../lib/releaseNotes', async importOriginal => {
+  const actual = await importOriginal()
+  return {...actual, releaseNotes:(version, published, role) => actual.releaseNotes(version, published ?? mock.installedNotes, role)}
+})
 vi.mock('../lib/appUpdates', () => ({ androidUpdatesAvailable:()=>mock.enabled, fetchRelease:mock.fetch,
   fetchWebRelease:mock.fetch, newerVersion:value=>value==='99.0.0',
   AppUpdater:{info:mock.info,download:mock.download,install:mock.install,addListener:mock.listener} }))
@@ -13,7 +17,7 @@ vi.mock('../lib/updateNotifications',()=>({notifyAppUpdate:vi.fn().mockResolvedV
 vi.mock('../lib/updatePush',()=>({syncUpdatePush:vi.fn().mockResolvedValue({})}))
 const release = {version:'5.9.0',versionCode:44,url:'https://github.com/Omars64/Budget-Planner/releases/download/v5.9.0/Budgetly.apk'}
 beforeEach(() => {
-  vi.clearAllMocks(); localStorage.clear(); mock.enabled=true
+  vi.clearAllMocks(); localStorage.clear(); mock.enabled=true; mock.installedNotes=null
   mock.info.mockResolvedValue({versionCode:43}); mock.fetch.mockResolvedValue(release)
   mock.download.mockResolvedValue({}); mock.install.mockResolvedValue({permissionRequired:true})
   mock.remove.mockResolvedValue(); mock.listener.mockResolvedValue({remove:mock.remove})
@@ -23,6 +27,23 @@ const view = path => {
   markReleaseSeen(1, version)
   return render(<MemoryRouter initialEntries={[path || '/']}><AndroidUpdate userId={1}/></MemoryRouter>)
 }
+
+test.each(['user', 'admin'])('available update notes respect the %s account role', async role => {
+  markReleaseSeen(1, version)
+  const shared = {title:'Shared fix',detail:'A shared fix'}
+  mock.fetch.mockResolvedValue({...release, notes:[shared], adminNotes:[shared, {title:'Admin only',detail:'Operational details',audience:'admin'}]})
+  render(<MemoryRouter><AndroidUpdate userId={1} role={role}/></MemoryRouter>)
+  await screen.findByText('Shared fix')
+  expect(!!screen.queryByText('Admin only')).toBe(role === 'admin')
+})
+
+test.each(['user', 'admin'])('installed What is new respects the %s account role', async role => {
+  mock.enabled = false
+  mock.installedNotes = [{title:'Shared fix',detail:'For everyone'}, {title:'User sign-in ledger',detail:'For admins',audience:'admin'}]
+  render(<MemoryRouter><AndroidUpdate userId={1} role={role}/></MemoryRouter>)
+  await screen.findByRole('dialog', {name:"What's new"})
+  expect(!!screen.queryByText('User sign-in ledger')).toBe(role === 'admin')
+})
 test('offers a higher code, downloads then asks Android for installation', async () => {
   view(); fireEvent.click(await screen.findByRole('button',{name:'Update now'}))
   await screen.findByText(/Allow updates from Budgetly/)

@@ -623,7 +623,10 @@ def delete_account(request: Request, user: User = Depends(current_user), db: Ses
 
 @app.get("/api/admin/users")
 def admin_users(_: User = Depends(admin_user), db: Session = Depends(get_db)):
-    return [user_payload(u) for u in db.query(User).order_by(User.role, User.username).all()]
+    latest = db.query(AccountSession.user_id, func.max(AccountSession.created_at)).group_by(AccountSession.user_id).all()
+    signed_in = dict(latest)
+    return [{**user_payload(u), 'last_signed_in_at': signed_in[u.id].isoformat()+'Z' if u.id in signed_in else None}
+            for u in db.query(User).order_by(User.role, User.username).all()]
 
 
 @app.post("/api/admin/users", status_code=201)

@@ -15,3 +15,12 @@ test('acknowledgement is per user and per installed version', () => {
   expect(hasSeenRelease(2,'5.12.5')).toBe(false)
   expect(hasSeenRelease(1,'5.12.6')).toBe(false)
 })
+
+test('users see only shared changes; admins see the complete validated release', () => {
+  const items = [{title:'Fix',detail:'For everyone'}, {title:'Operations',detail:'Admin details',audience:'admin'}]
+  expect(releaseNotes('99.0.0', items)).toEqual([items[0]])
+  expect(releaseNotes('99.0.0', items, 'admin')).toEqual(items)
+  expect(releaseNotes('99.0.0', items, 'owner')).toEqual([items[0]])
+  expect(releaseNotes('99.0.0', [items[1]])[0].title).toBe('Reliability improvements')
+  expect(validateReleaseNotes([{title:'Wrong',detail:'Unknown audience',audience:'other'}])).toEqual([])
+})

@@ -38,7 +38,8 @@ export function validateRelease(value) {
       url.pathname.slice(prefix.length).split('/').length !== 2) throw new Error('The update is not from the official Budgetly repository.')
   return { schema: 1, packageId: value.packageId, version: value.version, versionCode: value.versionCode,
     size: value.size, sha256: value.sha256, url: url.href,
-    ...(value.notes ? { notes: validateReleaseNotes(value.notes) } : {}) }
+    ...(value.notes ? { notes: validateReleaseNotes(value.notes) } : {}),
+    ...(value.adminNotes ? { adminNotes: validateReleaseNotes(value.adminNotes) } : {}) }
 }
 
 export async function fetchRelease(signal) {

@@ -7,7 +7,8 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'))
 const notes = JSON.parse(await readFile(join(root, 'release-notes.json'), 'utf8'))[pkg.version]
 if (!Array.isArray(notes) || !notes.length || notes.length > 12 || notes.some(item =>
-  !item.title || item.title.length > 100 || !item.detail || item.detail.length > 350)) {
+  !item.title || item.title.length > 100 || !item.detail || item.detail.length > 350 ||
+  (item.audience !== undefined && !['all', 'admin'].includes(item.audience)))) {
   throw new Error('Add concise release notes for the current version in release-notes.json before publishing.')
 }
 const directory = join(root, 'android/app/build/outputs/apk/release')
@@ -22,8 +23,10 @@ if (size <= 0 || size > 268435456) throw new Error('Release APK size is outside 
 const original = await readFile(join(directory, build.outputFile))
 const bytes = await readFile(apk)
 if (!bytes.equals(original)) throw new Error('Named APK differs from the latest Gradle release output. Rebuild it.')
+const userNotes = notes.filter(item => item.audience !== 'admin')
+const publicNotes = userNotes.length ? userNotes : [{title:'Reliability improvements',detail:'Maintenance and bug fixes help keep Budgetly running smoothly.'}]
 const manifest = { schema: 1, packageId: metadata.applicationId, version: pkg.version, versionCode: pkg.androidVersionCode,
-  size, notes, sha256: createHash('sha256').update(bytes).digest('hex'),
+  size, notes: publicNotes, adminNotes: notes, sha256: createHash('sha256').update(bytes).digest('hex'),
   url: `https://github.com/Omars64/Budget-Planner/releases/download/v${pkg.version}/${basename(apk)}` }
 const output = join(directory, 'update.json')
 await writeFile(output, JSON.stringify(manifest, null, 2) + '\n')
