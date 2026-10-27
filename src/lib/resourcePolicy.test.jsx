@@ -2,6 +2,7 @@ import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { api } from './api'
 import { readResourcePolicy, updateResourcePolicy, useResourcePolicy, startReadPolling, startResourcePolicySession } from './resourcePolicy'
+import { CLIENT_IDLE_MS } from './clientActivity'
 
 vi.mock('./api', () => ({ api: vi.fn() }))
 let stops
@@ -172,5 +173,68 @@ test('an in-flight explicit refresh stays queued through offline completion and 
   await tick(0)
   expect(read).toHaveBeenCalledTimes(2)
   await tick(299999)
+  expect(read).toHaveBeenCalledTimes(2)
+})
+
+test('visible but untouched clients stop after 30 minutes and interaction resumes each reader once', async () => {
+  const a = vi.fn(async () => {}), b = vi.fn(async () => {})
+  stops.push(startReadPolling(a), startReadPolling(b))
+  await tick(CLIENT_IDLE_MS)
+  expect(a).toHaveBeenCalledTimes(30)
+  expect(b).toHaveBeenCalledTimes(30)
+  await tick(CLIENT_IDLE_MS * 3)
+  expect(a).toHaveBeenCalledTimes(30)
+  for (let i=0;i<20;i++) document.dispatchEvent(new Event('pointermove'))
+  await tick(0)
+  expect(a).toHaveBeenCalledTimes(31)
+  expect(b).toHaveBeenCalledTimes(31)
+  await tick(59999)
+  expect(a).toHaveBeenCalledTimes(31)
+})
+
+test('typing renews inactivity, while policy changes and reconnect alone do not wake idle clients', async () => {
+  const read = vi.fn(async () => {})
+  stops.push(startReadPolling(read))
+  await tick(CLIENT_IDLE_MS - 1000)
+  document.dispatchEvent(new Event('keydown'))
+  await tick(CLIENT_IDLE_MS - 1000)
+  const before = read.mock.calls.length
+  await tick(60000)
+  expect(read.mock.calls.length).toBe(before)
+  updateResourcePolicy({client_poll_seconds:15})
+  online(false); online(true)
+  await tick(60000)
+  expect(read.mock.calls.length).toBe(before)
+  visible('hidden'); visible('visible')
+  await tick(0)
+  expect(read.mock.calls.length).toBe(before+1)
+})
+
+test('manual refresh wakes an idle client but a stopped reader cannot wake anything', async () => {
+  const read = vi.fn(async () => {})
+  const stop = startReadPolling(read); stops.push(stop)
+  await tick(CLIENT_IDLE_MS + 1000)
+  const before = read.mock.calls.length
+  stop.refresh()
+  await tick(0)
+  expect(read.mock.calls.length).toBe(before+1)
+  stop()
+  stop.refresh()
+  document.dispatchEvent(new Event('pointerdown'))
+  await tick(CLIENT_IDLE_MS)
+  expect(read.mock.calls.length).toBe(before+1)
+  expect(vi.getTimerCount()).toBe(0)
+})
+
+test('a read already in flight finishes normally when the client becomes idle', async () => {
+  let finish
+  const read = vi.fn().mockImplementationOnce(() => new Promise(resolve=>{finish=resolve})).mockResolvedValue(undefined)
+  stops.push(startReadPolling(read))
+  await tick(CLIENT_IDLE_MS)
+  await act(async()=>finish())
+  await tick(60000)
+  expect(read).toHaveBeenCalledTimes(1)
+  document.dispatchEvent(new Event('touchstart'))
+  await tick(0)
   expect(read).toHaveBeenCalledTimes(2)
 })

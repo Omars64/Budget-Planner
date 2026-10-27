@@ -10,6 +10,7 @@ import { syncUpdatePush } from '../lib/updatePush'
 import Modal from './Modal'
 import { version } from '../../package.json'
 import { hasSeenRelease, markReleaseSeen, releaseNotes } from '../lib/releaseNotes'
+import { canReadResources } from '../lib/resourcePolicy'
 
 export default function AndroidUpdate({ authentication = false, userId, guest = false, role = 'user' }) {
   const { pathname } = useLocation()
@@ -50,6 +51,7 @@ export default function AndroidUpdate({ authentication = false, userId, guest = 
   }
 
   async function check(manual = false, resumed = false) {
+    if (!manual && !canReadResources()) return
     if (!enabled || busy.current || checking.current || (!manual && Date.now() - lastCheck.current < (resumed ? 300000 : 21600000))) return
     const controller = new AbortController()
     checking.current = controller

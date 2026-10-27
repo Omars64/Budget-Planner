@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { api } from './api'
+import { clientIsActive, recordClientInteraction, subscribeClientResume } from './clientActivity'
 
 export const RESOURCE_POLICY_EVENT = 'budgetly:resource-policy'
 const DEFAULT_SECONDS = 60
@@ -9,7 +10,7 @@ const listeners = new Set()
 let listening = false
 
 export const readResourcePolicy = () => policy
-export const canReadResources = () => document.visibilityState !== 'hidden' && navigator.onLine !== false
+export const canReadResources = () => document.visibilityState !== 'hidden' && navigator.onLine !== false && clientIsActive()
 
 export function updateResourcePolicy(config) {
   const seconds = config?.client_poll_seconds
@@ -74,6 +75,10 @@ export function startReadPolling(read, { immediate = true, initialDelay = 0, rec
     schedule()
   }
   const unsubscribe = subscribe(changed)
+  const unsubscribeActivity = subscribeClientResume(() => {
+    if (lastCompleted !== null) due = Math.min(due, Date.now())
+    schedule()
+  })
   window.addEventListener('focus', schedule)
   window.addEventListener('online', schedule)
   window.addEventListener('offline', schedule)
@@ -83,6 +88,7 @@ export function startReadPolling(read, { immediate = true, initialDelay = 0, rec
     stopped = true
     window.clearTimeout(timer)
     unsubscribe()
+    unsubscribeActivity()
     window.removeEventListener('focus', schedule)
     window.removeEventListener('online', schedule)
     window.removeEventListener('offline', schedule)
@@ -90,6 +96,7 @@ export function startReadPolling(read, { immediate = true, initialDelay = 0, rec
   }
   stop.refresh = () => {
     if (stopped) return
+    recordClientInteraction()
     if (pending) refreshRequested = true
     else { explicitDue = true; due = Date.now(); schedule() }
   }

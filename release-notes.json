@@ -1,4 +1,8 @@
 {
+  "6.5.3": [
+    {"title":"Quieter when you step away","detail":"Automatic background refreshes pause after 30 minutes without interaction and resume when you return. You stay signed in, with drafts and manual saving unchanged."},
+    {"title":"Lower idle database activity","detail":"Idle-client polling no longer keeps requesting ledger, shared records, notes or reminder data. Neon can sleep once all database activity stops; due scheduled tasks and other active users can still wake it.","audience":"admin"}
+  ],
   "6.5.2": [
     {"title":"Clearer update messages","detail":"Update and What's new popups now show changes relevant to your account."},
     {"title":"Administrative release details","detail":"Administrators see the full release notes, including operational changes hidden from regular account popups.","audience":"admin"},
