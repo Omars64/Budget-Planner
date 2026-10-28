@@ -30,3 +30,10 @@ test('discloses archived member access before restoration', () => {
   expect(screen.getByText(/member@example.test/)).toHaveTextContent('view')
   expect(screen.getByRole('button',{name:'Replace workspace'})).toBeDisabled()
 })
+
+test('explains legacy category recovery before the user confirms replacement', () => {
+  render(<RestorePreview preview={{...preview,data:{version:1,recovery_compatibility:{legacy_space_category_links:18}}}} onClose={vi.fn()} onRestore={vi.fn()}/>)
+  expect(screen.getByRole('note')).toHaveTextContent('Category totals may increase')
+  expect(screen.getByRole('note')).toHaveTextContent('transaction amounts, dates and descriptions stay unchanged')
+  expect(screen.getByRole('button',{name:'Replace workspace'})).toBeDisabled()
+})

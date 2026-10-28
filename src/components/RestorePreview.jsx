@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import Modal from './Modal'
+import { hasLegacySpaceCategories } from '../lib/backupPreview'
 
 export default function RestorePreview({ preview, onClose, onRestore }) {
   const [confirmed, setConfirmed] = useState(false)
@@ -20,6 +21,7 @@ export default function RestorePreview({ preview, onClose, onRestore }) {
     <div className="stack gap-12" aria-busy={busy}>
       <p style={{overflowWrap:'anywhere'}}>{preview.name}</p>
       <p>This replaces your current workspace, not merges it. Export a backup first to keep a separate copy.</p>
+      {hasLegacySpaceCategories(preview.data) && <p role="note">This backup contains older Space category links. Recovery will reuse matching Space categories or add Space-specific copies of the same labels. Category totals may increase; transaction amounts, dates and descriptions stay unchanged.</p>}
       {preview.data?.spaces?.length > 0 && <details><summary>Space access in this backup</summary>
         <p>Space names, currencies and member permissions will be restored. Previously removed members may regain access.</p>
         {preview.data.spaces.map(space => <div key={space.id}><strong>{space.name}</strong><ul>{(space.members || []).map(member => <li key={member.email} style={{overflowWrap:'anywhere'}}>{member.email} · {member.role}</li>)}</ul></div>)}

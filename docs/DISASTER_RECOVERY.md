@@ -41,6 +41,13 @@ The `/api/maintenance/daily` Vercel cron uses `CRON_SECRET`. In Admin > Service 
 
 ## Verify and restore
 
+Archives containing personal category links from before Spaces are reconciled
+inside the archive copy on export/import. Matching Space categories are reused;
+otherwise the category label is copied into the declared Space. No live ledger
+row is rewritten during export, and money, dates and descriptions are preserved.
+The restore preview explains possible additional categories. Missing, malformed
+and cross-Space references remain rejected. See RECOVERY_COMPATIBILITY_655.md.
+
 New external manifests include the encrypted byte length and SHA-256 digest of
 each account archive. The daily backup reads every encrypted archive and manifest
 back from storage and compares those bytes before recording a successful run.

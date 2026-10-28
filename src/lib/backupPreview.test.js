@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { backupPreview } from './backupPreview'
+import { backupPreview, hasLegacySpaceCategories } from './backupPreview'
 const core = {version:1,settings:{},wallets:[],categories:[],transactions:[],budgets:[],goals:[],debts:[]}
 
 test('summarizes supported backups without changing records', () => {
@@ -19,4 +19,15 @@ test('rejects malformed Space memberships before previewing access', () => {
   expect(() => backupPreview({...core,spaces:[{name:'Home',members:'invalid'}]})).toThrow()
   expect(() => backupPreview({...core,spaces:[{name:'Home',members:[null]}]})).toThrow()
   expect(backupPreview({...core,spaces:[{name:'Home',members:[]}]}).find(row => row.key==='spaces').count).toBe(1)
+})
+
+test('recognizes old personal category links within declared Spaces without changing the backup', () => {
+  const data={...core,spaces:[{id:9}],wallets:[{id:1,space_id:9}],categories:[{id:2,kind:'expense'}],transactions:[{wallet_id:1,category_id:2,type:'expense'}]}
+  const original=JSON.stringify(data)
+  expect(hasLegacySpaceCategories(data)).toBe(true)
+  expect(JSON.stringify(data)).toBe(original)
+  expect(hasLegacySpaceCategories({...data,categories:[{id:2,kind:'expense',space_id:10}]})).toBe(false)
+  expect(hasLegacySpaceCategories({...data,categories:[{id:2,kind:'income'}]})).toBe(false)
+  expect(hasLegacySpaceCategories({...data,spaces:[]})).toBe(false)
+  expect(hasLegacySpaceCategories({})).toBe(false)
 })

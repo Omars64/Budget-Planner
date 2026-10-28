@@ -75,6 +75,12 @@ def validate_archive_records(data, collections):
             if name == 'planned_transactions' and row.get('status') not in {'planned', 'scheduled', 'posted', 'failed'}:
                 raise ValueError('Invalid planned status')
     folders = {row['id']: row for row in data.get('note_folders', [])}
+    for budget in data.get('budgets', []):
+        category_id = budget.get('category_id')
+        category = categories.get(category_id)
+        if category_id and (not category or category.get('kind') != 'expense'
+                            or category.get('space_id') != budget.get('space_id')):
+            raise ValueError('Invalid budget category workspace')
     from .workspace import validate_note_attachment
     for note in data.get('notes', []):
         validate_note_attachment(note.get('attachment_data'), note.get('attachment_type'), note.get('note_type', 'text'))

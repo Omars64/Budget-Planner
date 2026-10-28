@@ -7,6 +7,21 @@ const collections = {
   receipts: 'Receipts',
 }
 
+export function hasLegacySpaceCategories(data) {
+  if (data?.recovery_compatibility?.legacy_space_category_links > 0) return true
+  const categories = new Map((data?.categories || []).map(row => [row.id, row]))
+  const wallets = new Map((data?.wallets || []).map(row => [row.id, row]))
+  const spaces = new Set((data?.spaces || []).map(row => row.id))
+  return ['transactions', 'planned_transactions', 'budgets'].some(name =>
+    (data?.[name] || []).some(row => {
+      const category = categories.get(row.category_id)
+      const scope = name === 'budgets' ? row.space_id : wallets.get(row.wallet_id)?.space_id
+      const kind = name === 'budgets' ? 'expense' : row.type
+      return scope != null && spaces.has(scope) && category && category.space_id == null &&
+        category.kind === kind && ['income', 'expense'].includes(kind)
+    }))
+}
+
 export function backupPreview(data) {
   if (!data || typeof data !== 'object' || Array.isArray(data) || data.version !== 1) {
     throw new Error('Choose a supported Budgetly JSON backup.')

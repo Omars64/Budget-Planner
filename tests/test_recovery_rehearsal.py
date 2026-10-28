@@ -150,6 +150,70 @@ def restore(r, payload):
     assert response.status_code == 200, response.text
 
 
+def test_legacy_space_category_round_trip_does_not_rewrite_source_records(rehearsal):
+    from sqlalchemy.orm import Session
+    r=rehearsal
+    with Session(r.engine) as db:
+        category=db.query(r.m.Category).filter_by(user_id=r.ids['owner']).one()
+        shared=db.query(r.m.Transaction).filter_by(description='Shared expense').one()
+        shared.category_id=category.id
+        shared_id,category_id=shared.id,category.id
+        db.add(r.m.Budget(user_id=r.ids['owner'],space_id=r.space,category_id=category_id,
+                         name='Shared legacy budget',limit_amount=Decimal('10'),start_date=date(2026,10,1)))
+        db.commit()
+    exported=archive(r)
+    assert exported['recovery_compatibility']['legacy_space_category_links']==2
+    with Session(r.engine) as db:
+        assert db.get(r.m.Transaction,shared_id).category_id==category_id
+        assert db.query(r.m.Category).filter_by(user_id=r.ids['owner']).count()==1
+    # Recreate the pre-fix archive, to verify already stored off-site copies too.
+    legacy=copy.deepcopy(exported)
+    legacy.pop('recovery_compatibility')
+    legacy['categories']=[row for row in legacy['categories'] if row['id']==category_id]
+    next(row for row in legacy['transactions'] if row['id']==shared_id)['category_id']=category_id
+    legacy['budgets'][0]['category_id']=category_id
+    r.actor['id']=r.ids['target']
+    restore(r,legacy)
+    recovered=archive(r)
+    expense=next(row for row in recovered['transactions'] if row['description']=='Shared expense')
+    wallet=next(row for row in recovered['wallets'] if row['id']==expense['wallet_id'])
+    category=next(row for row in recovered['categories'] if row['id']==expense['category_id'])
+    assert category['space_id']==wallet['space_id'] and category['name']=='Synthetic bills'
+    assert expense['amount']==1.001 and recovered['budgets'][0]['category_id']==category['id']
+    with Session(r.engine) as db:
+        assert db.get(r.m.Transaction,shared_id).category_id==category_id
+        assert db.query(r.m.Category).filter_by(user_id=r.ids['owner']).count()==1
+
+
+def test_category_limit_is_checked_before_normalizing_untrusted_archives(rehearsal,monkeypatch):
+    r=rehearsal
+    before=archive(r)
+    oversized=copy.deepcopy(before)
+    oversized['categories']=[{'id':1000+i,'name':f'Category {i}','kind':'expense'} for i in range(501)]
+    def forbidden(_):raise AssertionError('Oversized input reached normalization')
+    with monkeypatch.context() as patch:
+        patch.setattr('api.backup_compatibility.normalize_legacy_space_categories',forbidden)
+        response=r.client.post('/api/backup/restore',json=oversized)
+        assert response.status_code==400
+    after=archive(r)
+    after.pop('exported_at');before.pop('exported_at')
+    assert after==before
+
+
+def test_full_category_budget_plus_generated_copy_restores_repeatedly(rehearsal):
+    r=rehearsal
+    payload=archive(r)
+    category_id=payload['categories'][0]['id']
+    payload['categories'].extend({'id':1000+i,'name':f'Synthetic category {i}','kind':'expense'} for i in range(499))
+    next(row for row in payload['transactions'] if row['description']=='Shared expense')['category_id']=category_id
+    r.actor['id']=r.ids['target']
+    restore(r,payload)
+    recovered=archive(r)
+    assert len(recovered['categories'])==501
+    restore(r,recovered)
+    assert len(archive(r)['categories'])==501
+
+
 def test_encrypted_completed_run_download_and_fresh_account_restore(rehearsal, monkeypatch):
     """Exercise upload -> manifest -> bounded download -> decrypt -> real restore.
 

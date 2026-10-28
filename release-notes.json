@@ -1,4 +1,8 @@
 {
+  "6.5.5": [
+    {"title":"Older backup compatibility","detail":"Older backups with Space entries now recover their category labels correctly, with a clear explanation before you confirm restoration. Transaction amounts, dates and descriptions are preserved."},
+    {"title":"Non-destructive recovery compatibility","detail":"Archive export and import reconcile legacy personal-category references into declared Spaces without rewriting live ledger rows. Cross-Space links and malformed archives remain rejected.","audience":"admin"}
+  ],
   "6.5.4": [
     {"title":"Safer saving and retries","detail":"Incomplete server responses no longer look like confirmed saves. Queued entries stay tied to the correct account, with clearer pending, retry and review controls."},
     {"title":"Clearer recovery and service status","detail":"Admin distinguishes database recovery from independent backups, shows missing backup configuration and flags unconfirmed health after a failed refresh.","audience":"admin"},

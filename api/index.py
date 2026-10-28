@@ -1296,7 +1296,8 @@ def _export_backup(user, db):
         payment_records = {t.id: t for t in db.query(Transaction).filter(Transaction.user_id == user.id, Transaction.id.in_(payment_ids)).all()}
         payload['settings'][key] = json.dumps(archive_snapshot(saved_planner,
             {w['id'] for w in payload['wallets']}, {t['id'] for t in payload['transactions']}, {p['id'] for p in payload['planned_transactions']}, payment_records, user.id))
-    return payload
+    from .backup_compatibility import normalize_legacy_space_categories
+    return normalize_legacy_space_categories(payload)
 
 
 @app.post("/api/backup/restore")
@@ -1321,8 +1322,18 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
     if data.get("version") != 1: raise HTTPException(400, "Unsupported backup version")
     for collection, limit in BACKUP_COLLECTION_LIMITS.items():
         value = data.get(collection, [])
-        if not isinstance(value, list) or len(value) > limit:
+        # Bound physical input before any compatibility processing. Equivalent
+        # category copies are accounted for separately, by their actual contents.
+        physical_limit = limit * (BACKUP_COLLECTION_LIMITS['spaces'] + 1) if collection == 'categories' else limit
+        if not isinstance(value, list) or len(value) > physical_limit:
             raise HTTPException(400, f"Backup contains too many or invalid {collection.replace('_', ' ')}")
+    from .backup_compatibility import normalize_legacy_space_categories, category_count_without_recovery_copies
+    if category_count_without_recovery_copies(data) > BACKUP_COLLECTION_LIMITS['categories']:
+        raise HTTPException(400, 'Backup contains too many categories')
+    data = normalize_legacy_space_categories(data)
+    if (len(data.get('categories', [])) > BACKUP_COLLECTION_LIMITS['categories'] * (BACKUP_COLLECTION_LIMITS['spaces'] + 1)
+            or category_count_without_recovery_copies(data) > BACKUP_COLLECTION_LIMITS['categories']):
+        raise HTTPException(400, 'Backup contains too many categories')
     for note in data.get("notes", []):
         if not isinstance(note, dict):
             raise HTTPException(400, "Backup contains an invalid note")
