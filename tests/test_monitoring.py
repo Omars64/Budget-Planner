@@ -93,3 +93,40 @@ def test_external_backup_failure_and_partial_config_fail_readiness(monitor, monk
     row = db.query(ServiceEvent).filter_by(area='external-backup').one()
     row.created_at = utc_now() - timedelta(hours=37); db.commit()
     assert client.get('/api/health/ready').status_code == 503
+
+@pytest.mark.parametrize('area,secret,name', [
+    ('scheduler-heartbeat', 'SCHEDULE_RUNNER_SECRET', 'scheduler'),
+    ('daily-recovery', 'CRON_SECRET', 'daily_backup'),
+    ('external-backup', 'BACKUP_S3_BUCKET', 'external_backup'),
+])
+def test_future_job_success_is_not_healthy(monitor, monkeypatch, area, secret, name):
+    _, db = monitor
+    monkeypatch.setattr('api.monitoring.resource_control.configured', lambda: False)
+    monkeypatch.setenv(secret, 'synthetic')
+    if name == 'external_backup':
+        for key in ('BACKUP_S3_REGION', 'BACKUP_S3_ACCESS_KEY_ID',
+                    'BACKUP_S3_SECRET_ACCESS_KEY', 'BACKUP_ENCRYPTION_KEY'):
+            monkeypatch.setenv(key, 'synthetic')
+    db.add(ServiceEvent(area=area, status=200, created_at=utc_now() + timedelta(hours=1)))
+    db.commit()
+    assert job_status(db)[name]['healthy'] is False
+
+
+@pytest.mark.parametrize('area,secret,name', [
+    ('scheduler-heartbeat', 'SCHEDULE_RUNNER_SECRET', 'scheduler'),
+    ('daily-recovery', 'CRON_SECRET', 'daily_backup'),
+])
+def test_latest_failure_wins_timestamp_tie(monitor, monkeypatch, area, secret, name):
+    _, db = monitor
+    monkeypatch.setattr('api.monitoring.resource_control.configured', lambda: False)
+    monkeypatch.setenv(secret, 'synthetic')
+    stamp = utc_now()
+    db.add(ServiceEvent(area=area, status=200, created_at=stamp))
+    db.flush()
+    failure = ServiceEvent(area=area, status=503, created_at=stamp)
+    db.add(failure)
+    db.commit()
+    assert job_status(db)[name]['healthy'] is False
+    record_job(db, area, 200)
+    db.refresh(failure)
+    assert failure.status == 200

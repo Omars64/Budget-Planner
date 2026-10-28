@@ -97,10 +97,12 @@ export function syncOfflineQueue(send, token, userId = activeUserId) {
         const headers = new Headers({ 'Idempotency-Key': row.key })
         await send(row.path, { method: 'POST', body: row.body, headers })
         await deleteOffline(`queue:${userId}:${row.id}`)
-        notify()
-        window.dispatchEvent(new Event('budgetly:offline-synced'))
+        if (activeUserId === String(userId)) {
+          notify()
+          window.dispatchEvent(new Event('budgetly:offline-synced'))
+        }
       } catch (error) {
-        if (error.network || error.status === 401 || error.status >= 500) break
+        if (error.staleAuth || error.network || error.status === 401 || error.status >= 500) break
         await writeOffline(`queue:${userId}:${row.id}`, { ...row, status: 'failed', error: error.message })
         notify()
       }

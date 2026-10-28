@@ -7,6 +7,7 @@ import time
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, StrictInt
 from starlette.concurrency import run_in_threadpool
+from starlette.datastructures import MutableHeaders
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -74,7 +75,8 @@ def prepare(request):
         request.state.resource_health_started = time.time()
         health = control.read_health(request.state.resource_health_started)
         if health['cached']:
-            return JSONResponse({'ok': health['ok']}, status_code=200 if health['ok'] else 503)
+            return JSONResponse({'ok': health['ok']}, status_code=200 if health['ok'] else 503,
+                                headers={'X-Budgetly-Readiness-Source': 'cached', 'Cache-Control': 'no-store'})
         request.state.resource_health_probe = True
         request.state.resource_health_generation = health.get('generation')
     elif path == SCHEDULER and method == 'POST':
@@ -137,11 +139,17 @@ class ResourceMiddleware:
                                      'Referrer-Policy': 'same-origin'})
             return await response(scope, receive, send)
         status = 500
+        readiness = request.method == 'GET' and request.url.path == '/api/health/ready'
 
         async def capture(message):
             nonlocal status
             if message['type'] == 'http.response.start':
                 status = message['status']
+                if readiness:
+                    # This identifies the uncached path, not a successful DB connection.
+                    headers = MutableHeaders(scope=message)
+                    headers['X-Budgetly-Readiness-Source'] = 'probe'
+                    headers['Cache-Control'] = 'no-store'
             await send(message)
 
         try:

@@ -63,6 +63,11 @@ const pending = new Map()
 const transactionKeys = new Map()
 let writes = 0
 export const hasPendingWrites = () => writes > 0
+function assertRequestIdentity(token, userId) {
+  if (auth.token !== token || offlineUser() !== userId) {
+    throw Object.assign(new Error('Your account changed while this request was in progress. Reopen this screen before trying again.'), { staleAuth: true })
+  }
+}
 export function api(path, options = {}) {
   if (guestActive() && !auth.token && !path.startsWith('/api/auth/') && !path.startsWith('/api/passkeys/login/')) return guestApi(path, options)
   path = scopedPath(path)
@@ -79,15 +84,19 @@ export function api(path, options = {}) {
     options = { ...options, headers }
   }
   const mutation = options.method && options.method !== 'GET'
+  const requestUser = offlineUser()
+  const requestToken = auth.token
   if (mutation) window.dispatchEvent(new CustomEvent('flowbudget:pending', { detail: ++writes }))
   const request = (canQueueOffline(path, options) && navigator.onLine === false
     ? queueOfflineTransaction(path, options)
     : send(path, options).catch(error => {
-      if ((error.network || [502, 503, 504].includes(error.status)) && canQueueOffline(path, options)) return queueOfflineTransaction(path, options)
+      if ((error.network || [502, 503, 504].includes(error.status)) && requestUser === offlineUser() && requestToken === auth.token && canQueueOffline(path, options)) return queueOfflineTransaction(path, options)
       throw error
     })).catch(async error => {
     if (error.status !== 428) throw error
+    assertRequestIdentity(requestToken, requestUser)
     await new Promise((resolve,reject)=>window.dispatchEvent(new CustomEvent('flowbudget:confirm-password',{detail:{resolve,reject}})))
+    assertRequestIdentity(requestToken, requestUser)
     return send(path,options)
   }).then(data => {
     if (transaction) transactionKeys.delete(key)
@@ -105,24 +114,31 @@ export function api(path, options = {}) {
 }
 
 async function send(path, options = {}) {
+  const requestToken = auth.token
+  const requestUser = offlineUser()
+  const checkIdentity = () => assertRequestIdentity(requestToken, requestUser)
+  const readFallback = async () => {
+    checkIdentity()
+    let cached
+    try { cached = await readOfflineResponse(path) } catch { /* Report the normal request error. */ }
+    checkIdentity()
+    return cached
+  }
   if ((!options.method || options.method === 'GET') && navigator.onLine === false) {
-    try {
-      const cached = await readOfflineResponse(path)
-      if (cached !== undefined) return cached
-    } catch { /* Continue with the normal request error. */ }
+    const cached = await readFallback()
+    if (cached !== undefined) return cached
   }
   const headers = new Headers(options.headers || {})
   if (options.body && !(options.body instanceof FormData)) headers.set('Content-Type', 'application/json')
-  if (auth.token) headers.set('Authorization', `Bearer ${auth.token}`)
+  if (requestToken) headers.set('Authorization', `Bearer ${requestToken}`)
   let response
   try { response = await fetch(`${apiBase}${path}`, { ...options, headers }) }
   catch (cause) {
+    checkIdentity()
     if (cause?.name === 'AbortError') throw cause
     if (!options.method || options.method === 'GET') {
-      try {
-        const cached = await readOfflineResponse(path)
-        if (cached !== undefined) return cached
-      } catch { /* Report the network error below. */ }
+      const cached = await readFallback()
+      if (cached !== undefined) return cached
     }
     const error = new Error(path.startsWith('/api/auth/')
       ? 'Could not connect to Budgetly for sign-in. Check your connection and try again.'
@@ -130,15 +146,22 @@ async function send(path, options = {}) {
     error.network = true
     throw error
   }
+  checkIdentity()
   if (response.status === 204) { responseCache.clear(); return null }
   let data = null
-  try { data = await response.json() } catch { data = null }
+  try { data = await response.json() } catch {
+    checkIdentity()
+    if (response.ok) {
+      const error = new Error('Could not confirm the server response. Retry to confirm this save safely.')
+      error.network = true
+      throw error
+    }
+  }
+  checkIdentity()
   if (!response.ok) {
     if ([502, 503, 504].includes(response.status) && (!options.method || options.method === 'GET')) {
-      try {
-        const cached = await readOfflineResponse(path)
-        if (cached !== undefined) return cached
-      } catch { /* Report the service error below. */ }
+      const cached = await readFallback()
+      if (cached !== undefined) return cached
     }
     const message = data?.detail || (response.status >= 500
       ? 'The service is temporarily unavailable. Please try again shortly.'
@@ -148,9 +171,10 @@ async function send(path, options = {}) {
     throw error
   }
   if (!options.method || options.method === 'GET') {
-    if (path.startsWith('/api/shared/') || path.split('?')[0] === '/api/wallets') responseCache.set(path, { token: auth.token, time: Date.now(), data })
+    if (path.startsWith('/api/shared/') || path.split('?')[0] === '/api/wallets') responseCache.set(path, { token: requestToken, time: Date.now(), data })
     await cacheOfflineResponse(path, data)
   } else responseCache.clear()
+  checkIdentity()
   window.dispatchEvent(new Event('budgetly:service-available'))
   return data
 }

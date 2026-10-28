@@ -150,6 +150,61 @@ def restore(r, payload):
     assert response.status_code == 200, response.text
 
 
+def test_encrypted_completed_run_download_and_fresh_account_restore(rehearsal, monkeypatch):
+    """Exercise upload -> manifest -> bounded download -> decrypt -> real restore.
+
+    Storage is an in-memory private object store; the database and identities are
+    this fixture's synthetic data only. No environment credentials are consumed.
+    """
+    import boto3
+    from cryptography.fernet import Fernet
+    from sqlalchemy.orm import Session
+    from api.operations import external_snapshots
+    from api.index import wallet_balance
+    from scripts.verify_external_backup import verify_run, decode_backup
+    r = rehearsal
+    secret = Fernet.generate_key()
+    for name, value in {'BUCKET': 'synthetic-private', 'REGION': 'us-east-1',
+                        'ACCESS_KEY_ID': 'synthetic', 'SECRET_ACCESS_KEY': 'synthetic'}.items():
+        monkeypatch.setenv('BACKUP_S3_' + name, value)
+    monkeypatch.setenv('BACKUP_ENCRYPTION_KEY', secret.decode())
+    monkeypatch.setenv('BACKUP_S3_ENDPOINT_URL', 'https://storage.invalid')
+    objects = {}
+    class Storage:
+        def put_object(self, *, Bucket, Key, Body, **_):
+            assert Bucket == 'synthetic-private'
+            objects[Key] = Body
+        def get_object(self, *, Bucket, Key):
+            assert Bucket == 'synthetic-private'
+            return {'Body': io.BytesIO(objects[Key])}
+    storage = Storage()
+    monkeypatch.setattr(boto3, 'client', lambda *_, **__: storage)
+    with Session(r.engine) as db:
+        assert external_snapshots(db) == len(r.ids)
+    manifest_key = next(key for key in objects if key.endswith('/manifest.json.gz.enc'))
+    checked = verify_run(storage, 'synthetic-private', manifest_key, secret)
+    assert checked['accounts'] == len(r.ids) and checked['records']['receipts'] == 1
+    owner_key = manifest_key.rsplit('/', 1)[0] + f"/user-{r.ids['owner']}.json.gz.enc"
+    downloaded = decode_backup(objects[owner_key], secret)
+    r.actor['id'] = r.ids['target']
+    restore(r, downloaded)
+    recovered = archive(r)
+    assert len(recovered['receipts']) == 1
+    assert recovered['receipts'][0]['image'] == r.receipt
+    assert len(recovered['notes']) == 2
+    assert all(note['attachment_data'] == r.attachment for note in recovered['notes'])
+    with Session(r.engine) as db:
+        wallets = {w.name: w for w in db.query(r.m.Wallet).filter_by(user_id=r.ids['target'])}
+        assert {name: Decimal(str(wallet_balance(db, w))) for name, w in wallets.items()} == {
+            'Cash': Decimal('86.744'), 'Bank': Decimal('27.009'), 'Shared': Decimal('49.002')}
+        space = db.get(r.m.Space, wallets['Shared'].space_id)
+        members = db.query(r.m.SpaceMember).filter_by(space_id=space.id).all()
+        assert {member.email for member in members} == {
+            'viewer@rehearsal.test', 'adder@rehearsal.test', 'editor@rehearsal.test', 'pending@rehearsal.test'}
+        assert db.get(r.m.Space, r.space).owner_id == r.ids['owner']
+        assert db.query(r.m.Wallet).filter_by(user_id=r.ids['outsider']).one().initial_balance == Decimal('77.777')
+
+
 @pytest.mark.parametrize('fresh', [False, True], ids=['same-account', 'fresh-account-id-collision'])
 def test_account_restore_preserves_content_links_and_balances(rehearsal, fresh):
     from sqlalchemy.orm import Session

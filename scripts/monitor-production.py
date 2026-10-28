@@ -5,6 +5,7 @@ import os
 import time
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
+from http.client import HTTPException
 
 TITLE = '[Budgetly Monitor] Service needs attention'
 
@@ -12,11 +13,11 @@ TITLE = '[Budgetly Monitor] Service needs attention'
 def healthy(url):
     for attempt in range(3):
         try:
-            with urlopen(Request(url, headers={'User-Agent': 'Budgetly-Readiness'}), timeout=15) as response:
+            with urlopen(Request(url, headers={'User-Agent': 'Budgetly-Readiness', 'Cache-Control': 'no-cache'}), timeout=15) as response:
                 payload = json.loads(response.read(4096))
                 if response.status == 200 and isinstance(payload, dict) and payload.get('ok') is True:
                     return True
-        except (HTTPError, URLError, TimeoutError, ValueError):
+        except (HTTPError, URLError, OSError, HTTPException, ValueError):
             pass
         if attempt < 2:
             time.sleep(5)

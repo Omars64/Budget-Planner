@@ -1,4 +1,9 @@
 {
+  "6.5.4": [
+    {"title":"Safer saving and retries","detail":"Incomplete server responses no longer look like confirmed saves. Queued entries stay tied to the correct account, with clearer pending, retry and review controls."},
+    {"title":"Clearer recovery and service status","detail":"Admin distinguishes database recovery from independent backups, shows missing backup configuration and flags unconfirmed health after a failed refresh.","audience":"admin"},
+    {"title":"Stronger verification","detail":"Completed encrypted backup runs include archive integrity metadata and can be verified together. New integration journeys cover sign-in, Space permissions, scheduled retries and restore.","audience":"admin"}
+  ],
   "6.5.3": [
     {"title":"Quieter when you step away","detail":"Automatic background refreshes pause after 30 minutes without interaction and resume when you return. You stay signed in, with drafts and manual saving unchanged."},
     {"title":"Lower idle database activity","detail":"Idle-client polling no longer keeps requesting ledger, shared records, notes or reminder data. Neon can sleep once all database activity stops; due scheduled tasks and other active users can still wake it.","audience":"admin"}

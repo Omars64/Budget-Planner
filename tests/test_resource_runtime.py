@@ -353,6 +353,10 @@ def test_cached_readiness_never_republishes_probe_generation(isolated, ok):
     application = Mock(side_effect=AssertionError('Cached response dispatched application'))
     response = TestClient(runtime.ResourceMiddleware(application)).get('/api/health/ready')
     assert response.status_code == (200 if ok else 503)
+    assert response.json() == {'ok': ok}
+    assert response.headers['x-budgetly-readiness-source'] == 'cached'
+    assert response.headers['cache-control'] == 'no-store'
+    assert 'synthetic-cached:2' not in str(response.headers)
     application.assert_not_called()
     isolated.save_health.assert_not_called()
 
@@ -762,3 +766,54 @@ def test_real_coordinator_provider_failure_rejects_mutation_without_sql(end_to_e
     assert command[3 + command[2]] == 'begin'
     assert ledger_snapshot(s) == before
     s.initialize.assert_not_called()
+
+@pytest.mark.parametrize('configured', [True, False])
+@pytest.mark.parametrize('outcome', ['success', 'database-failure', 'initialization-failure'])
+def test_actual_readiness_discloses_probe_even_when_storage_fails(integration, monkeypatch, configured, outcome):
+    from sqlalchemy.exc import OperationalError
+    from api import diagnostics
+
+    s = integration
+    s.control.configured.return_value = configured
+    s.control.read_health.return_value = {
+        'cached': False, 'ok': False, 'generation': 'opaque-private-generation'}
+    monkeypatch.setattr(diagnostics, 'job_status', Mock(return_value={}))
+    monkeypatch.setattr(diagnostics, 'IS_EPHEMERAL_VERCEL_SQLITE', False)
+    s.app.state.storage_ready = outcome != 'initialization-failure'
+    s.initialize.return_value = outcome != 'initialization-failure'
+    if outcome == 'database-failure':
+        s.db.execute.side_effect = OperationalError('SELECT 1', {}, Exception('private-db-error'))
+    response = s.client.get('/api/health/ready')
+    assert response.status_code == (200 if outcome == 'success' else 503)
+    assert response.headers['x-budgetly-readiness-source'] == 'probe'
+    assert response.headers['cache-control'] == 'no-store'
+    assert 'opaque-private-generation' not in str(response.headers)
+    assert 'private-db-error' not in response.text
+    if outcome == 'success':
+        assert response.json() == {'ok': True}
+    if outcome == 'initialization-failure':
+        s.db.execute.assert_not_called()
+        assert s.events == []
+    else:
+        assert s.db.execute.call_count == 1
+    if not configured:
+        s.control.read_health.assert_not_called()
+        s.control.save_health.assert_not_called()
+
+
+@pytest.mark.parametrize('status', [200, 503, 500])
+def test_probe_capture_overwrites_conflicting_headers_without_changing_body(isolated, status):
+    isolated.read_health.return_value = {'cached': False, 'ok': False}
+
+    async def application(scope, receive, send):
+        await send({'type': 'http.response.start', 'status': status, 'headers': [
+            (b'cache-control', b'public, max-age=3600'),
+            (b'x-budgetly-readiness-source', b'cached'),
+            (b'cache-control', b'private')]})
+        await send({'type': 'http.response.body', 'body': b'{"ok":false}'})
+
+    response = TestClient(runtime.ResourceMiddleware(application)).get('/api/health/ready')
+    assert response.status_code == status
+    assert response.json() == {'ok': False}
+    assert response.headers.get_list('cache-control') == ['no-store']
+    assert response.headers.get_list('x-budgetly-readiness-source') == ['probe']

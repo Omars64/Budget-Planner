@@ -1,5 +1,7 @@
 import gzip
+import hashlib
 import json
+import io
 
 import boto3
 import pytest
@@ -31,6 +33,8 @@ def test_external_backup_is_encrypted_and_reports_success_only_after_upload(monk
     class Client:
         def put_object(self, **kwargs):
             written.append(kwargs)
+        def get_object(self, **kwargs):
+            return {'Body': io.BytesIO(next(row['Body'] for row in written if row['Key'] == kwargs['Key']))}
 
     monkeypatch.setattr(boto3, 'client', lambda *args, **kwargs: Client())
     engine = create_engine('sqlite://')
@@ -49,6 +53,8 @@ def test_external_backup_is_encrypted_and_reports_success_only_after_upload(monk
         assert manifest['kind'] == 'budgetly-account-recovery-manifest'
         assert manifest['accounts'][0]['archive_key'] == written[0]['Key']
         assert manifest['accounts'][0]['email'] == 'owner@backup.test'
+        assert manifest['accounts'][0]['archive_bytes'] == len(written[0]['Body'])
+        assert manifest['accounts'][0]['archive_sha256'] == hashlib.sha256(written[0]['Body']).hexdigest()
         assert 'password_hash' not in manifest['accounts'][0]
         assert 'owner@backup.test' not in written[1]['Body'].decode()
         assert db.query(ServiceEvent).filter_by(area='external-backup', status=200).count() == 1
@@ -63,6 +69,14 @@ def test_external_backup_is_encrypted_and_reports_success_only_after_upload(monk
 
         monkeypatch.setattr(boto3, 'client', lambda *args, **kwargs: InterruptedClient())
         with pytest.raises(RuntimeError, match='Synthetic interrupted'):
+            external_snapshots(db)
+        db.rollback()
+        assert db.query(ServiceEvent).filter_by(area='external-backup', status=200).count() == 2
+        class CorruptedReadClient(Client):
+            def get_object(self, **kwargs):
+                return {'Body': io.BytesIO(b'corrupted read-back')}
+        monkeypatch.setattr(boto3, 'client', lambda *args, **kwargs: CorruptedReadClient())
+        with pytest.raises(ValueError, match='read-back'):
             external_snapshots(db)
         db.rollback()
         assert db.query(ServiceEvent).filter_by(area='external-backup', status=200).count() == 2

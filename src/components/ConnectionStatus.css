@@ -1,0 +1,7 @@
+.connection-status.connection-status-feedback { background:var(--surface); color:var(--text); border:1px solid var(--line); }
+.connection-status-feedback p { margin:6px 0; }
+.connection-status-actions { display:flex; justify-content:center; align-items:center; flex-wrap:wrap; gap:12px; margin-top:6px; }
+.connection-status-actions a { color:inherit; text-decoration:underline; }
+.connection-status-actions button { background:var(--surface); color:var(--text); border:1px solid currentColor; border-radius:4px; padding:6px 10px; font:inherit; min-height:36px; }
+.connection-status-actions button:disabled { opacity:.65; cursor:default; }
+.connection-status-actions :is(a,button):focus-visible { outline:3px solid currentColor; outline-offset:3px; }

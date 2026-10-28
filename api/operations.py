@@ -1,10 +1,12 @@
 """Private operational status and authenticated daily recovery snapshots."""
 import hmac
+import hashlib
 import gzip
 import json
 import logging
 import os
 import secrets
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from fastapi.encoders import jsonable_encoder
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -17,25 +19,28 @@ from .data_safety import save_recovery
 from .monitoring import job_status
 
 router=APIRouter()
+BACKUP_KEYS = ('BACKUP_S3_BUCKET', 'BACKUP_S3_REGION', 'BACKUP_S3_ACCESS_KEY_ID',
+               'BACKUP_S3_SECRET_ACCESS_KEY', 'BACKUP_ENCRYPTION_KEY')
 
 
 def external_backup_ready():
-    return all(os.getenv(key) for key in ('BACKUP_S3_BUCKET', 'BACKUP_S3_REGION',
-                                           'BACKUP_S3_ACCESS_KEY_ID', 'BACKUP_S3_SECRET_ACCESS_KEY',
-                                           'BACKUP_ENCRYPTION_KEY'))
+    return all(os.getenv(key) for key in BACKUP_KEYS)
 
 
 def external_snapshots(db):
     if not external_backup_ready():
         return 0
     import boto3
+    from botocore.config import Config
     from cryptography.fernet import Fernet
     from .index import export_backup
     cipher = Fernet(os.environ['BACKUP_ENCRYPTION_KEY'].encode())
     client = boto3.client('s3', region_name=os.environ['BACKUP_S3_REGION'],
                           endpoint_url=os.getenv('BACKUP_S3_ENDPOINT_URL') or None,
                           aws_access_key_id=os.environ['BACKUP_S3_ACCESS_KEY_ID'],
-                          aws_secret_access_key=os.environ['BACKUP_S3_SECRET_ACCESS_KEY'])
+                          aws_secret_access_key=os.environ['BACKUP_S3_SECRET_ACCESS_KEY'],
+                          config=Config(connect_timeout=5, read_timeout=20,
+                                        retries={'max_attempts': 2, 'mode': 'standard'}))
     day = utc_now().date().isoformat()
     prefix = f'budgetly/{day}/{secrets.token_hex(16)}'
     count = 0
@@ -50,7 +55,9 @@ def external_snapshots(db):
             upload['ServerSideEncryption'] = 'AES256'
         client.put_object(**upload)
         identities.append({'id': user.id, 'email': user.email, 'username': user.username,
-                           'role': user.role, 'archive_key': upload['Key']})
+                           'role': user.role, 'archive_key': upload['Key'],
+                           'archive_bytes': len(payload),
+                           'archive_sha256': hashlib.sha256(payload).hexdigest()})
         count += 1
     manifest = {'version': 1, 'kind': 'budgetly-account-recovery-manifest',
                 'exported_at': utc_now().isoformat() + 'Z', 'accounts': identities}
@@ -61,6 +68,22 @@ def external_snapshots(db):
     if not os.getenv('BACKUP_S3_ENDPOINT_URL'):
         metadata['ServerSideEncryption'] = 'AES256'
     client.put_object(**metadata)
+    # A completed upload is not yet evidence that recovery can read the bytes.
+    # Verify the commit marker and every encrypted object before recording success.
+    # Digests refer to bytes just encrypted here; no plaintext or keys are logged.
+    for key, length, digest in [
+        (row['archive_key'], row['archive_bytes'], row['archive_sha256']) for row in identities
+    ] + [(metadata['Key'], len(metadata['Body']), hashlib.sha256(metadata['Body']).hexdigest())]:
+        with closing(client.get_object(Bucket=os.environ['BACKUP_S3_BUCKET'], Key=key)['Body']) as body:
+            remaining, actual = length, hashlib.sha256()
+            while remaining:
+                chunk = body.read(min(64 * 1024, remaining))
+                if not chunk:
+                    raise ValueError('External backup read-back was incomplete')
+                actual.update(chunk)
+                remaining -= len(chunk)
+            if body.read(1) or not hmac.compare_digest(actual.hexdigest(), digest):
+                raise ValueError('External backup read-back integrity failed')
     db.add(ServiceEvent(area='external-backup', status=200))
     db.commit()
     return count
@@ -92,7 +115,8 @@ def daily_snapshots(db):
             db.add(ServiceEvent(area='external-backup', status=500))
             db.commit()
             raise HTTPException(503, 'External backup failed; investigate the backup destination')
-    return {'ok':True,'snapshots_created':total,'external_backups_created':external}
+    return {'ok':True,'snapshots_created':total,'external_backups_created':external,
+            'external_backup_configured':external_backup_ready()}
 
 
 def cron_auth(request):
@@ -205,4 +229,6 @@ def operations(user=Depends(admin_user),db=Depends(get_db)):
     events=db.query(ServiceEvent).order_by(ServiceEvent.id.desc()).limit(100).all()
     backup=db.query(ServiceEvent).filter_by(area='daily-recovery',status=200).order_by(ServiceEvent.id.desc()).first()
     external=db.query(ServiceEvent).filter_by(area='external-backup',status=200).order_by(ServiceEvent.id.desc()).first()
-    return {'jobs':job_status(db),'database':'connected','database_engine':engine.dialect.name,'persistent_storage':not IS_EPHEMERAL_VERCEL_SQLITE,'email_configured':smtp_status().get('configured',False),'daily_job_configured':bool(os.getenv('CRON_SECRET')),'external_backup_configured':external_backup_ready(),'last_daily_backup':backup.created_at.isoformat()+'Z' if backup else None,'last_external_backup':external.created_at.isoformat()+'Z' if external else None,'events':[{'id':r.id,'area':r.area,'status':r.status,'duration_ms':r.duration_ms,'created_at':r.created_at.isoformat()+'Z'} for r in events]}
+    return {'jobs':job_status(db),'database':'connected','database_engine':engine.dialect.name,'persistent_storage':not IS_EPHEMERAL_VERCEL_SQLITE,'email_configured':smtp_status().get('configured',False),'daily_job_configured':bool(os.getenv('CRON_SECRET')),'external_backup_configured':external_backup_ready(),
+            'external_backup_missing':[key for key in BACKUP_KEYS if not os.getenv(key)],
+            'last_daily_backup':backup.created_at.isoformat()+'Z' if backup else None,'last_external_backup':external.created_at.isoformat()+'Z' if external else None,'events':[{'id':r.id,'area':r.area,'status':r.status,'duration_ms':r.duration_ms,'created_at':r.created_at.isoformat()+'Z'} for r in events]}

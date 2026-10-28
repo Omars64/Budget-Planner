@@ -8,7 +8,7 @@ from .timekeeping import now as ledger_now
 
 
 def record_job(db, area, status):
-    row = db.query(ServiceEvent).filter_by(area=area).order_by(ServiceEvent.created_at.desc()).first()
+    row = db.query(ServiceEvent).filter_by(area=area).order_by(ServiceEvent.created_at.desc(), ServiceEvent.id.desc()).first()
     if row is None:
         row = ServiceEvent(area=area, status=status)
         db.add(row)
@@ -18,13 +18,14 @@ def record_job(db, area, status):
 
 def job_status(db):
     result = {}
+    now = utc_now()
     for name, area, secret, minutes in (
         ('scheduler', 'scheduler-heartbeat', 'SCHEDULE_RUNNER_SECRET', 5),
         ('daily_backup', 'daily-recovery', 'CRON_SECRET', 2160),
     ):
-        row = db.query(ServiceEvent).filter_by(area=area).order_by(ServiceEvent.created_at.desc()).first()
+        row = db.query(ServiceEvent).filter_by(area=area).order_by(ServiceEvent.created_at.desc(), ServiceEvent.id.desc()).first()
         configured = bool(os.getenv(secret))
-        fresh = bool(row and row.status == 200 and row.created_at >= utc_now() - timedelta(minutes=minutes))
+        fresh = bool(row and row.status == 200 and now - timedelta(minutes=minutes) <= row.created_at <= now)
         result[name] = {'configured': configured, 'healthy': fresh if configured else None,
                         'last_run': row.created_at.isoformat() + 'Z' if row else None}
     if result['scheduler']['configured'] and resource_control.configured():
@@ -37,7 +38,7 @@ def job_status(db):
                 tick = status.get('last_tick')
                 failure = status.get('last_failure')
                 success = status.get('last_success')
-                now_epoch = utc_now().replace(tzinfo=timezone.utc).timestamp()
+                now_epoch = now.replace(tzinfo=timezone.utc).timestamp()
                 scheduler['healthy'] = bool(tick is not None and 0 <= now_epoch - tick <= 300 and
                     (failure is None or (success is not None and failure <= success)))
                 last_run = status.get('last_run')
@@ -52,7 +53,7 @@ def job_status(db):
     external = db.query(ServiceEvent).filter_by(area='external-backup').order_by(
         ServiceEvent.created_at.desc(), ServiceEvent.id.desc()).first()
     healthy = bool(complete and external and external.status == 200 and
-                   external.created_at >= utc_now() - timedelta(minutes=2160))
+                   now - timedelta(minutes=2160) <= external.created_at <= now)
     result['external_backup'] = {'configured': configured, 'healthy': healthy if configured else None,
                                 'last_run': external.created_at.isoformat() + 'Z' if external else None}
     overdue = db.query(PlannedTransaction.id).filter(PlannedTransaction.status == 'scheduled',

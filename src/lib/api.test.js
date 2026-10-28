@@ -53,3 +53,16 @@ it('removing keep-me-signed-in deletes the persisted token', () => {
   expect(auth.token).toBe('')
   expect(localStorage.getItem('flowbudget_token')).toBeNull()
 })
+
+it('rejects an unconfirmed save and reuses its key on retry', async () => {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce({ ok: true, status: 201, json: async () => { throw new SyntaxError('Truncated JSON') } })
+    .mockResolvedValueOnce({ ok: true, status: 201, json: async () => ({ id: 6 }) })
+  vi.stubGlobal('fetch', fetchMock)
+  try {
+    const options = { method: 'POST', body: JSON.stringify({ name: 'Retry wallet' }) }
+    await expect(api('/api/wallets', options)).rejects.toMatchObject({ network: true })
+    expect(await api('/api/wallets', options)).toEqual({ id: 6 })
+    expect(fetchMock.mock.calls[1][1].headers.get('Idempotency-Key')).toBe(fetchMock.mock.calls[0][1].headers.get('Idempotency-Key'))
+  } finally { vi.unstubAllGlobals() }
+})

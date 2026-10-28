@@ -26,3 +26,26 @@ def test_probe_handles_unexpected_json(monkeypatch):
     assert not monitor.healthy('https://example.invalid/api/health/ready')
     response.read.return_value = b'{"ok":true}'
     assert monitor.healthy('https://example.invalid/api/health/ready')
+
+
+def test_probe_retries_transport_disconnects(monkeypatch):
+    from http.client import IncompleteRead, RemoteDisconnected
+    request = Mock(side_effect=[RemoteDisconnected(), IncompleteRead(b'partial'), OSError('private')])
+    monkeypatch.setattr(monitor, 'urlopen', request)
+    monkeypatch.setattr(monitor.time, 'sleep', Mock())
+    assert not monitor.healthy('https://example.invalid/api/health/ready')
+    assert request.call_count == 3
+    assert monitor.time.sleep.call_count == 2
+
+
+def test_probe_recovers_and_requests_no_intermediary_cache(monkeypatch):
+    response = Mock(status=200)
+    response.read.return_value = b'{"ok":true}'
+    response.__enter__ = Mock(return_value=response)
+    response.__exit__ = Mock(return_value=False)
+    request = Mock(side_effect=[URLError('private'), response])
+    monkeypatch.setattr(monitor, 'urlopen', request)
+    monkeypatch.setattr(monitor.time, 'sleep', Mock())
+    assert monitor.healthy('https://example.invalid/api/health/ready')
+    assert request.call_count == 2
+    assert request.call_args.args[0].get_header('Cache-control') == 'no-cache'

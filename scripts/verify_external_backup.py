@@ -2,6 +2,7 @@
 import argparse
 from contextlib import closing
 import gzip
+import hashlib
 import io
 import json
 import os
@@ -11,6 +12,7 @@ from cryptography.fernet import Fernet
 
 MAX_ARCHIVE_BYTES = 40_000_000
 MAX_JSON_BYTES = 25_000_000
+MAX_RUN_ACCOUNTS = 10_000
 
 
 def read_archive(stream):
@@ -57,13 +59,65 @@ def decode_backup(encrypted, secret):
     return data
 
 
+def verify_run(client, bucket, manifest_key, secret):
+    """Read every archive from one completed run; never write or restore records.
+
+    The authenticated manifest is the commit marker. Refuse cross-run references
+    before reading any account archive. Legacy manifests without digests remain
+    supported, with Fernet authentication for each archive.
+    """
+    parts = manifest_key.split('/')
+    if (len(parts) not in (3, 4) or parts[0] != 'budgetly'
+            or parts[-1] != 'manifest.json.gz.enc'
+            or any(part in ('', '.', '..') for part in parts)):
+        raise ValueError('Select a completed Budgetly manifest')
+    with closing(client.get_object(Bucket=bucket, Key=manifest_key)['Body']) as body:
+        manifest = decode_backup(read_archive(body), secret)
+    if manifest.get('kind') != 'budgetly-account-recovery-manifest':
+        raise ValueError('Select a completed Budgetly manifest')
+    accounts = manifest['accounts']
+    if len(accounts) > MAX_RUN_ACCOUNTS:
+        raise ValueError('Recovery manifest exceeds account limit')
+    prefix = manifest_key.rsplit('/', 1)[0]
+    for account in accounts:
+        if account['archive_key'] != f"{prefix}/user-{account['id']}.json.gz.enc":
+            raise ValueError('Recovery manifest references another run')
+        digest, size = account.get('archive_sha256'), account.get('archive_bytes')
+        if ('archive_sha256' in account) != ('archive_bytes' in account):
+            raise ValueError('Incomplete archive integrity metadata')
+        if 'archive_sha256' in account and (not isinstance(digest, str) or len(digest) != 64
+                or any(char not in '0123456789abcdef' for char in digest)
+                or type(size) is not int or not 0 < size <= MAX_ARCHIVE_BYTES):
+            raise ValueError('Invalid archive integrity metadata')
+    totals = dict.fromkeys(('wallets', 'transactions', 'spaces', 'receipts', 'notes'), 0)
+    for account in accounts:
+        with closing(client.get_object(Bucket=bucket, Key=account['archive_key'])['Body']) as body:
+            encrypted = read_archive(body)
+        if 'archive_sha256' in account and (len(encrypted) != account['archive_bytes']
+                or hashlib.sha256(encrypted).hexdigest() != account['archive_sha256']):
+            raise ValueError('Archive integrity does not match the completed manifest')
+        data = decode_backup(encrypted, secret)
+        if data.get('kind') == 'budgetly-account-recovery-manifest':
+            raise ValueError('Manifest account entry is not a workspace archive')
+        for name in totals:
+            rows = data.get(name, [])
+            if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+                raise ValueError('Invalid workspace collection')
+            totals[name] += len(rows)
+    return {'verified': True, 'accounts': len(accounts), 'records': totals,
+            'integrity_metadata': all('archive_sha256' in row for row in accounts)}
+
+
 def main():
     parser = argparse.ArgumentParser(description='Verify a Budgetly external backup')
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument('--file', type=Path, help='Downloaded encrypted backup file')
     source.add_argument('--key', help='S3 object key under the configured bucket')
+    source.add_argument('--run', help='Verify every archive in this S3 manifest; aggregate output only')
     parser.add_argument('--output', type=Path, help='Write the restored JSON to this local file')
     args = parser.parse_args()
+    if args.run and args.output:
+        parser.error('--run never extracts financial records; omit --output')
     secret = os.environ.get('BACKUP_ENCRYPTION_KEY')
     if not secret:
         parser.error('BACKUP_ENCRYPTION_KEY is required')
@@ -80,6 +134,9 @@ def main():
                               endpoint_url=os.getenv('BACKUP_S3_ENDPOINT_URL') or None,
                               aws_access_key_id=os.environ['BACKUP_S3_ACCESS_KEY_ID'],
                               aws_secret_access_key=os.environ['BACKUP_S3_SECRET_ACCESS_KEY'])
+        if args.run:
+            print(json.dumps(verify_run(client, os.environ['BACKUP_S3_BUCKET'], args.run, secret.encode())))
+            return
         with closing(client.get_object(Bucket=os.environ['BACKUP_S3_BUCKET'], Key=args.key)['Body']) as body:
             encrypted = read_archive(body)
     data = decode_backup(encrypted, secret.encode())

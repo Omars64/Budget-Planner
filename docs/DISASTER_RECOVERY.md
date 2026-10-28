@@ -41,6 +41,27 @@ The `/api/maintenance/daily` Vercel cron uses `CRON_SECRET`. In Admin > Service 
 
 ## Verify and restore
 
+New external manifests include the encrypted byte length and SHA-256 digest of
+each account archive. The daily backup reads every encrypted archive and manifest
+back from storage and compares those bytes before recording a successful run.
+This verifies delivery and read permission without exporting plaintext. A failed
+read-back leaves the run unhealthy even when its uploads completed.
+Verify a complete run later without extracting financial records:
+
+```powershell
+python scripts/verify_external_backup.py --run budgetly/YYYY-MM-DD/RUN-ID/manifest.json.gz.enc
+```
+
+This downloads and authenticates every referenced archive, checks integrity
+metadata where available, refuses cross-run references, and prints aggregate
+counts only. It never restores records or writes plaintext files. Earlier manifests
+remain readable and each legacy archive is still authenticated with Fernet.
+Run verification proves readable encrypted delivery and basic structure; the
+isolated application restore below separately proves application compatibility.
+An account archive is not a full PostgreSQL identity/credential backup. A provider
+snapshot/dump and protected deployment configuration are still needed to recover
+the entire service, and identities must be re-established safely.
+
 Once a month, use a backup from the previous day:
 
 1. Run `python scripts/verify_external_backup.py --key budgetly/YYYY-MM-DD/RUN-ID/user-ID.json.gz.enc --output isolated-test-backup.json` on a secure machine with the backup environment variables available. The script decrypts, decompresses, checks the format, and reports record counts without printing transaction content. Choose a run that contains its completed manifest.
