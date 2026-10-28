@@ -1,4 +1,10 @@
 {
+  "6.5.6": [
+    {"title":"Safer upcoming entries","detail":"Retrying a scheduled save no longer creates duplicate plans. Conflicting edits ask you to reload the latest entry, and Viewer permissions apply consistently after a role change."},
+    {"title":"Clearer offline entry controls","detail":"Offline entries distinguish unsent drafts from uploads that may already have reached your wallet, so discarding a local entry cannot silently race with syncing."},
+    {"title":"Browser offline and notifications together","detail":"Browser push notifications and offline reopening now share one service worker, so enabling notifications no longer replaces offline support."},
+    {"title":"Continuous reliability checks","detail":"Release checks now exercise concurrent PostgreSQL load and browser offline persistence using isolated synthetic records, without connecting to production data. Compatible dependency security patches are included.","audience":"admin"}
+  ],
   "6.5.5": [
     {"title":"Older backup compatibility","detail":"Older backups with Space entries now recover their category labels correctly, with a clear explanation before you confirm restoration. Transaction amounts, dates and descriptions are preserved."},
     {"title":"Non-destructive recovery compatibility","detail":"Archive export and import reconcile legacy personal-category references into declared Spaces without rewriting live ledger rows. Cross-Space links and malformed archives remain rejected.","audience":"admin"}

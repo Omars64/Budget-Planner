@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api, auth, flushOfflineTransactions, readCached } from './api'
-import { listOfflineQueue, setOfflineUser, syncOfflineQueue } from './offlineSync'
+import { discardOfflineTransaction, listOfflineQueue, setOfflineUser, syncOfflineQueue } from './offlineSync'
 import {deleteOffline} from './offlineStore'
 
 const records = vi.hoisted(() => new Map())
@@ -8,6 +8,12 @@ vi.mock('./offlineStore', () => ({
   readOffline: vi.fn(async key => records.get(key)),
   writeOffline: vi.fn(async (key, value) => { records.set(key, value) }),
   deleteOffline: vi.fn(async key => { records.delete(key) }),
+  updateOffline: vi.fn(async (key, update) => {
+    const value = update(records.get(key))
+    if (value === undefined) records.delete(key)
+    else records.set(key, value)
+    return value
+  }),
   listOffline: vi.fn(async prefix => [...records.entries()].filter(([key]) => key.startsWith(prefix)).map(([key, value]) => ({ key, value }))),
   clearOfflineCache: vi.fn(async () => {}),
 }))
@@ -20,13 +26,71 @@ beforeEach(() => {
 })
 
 describe('offline transaction sync', () => {
+  it('does not post a later batch entry discarded while the first is in flight', async () => {
+    setOfflineUser(4)
+    for (const id of ['first', 'second']) records.set(`queue:4:${id}`, {
+      id, key:id, path:'/api/transactions', body:JSON.stringify({description:id}), status:'pending', attempted:false,
+    })
+    let release, started
+    const entered = new Promise(resolve => { started = resolve })
+    const send = vi.fn(() => { started(); return new Promise(resolve => { release = resolve }) })
+    const sync = syncOfflineQueue(send, 'synthetic', 4)
+    await entered
+    await discardOfflineTransaction('second', 4)
+    await expect(discardOfflineTransaction('first', 4)).rejects.toThrow('may already have reached')
+    release()
+    await sync
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(await listOfflineQueue(4)).toEqual([])
+  })
+
+  it('preserves an uncertain committed save and retries with its original key', async () => {
+    setOfflineUser(4)
+    records.set('queue:4:entry', {id:'entry',key:'original',path:'/api/transactions',body:'{}',status:'pending',attempted:false})
+    const committed = new Set()
+    const send = vi.fn(async (_path, options) => {
+      committed.add(options.headers.get('Idempotency-Key'))
+      if (send.mock.calls.length === 1) throw Object.assign(new Error('Lost response'), {network:true})
+    })
+    await syncOfflineQueue(send, 'synthetic', 4)
+    await expect(discardOfflineTransaction('entry', 4)).rejects.toThrow('cannot undo a server save')
+    expect(await listOfflineQueue(4)).toHaveLength(1)
+    await syncOfflineQueue(send, 'synthetic', 4)
+    expect([...committed]).toEqual(['original'])
+    expect(await listOfflineQueue(4)).toEqual([])
+  })
+
+  it('keeps initial online attempts uncertain even when connectivity drops before fallback', async () => {
+    setOfflineUser(4)
+    auth.token = 'synthetic'
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      vi.stubGlobal('navigator', {onLine:false})
+      throw new TypeError('Lost response')
+    }))
+    await api('/api/transactions', {method:'POST',body:'{"amount":8}'})
+    const [row] = await listOfflineQueue(4)
+    expect(row.attempted).toBe(true)
+    await expect(discardOfflineTransaction(row.id, 4)).rejects.toThrow('may already have reached')
+  })
+
+  it('allows a never-attempted offline save to be discarded without any POST', async () => {
+    setOfflineUser(4)
+    auth.token = 'synthetic'
+    vi.stubGlobal('navigator', {onLine:false})
+    vi.stubGlobal('fetch', vi.fn())
+    const saved = await api('/api/transactions', {method:'POST',body:'{"amount":9}'})
+    await discardOfflineTransaction(saved.offline_id, 4)
+    expect(await listOfflineQueue(4)).toEqual([])
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
   it('keeps an unconfirmed queued write pending when its account signs out', async () => {
     setOfflineUser(4)
     const record={id:'pending',key:'stable-key',path:'/api/transactions',body:'{}',status:'pending'}
     records.set('queue:4:pending',record)
     const send=vi.fn(async()=>{setOfflineUser(5);throw Object.assign(new Error('Account changed'),{staleAuth:true})})
     await syncOfflineQueue(send,'synthetic-token',4)
-    expect(await listOfflineQueue(4)).toEqual([record])
+    expect(await listOfflineQueue(4)).toEqual([{...record, attempted:true}])
     expect(await listOfflineQueue(5)).toEqual([])
   })
 

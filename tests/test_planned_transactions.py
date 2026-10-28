@@ -10,7 +10,7 @@ from sqlalchemy.pool import StaticPool
 from api.app import app
 from api.database import Base, get_db
 from api.index import current_user, export_backup
-from api.models import PlannedTransaction, Transaction, User, Wallet, WalletShare
+from api.models import PlannedTransaction, Transaction, User, Wallet, WalletShare, Space, SpaceMember
 from api.planned import post_due
 from api.timekeeping import now as ledger_now
 
@@ -49,6 +49,124 @@ def payload(wallet_id, status='scheduled'):
         'description': 'Upcoming bill', 'notes': '', 'date': due,
         'transfer_wallet_id': None, 'category_id': None,
         'recurring_frequency': 'none', 'recurring_until': None}}
+
+
+def shared_space(db, owner, member, wallet):
+    space = Space(owner_id=owner.id, name='Synthetic Space', currency='KWD')
+    db.add(space); db.flush()
+    wallet.space_id = space.id
+    membership = SpaceMember(space_id=space.id, email=member.email,
+                             member_user_id=member.id, role='edit')
+    db.add(membership); db.commit()
+    return space, membership
+
+
+@pytest.mark.parametrize('scoped', [False, True])
+def test_plan_creation_replay_posts_only_one_entry(workspace, scoped):
+    client, db, _, owner, member, wallet = workspace
+    suffix = ''
+    if scoped:
+        space, _ = shared_space(db, owner, member, wallet)
+        suffix = f'?space_id={space.id}'
+    body = payload(wallet.id)
+    path = '/api/planned-transactions' + suffix
+    headers = {'Idempotency-Key': 'plan-retry'}
+    first = client.post(path, json=body, headers=headers)
+    assert first.status_code == 201, first.text
+    assert client.post(path, json=body, headers=headers).json() == first.json()
+    assert client.post(path, json={**body, 'revision': first.json()['revision']}, headers=headers).json() == first.json()
+    changed = {**body, 'reminder_enabled': False}
+    assert client.post(path, json=changed, headers=headers).status_code == 409
+    assert db.query(PlannedTransaction).count() == 1
+    plan = db.get(PlannedTransaction, first.json()['id'])
+    plan.due_at = ledger_now() - timedelta(minutes=1)
+    db.commit()
+    # A lost creation response can also be retried after scheduling has completed.
+    assert post_due(db) == 1
+    replay = client.post(path, json=body, headers=headers)
+    assert replay.status_code == 201, replay.text
+    assert replay.json() == first.json()
+    assert post_due(db) == 0
+    assert db.query(Transaction).count() == 1
+
+
+@pytest.mark.parametrize('scope', ['legacy', 'space-unscoped', 'space-scoped'])
+def test_downgraded_creator_cannot_edit_move_or_delete_plan(workspace, scope):
+    client, db, actor, owner, member, wallet = workspace
+    membership = None
+    suffix = ''
+    if scope != 'legacy':
+        space, membership = shared_space(db, owner, member, wallet)
+        if scope == 'space-scoped':
+            suffix = f'?space_id={space.id}'
+    share = db.query(WalletShare).one()
+    share.permission = 'edit'; db.commit()
+    actor['user'] = member
+    body = payload(wallet.id)
+    created = client.post('/api/planned-transactions' + suffix, json=body)
+    assert created.status_code == 201, created.text
+    row = created.json()
+    share.permission = 'view'
+    if membership:
+        membership.role = 'view'
+    db.commit()
+    listed = client.get('/api/planned-transactions' + suffix)
+    assert listed.status_code == 200, listed.text
+    assert listed.json()[0]['can_edit'] is False
+    path = f"/api/planned-transactions/{row['id']}" + suffix
+    assert client.put(path, json={**body, 'revision': row['revision']}).status_code == 403
+    assert client.delete(path, headers={'If-Match': row['revision']}).status_code == 403
+    assert db.get(PlannedTransaction, row['id']) is not None
+    if scope != 'space-scoped':
+        own_wallet = Wallet(user_id=member.id, name='Member personal', initial_balance=0)
+        db.add(own_wallet); db.commit()
+        moved = payload(own_wallet.id)
+        assert client.put(path, json={**moved, 'revision': row['revision']}).status_code == 403
+
+
+@pytest.mark.parametrize('use_header', [False, True])
+def test_plan_revision_rejects_stale_drafts_and_deletes(workspace, use_header):
+    client, db, _, _, _, wallet = workspace
+    original = payload(wallet.id)
+    created = client.post('/api/planned-transactions', json=original).json()
+    revision = created['revision']
+    assert len(revision) == 64
+    assert client.get('/api/planned-transactions').json()[0]['revision'] == revision
+    path = f"/api/planned-transactions/{created['id']}"
+    missing = client.put(path, json=original)
+    assert missing.status_code == 409
+    assert missing.json()['detail'] == 'Update or refresh Budgetly, then reopen this planned entry before editing it.'
+    changed = {**original, 'transaction': {**original['transaction'], 'amount': '9.000'}}
+    options = {'headers': {'If-Match': revision}} if use_header else {}
+    if not use_header:
+        changed['revision'] = revision
+    saved = client.put(path, json=changed, **options)
+    assert saved.status_code == 200, saved.text
+    assert saved.json()['revision'] != revision
+    assert client.put(path, json={**original, 'revision': saved.json()['revision']},
+                      headers={'If-Match': revision}).status_code == 409
+    stale = {**original, 'revision': revision,
+             'transaction': {**original['transaction'], 'notes': 'Stale device notes'}}
+    assert client.put(path, json=stale, **options).status_code == 409
+    db.expire_all()
+    assert db.get(PlannedTransaction, created['id']).amount == Decimal('9.000')
+    assert client.delete(path, headers={'If-Match': revision}).status_code == 409
+    assert client.delete(path, headers={'If-Match': saved.json()['revision']}).status_code == 204
+
+
+@pytest.mark.parametrize('role', ['edit', 'add'])
+def test_current_shared_creator_can_update_and_delete(workspace, role):
+    client, db, actor, _, member, wallet = workspace
+    db.query(WalletShare).one().permission = role; db.commit()
+    actor['user'] = member
+    body = payload(wallet.id)
+    created = client.post('/api/planned-transactions', json=body).json()
+    assert created['can_edit'] is True
+    path = f"/api/planned-transactions/{created['id']}"
+    saved = client.put(path, json={**body, 'revision': created['revision'], 'reminder_enabled': False})
+    assert saved.status_code == 200, saved.text
+    # Legacy clients may still delete without a revision, subject to current permissions.
+    assert client.delete(path).status_code == 204
 
 
 def test_scheduled_plan_posts_once_and_not_before_due(workspace):

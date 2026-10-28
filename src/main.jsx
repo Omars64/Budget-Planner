@@ -57,7 +57,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 )
 
 if (import.meta.env.PROD && !Capacitor.isNativePlatform() && 'serviceWorker' in navigator) {
-  const register = () => { void navigator.serviceWorker.register('/sw.js').catch(() => {}) }
+  const register = () => { void navigator.serviceWorker.register('/budgetly-push-sw.js', { scope: '/' }).catch(() => {}) }
   if (document.readyState === 'complete') register()
   else window.addEventListener('load', register, { once: true })
 }

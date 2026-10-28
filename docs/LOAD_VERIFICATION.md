@@ -1,5 +1,21 @@
 # Isolated PostgreSQL Load Verification
 
+## Release regression gate
+
+The quality workflow now runs the existing 32-worker, 30-second workload on a
+fresh PostgreSQL 17 service for each pull request and main-branch push. It uses
+20 synthetic accounts and 20,060 initial entries, with concurrent dashboard,
+transaction and analytics reads, creates and idempotent replays. The job fails
+on any request error or final ledger/receipt reconciliation failure and retains
+aggregate evidence as the `postgres-load-evidence` Actions artifact, including
+on failure. It has no production credentials or application deployment target.
+
+Latency and throughput remain observations rather than fixed acceptance limits:
+shared CI hardware varies. This gate detects correctness and availability
+regressions in this bounded workload; it does not establish production capacity.
+The Android release launcher waits for the complete quality workflow, including
+this job, before publishing an APK.
+
 Run from the repository root using the project's Python environment, in a fresh
 process. This harness refuses application API URLs, remote or ambiguous database
 hosts, connection query overrides, other databases, and ports other than 55432.

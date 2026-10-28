@@ -1,0 +1,41 @@
+name: Browser reliability
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  browser-reliability:
+    name: Synthetic offline browser gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: npm ci
+      - run: python -m pip install -r requirements.txt
+      - run: npx playwright install --with-deps chromium
+      - name: Verify real IndexedDB coordination across tabs
+        run: npx vitest run src/lib/offlineStore.test.js
+        env:
+          FLOWBUDGET_PLAYWRIGHT: '@playwright/test'
+          FLOWBUDGET_BROWSER_CHANNEL: chromium
+      - name: Build same-origin production shell without inherited Vite configuration
+        shell: bash
+        run: |
+          for file in .env .env.local .env.browser-reliability .env.browser-reliability.local; do
+            if [[ -e "$file" || -L "$file" ]]; then
+              echo 'Browser gate requires a checkout without active dotenv files'
+              exit 1
+            fi
+          done
+          env -i PATH="$PATH" HOME="$HOME" CI=true node node_modules/vite/bin/vite.js build --mode browser-reliability --base /
+      - run: python scripts/browser-reliability-server.py --self-test
+      - run: node scripts/verify-offline-browser.mjs
+        env:
+          CI: 'true'

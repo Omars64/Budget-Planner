@@ -50,3 +50,28 @@ it('uses the shared calendar and clock and keeps the reminder label visible when
   const body = JSON.parse(api.mock.calls.find(([path, options]) => path === '/api/planned-transactions' && options?.method === 'POST')[1].body)
   expect(body).toMatchObject({ reminder_enabled: true, transaction: { type: 'expense', description: 'Lunch', amount: 2.25, wallet_id: 1 } })
 })
+
+it('keeps a conflicting draft visible and reloads the current revision only after confirmation', async () => {
+  const original = { ...rows[0], revision: 'plan-original' }
+  let plans = [original]
+  api.mockImplementation((path, options) => {
+    if (options?.method === 'PUT') {
+      plans = [{ ...original, amount: 25, revision: 'plan-newer' }]
+      return Promise.reject(Object.assign(new Error('This entry changed. Reload before saving.'), { status: 409 }))
+    }
+    return Promise.resolve(path === '/api/planned-transactions' ? plans : path === '/api/wallets' ? [{ id: 1, name: 'Main', archived: false, is_shared: false }] : [])
+  })
+  render(<Upcoming/>)
+  fireEvent.click(await screen.findByRole('button', { name: 'Edit October rent' }))
+  fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'My unsaved correction' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Save entry' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('This entry changed')
+  const update = api.mock.calls.find(([, options]) => options?.method === 'PUT')
+  expect(JSON.parse(update[1].body)).toMatchObject({ revision: 'plan-original' })
+  expect(screen.getByLabelText('Description')).toHaveValue('My unsaved correction')
+  expect(screen.getByRole('button', { name: 'Save entry' })).toBeDisabled()
+  fireEvent.click(screen.getByRole('button', { name: 'Reload latest entry' }))
+  await waitFor(() => expect(screen.getByLabelText('Amount (KWD)')).toHaveValue(25))
+  expect(screen.getByLabelText('Description')).toHaveValue('October rent')
+  expect(screen.getByRole('button', { name: 'Save entry' })).toBeEnabled()
+})

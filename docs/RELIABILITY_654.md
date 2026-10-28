@@ -40,8 +40,14 @@ backup copies; the proposed 30-day lifecycle rule was cancelled without applying
 At the free capacity limit, uploads can stop; retained files are not silently
 deleted to make space. Protect the encryption key outside the hosting account.
 
-Deployment and a real completed upload/read-back still need verification. Local
-tests do not substitute for those live checks. No production restore is allowed.
+Production verification completed on 28 October 2026: v6.5.4 uploaded encrypted
+archives for all ten then-active accounts and read every object back before
+recording success. A downloaded real archive subsequently passed isolated
+restoration with matching balances, memberships and attachment content after
+the legacy-category compatibility fix in v6.5.5. See RECOVERY_COMPATIBILITY_655.md.
+The owner confirmed a protected encryption-key copy outside Vercel. A fresh
+v6.5.5 backup reported healthy at 16:00 Kuwait. These are point-in-time checks;
+no production restore or replacement of user financial records was performed.
 
 ## Local evidence
 

@@ -102,6 +102,54 @@ def transaction(api, wallet, description='New'):
         description=description, date=api.index.ledger_now(), recurring_frequency='none')
 
 
+@pytest.mark.parametrize('scoped', [False, True])
+def test_planned_creation_concurrent_replay(api, ledger, monkeypatch, scoped):
+    """A retry waits for the first owner's commit and returns its one saved result."""
+    entered, resume, started = threading.Event(), threading.Event(), threading.Event()
+    pids = {}
+    original = api.planned.validate_plan
+    def pause(db, user, payload, existing=None):
+        wallet = original(db, user, payload, existing)
+        if threading.current_thread().name.startswith('plan-first'):
+            entered.set(); wait(resume)
+        return wallet
+    monkeypatch.setattr(api.planned, 'validate_plan', pause)
+    body = api.planned.PlanIn(transaction=transaction(api, ledger.wallet), status='planned')
+    actor_id = ledger.member if scoped else ledger.owner
+    suffix = f'?space_id={ledger.space}' if scoped else ''
+    def create(label):
+        with Session(api.engine, autoflush=False) as db:
+            actor = db.get(api.m.User, actor_id)
+            pids[label] = db.scalar(text('SELECT pg_backend_pid()'))
+            if label == 'retry':
+                started.set()
+            req = request('/api/planned-transactions' + suffix, 'POST',
+                          headers={'Idempotency-Key': 'concurrent-plan'})
+            api.spaces.establish_scope(req, db, actor)
+            return api.planned.create_plan(body, req, actor, db)
+    with ThreadPoolExecutor(max_workers=1, thread_name_prefix='plan-first') as first_pool, \
+         ThreadPoolExecutor(max_workers=1, thread_name_prefix='plan-retry') as retry_pool:
+        first = first_pool.submit(create, 'first')
+        try:
+            wait(entered)
+            retry = retry_pool.submit(create, 'retry')
+            wait(started); blocked(api.engine, pids['retry'], pids['first'])
+        finally:
+            resume.set()
+        result = first.result(timeout=5)
+        assert retry.result(timeout=5) == result
+    with Session(api.engine) as db:
+        assert db.query(api.m.PlannedTransaction).filter_by(owner_id=ledger.owner).count() == 1
+        receipt = db.query(api.m.RequestReceipt).filter_by(user_id=actor_id, key='concurrent-plan').one()
+        assert json.loads(receipt.response) == result
+        plan = db.get(api.m.PlannedTransaction, result['id'])
+        plan.status = 'scheduled'; plan.due_at = api.index.ledger_now() - timedelta(minutes=1)
+        db.commit()
+        assert api.planned.post_due(db) == 1
+        assert api.planned.post_due(db) == 0
+        assert db.query(api.m.Transaction).filter_by(user_id=ledger.owner, description='New').count() == 1
+
+
 def test_receipt_reauthorizes_after_limiter_commit(api, ledger, monkeypatch):
     import base64
     import io
@@ -575,6 +623,7 @@ def main():
     parser.add_argument('--load-workers', type=int, choices=[16, 32])
     parser.add_argument('--seconds', type=int, default=15, choices=range(1, 31))
     parser.add_argument('--reproduce-read-claims', action='store_true')
+    parser.add_argument('--test-pattern', help='Run only coordination tests matching this pytest expression')
     args = parser.parse_args()
     url = harness.validate_url(args.url)
     if any(name == 'api' or name.startswith('api.') for name in sys.modules):
@@ -595,8 +644,9 @@ def main():
                         return diagnose_load(engine, args.load_workers, args.seconds)
                     finally:
                         engine.dispose()
+                selection = ['-k', args.test_pattern] if args.test_pattern else []
                 return pytest.main([str(Path(__file__).resolve()), '-q', '--noconftest',
-                                    '--tb=short', '-p', 'no:cacheprovider'])
+                                    '--tb=short', '-p', 'no:cacheprovider', *selection])
         finally:
             admin.dispose()
 

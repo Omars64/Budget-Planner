@@ -30,6 +30,28 @@ async function access(mode, operation) {
 export const readOffline = key => access('readonly', store => store.get(key))
 export const writeOffline = (key, value) => access('readwrite', store => store.put(value, key))
 export const deleteOffline = key => access('readwrite', store => store.delete(key))
+// The callback must be synchronous: IndexedDB serializes this read and mutation
+// with other tabs' readwrite transactions. Resolve only after commit.
+export async function updateOffline(key, update) {
+  const db = await database()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite')
+    const store = tx.objectStore(STORE)
+    const request = store.get(key)
+    let result
+    let failure
+    request.onsuccess = () => {
+      try {
+        result = update(request.result)
+        if (result === undefined) store.delete(key)
+        else store.put(result, key)
+      } catch (error) { failure = error; tx.abort() }
+    }
+    tx.oncomplete = () => resolve(result)
+    tx.onabort = () => reject(failure || tx.error || new Error('Device storage failed.'))
+    tx.onerror = () => reject(failure || tx.error || new Error('Device storage failed.'))
+  })
+}
 export const listOffline = async prefix => {
   const db = await database()
   return new Promise((resolve, reject) => {

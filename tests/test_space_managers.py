@@ -123,7 +123,7 @@ def test_manager_manages_wallet_category_budget_and_upcoming(spaces):
     assert plan.status_code == 201, plan.text
     actor['id'] = ids['member']
     path = f"/api/planned-transactions/{plan.json()['id']}" + scope
-    edited = client.put(path, json=payload)
+    edited = client.put(path, json=payload, headers={'If-Match': plan.json()['revision']})
     assert edited.status_code == 200, edited.text
     assert client.delete(path).status_code == 204
     assert client.put(f"/api/spaces/{ids['space']}/members",json={'email':'other@example.com','role':'edit'}).status_code == 403

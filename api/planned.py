@@ -1,18 +1,20 @@
 """Upcoming ledger entries. Plans never affect balances until posted."""
+import hashlib
+import json
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
 from .database import get_db
 from .spaces import workspace_actor
-from .index import current_user
 from .models import Category, PlannedTransaction, Transaction, User, Wallet, WalletShare
-from .extensions import can_edit_wallet, share_for_wallet, shared_wallet_ids
+from .extensions import share_for_wallet, shared_wallet_ids
 from .schemas import TransactionIn
 from .timekeeping import ledger_iso, now as ledger_now
 from .coordination import lock_owners, lock_wallet_owners, lock_record
+from .idempotency import reserve
 
 router = APIRouter()
 
@@ -21,6 +23,7 @@ class PlanIn(BaseModel):
     transaction: TransactionIn
     status: Literal['planned', 'scheduled'] = 'planned'
     reminder_enabled: bool = True
+    revision: str | None = None
 
     @field_validator('transaction',mode='before')
     @classmethod
@@ -33,6 +36,36 @@ class PlanIn(BaseModel):
 def access(db, user, wallet_id):
     wallet, permission, _ = share_for_wallet(db, user, wallet_id)
     return wallet, permission
+
+
+def can_change_plan(db, user, row):
+    for wallet_id in (row.wallet_id, row.transfer_wallet_id):
+        if wallet_id is None:
+            continue
+        try:
+            _, permission = access(db, user, wallet_id)
+        except HTTPException as error:
+            if error.status_code not in (403, 404):
+                raise
+            return False
+        if permission != 'edit' and not (permission == 'add' and row.created_by_id == user.id):
+            return False
+    return True
+
+
+def plan_revision(row):
+    values = [str(getattr(row, column.name)) for column in PlannedTransaction.__table__.columns]
+    return hashlib.sha256(json.dumps(values).encode()).hexdigest()
+
+
+def check_plan_revision(request, row, revision=None, required=True):
+    expected = request.headers.get('If-Match') or revision
+    if not expected:
+        if required:
+            raise HTTPException(409, 'Update or refresh Budgetly, then reopen this planned entry before editing it.')
+        return
+    if expected != plan_revision(row):
+        raise HTTPException(409, 'This planned entry changed on another device. Your draft is kept; reload the latest entry before saving.')
 
 
 def validate_plan(db, user, payload, existing=None):
@@ -61,6 +94,7 @@ def serialize(db, row, user):
     owner = db.get(User, row.owner_id)
     category = db.get(Category, row.category_id) if row.category_id else None
     return {
+        'revision': plan_revision(row),
         'id': row.id, 'type': row.type, 'amount': float(row.amount),
         'description': row.description, 'notes': row.notes, 'date': ledger_iso(row.due_at), 'reporting_month': row.reporting_month,
         'wallet_id': row.wallet_id, 'wallet_name': wallet.name if wallet else 'Deleted wallet',
@@ -70,7 +104,7 @@ def serialize(db, row, user):
         'shared': bool(wallet and wallet.user_id != user.id) or bool(wallet and db.query(WalletShare.id).filter_by(wallet_id=row.wallet_id).first()),
         'status': row.status, 'reminder_enabled': row.reminder_enabled,
         'posted_transaction_id': row.posted_transaction_id, 'error': row.error,
-        'can_edit': bool(wallet and (wallet.user_id == user.id or row.created_by_id == user.id or can_edit_wallet(db, user, row.wallet_id))),
+        'can_edit': bool(wallet and can_change_plan(db, user, row)),
     }
 
 
@@ -138,7 +172,15 @@ def list_plans(status: str = Query('all', pattern='^(all|planned|scheduled|poste
 
 
 @router.post('/api/planned-transactions', status_code=201)
-def create_plan(payload: PlanIn, user: User = Depends(workspace_actor), db: Session = Depends(get_db)):
+def create_plan(payload: PlanIn, request: Request, user: User = Depends(workspace_actor), db: Session = Depends(get_db)):
+    # Authorize before replay, but allow a committed request to replay after its due time.
+    lock_wallet_owners(db, payload.transaction.wallet_id, payload.transaction.transfer_wallet_id)
+    for wallet_id in (payload.transaction.wallet_id, payload.transaction.transfer_wallet_id):
+        if wallet_id is not None and access(db, user, wallet_id)[1] not in ('add', 'edit'):
+            raise HTTPException(403, 'You cannot add or edit plans for this wallet.')
+    receipt, previous = reserve(db, user.id, 'planned-transaction', request.headers.get('Idempotency-Key'), payload.model_copy(update={'revision': None}))
+    if previous is not None:
+        return previous
     wallet = validate_plan(db, user, payload)
     tx = payload.transaction
     row = PlannedTransaction(owner_id=wallet.user_id, created_by_id=user.id, wallet_id=tx.wallet_id,
@@ -146,18 +188,22 @@ def create_plan(payload: PlanIn, user: User = Depends(workspace_actor), db: Sess
         amount=tx.amount, description=tx.description, notes=tx.notes, due_at=tx.date,
         reporting_month=tx.reporting_month,
         status=payload.status, reminder_enabled=payload.reminder_enabled)
-    db.add(row); db.commit(); db.refresh(row)
-    return serialize(db, row, user)
+    db.add(row); db.flush(); db.refresh(row)
+    result = serialize(db, row, user)
+    if receipt:
+        receipt.response = json.dumps(result)
+    db.commit()
+    return result
 
 
 @router.put('/api/planned-transactions/{plan_id}')
-def update_plan(plan_id: int, payload: PlanIn, user: User = Depends(workspace_actor), db: Session = Depends(get_db)):
+def update_plan(plan_id: int, payload: PlanIn, request: Request, user: User = Depends(workspace_actor), db: Session = Depends(get_db)):
     row = lock_record(db, PlannedTransaction, plan_id, (payload.transaction.wallet_id, payload.transaction.transfer_wallet_id))
     if not row: raise HTTPException(404, 'Planned entry not found')
     if row.status == 'posted': raise HTTPException(409, 'This entry has already been recorded. Edit the transaction instead.')
-    access(db, user, row.wallet_id)
-    if row.created_by_id != user.id and row.owner_id != user.id and not can_edit_wallet(db, user, row.wallet_id):
+    if not can_change_plan(db, user, row):
         raise HTTPException(403, 'You cannot edit this entry.')
+    check_plan_revision(request, row, payload.revision)
     wallet = validate_plan(db, user, payload, row)
     tx = payload.transaction
     row.owner_id = wallet.user_id
@@ -173,11 +219,11 @@ def update_plan(plan_id: int, payload: PlanIn, user: User = Depends(workspace_ac
 
 
 @router.delete('/api/planned-transactions/{plan_id}', status_code=204)
-def delete_plan(plan_id: int, user: User = Depends(workspace_actor), db: Session = Depends(get_db)):
+def delete_plan(plan_id: int, request: Request, user: User = Depends(workspace_actor), db: Session = Depends(get_db)):
     row = lock_record(db, PlannedTransaction, plan_id)
     if not row: raise HTTPException(404, 'Planned entry not found')
-    access(db, user, row.wallet_id)
-    if row.created_by_id != user.id and row.owner_id != user.id and not can_edit_wallet(db, user, row.wallet_id):
+    if not can_change_plan(db, user, row):
         raise HTTPException(403, 'You cannot delete this entry.')
     if row.status == 'posted': raise HTTPException(409, 'This entry has already been recorded.')
+    check_plan_revision(request, row, required=False)
     db.delete(row); db.commit()

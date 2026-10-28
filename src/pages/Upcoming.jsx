@@ -48,6 +48,7 @@ export default function Upcoming() {
   const [draft, setDraft] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [conflict, setConflict] = useState(false)
   const [loading, setLoading] = useState(true)
   const editor = useRef(null)
 
@@ -63,6 +64,7 @@ export default function Upcoming() {
 
   const start = row => {
     setError('')
+    setConflict(false)
     if (row) setDraft({ ...row, status: row.status === 'failed' ? 'planned' : row.status, amount: String(row.amount), date: dateInput(row.date), reporting_month: row.reporting_month || String(row.date || '').slice(0, 7), wallet_id: String(row.wallet_id), transfer_wallet_id: row.transfer_wallet_id ? String(row.transfer_wallet_id) : '', category_id: row.category_id ? String(row.category_id) : '' })
     else setDraft({ ...empty(), wallet_id: String(wallets.find(w => w.editable)?.id || '') })
     window.requestAnimationFrame?.(() => editor.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' }))
@@ -90,13 +92,24 @@ export default function Upcoming() {
     if (draft.status === 'scheduled' && new Date(saveDate(draft.date)).getTime() <= Date.now()) { setError('Choose a future date and time for automatic recording.'); return }
     setBusy(true); setError('')
     try {
-      await api(draft.id ? `/api/planned-transactions/${draft.id}` : '/api/planned-transactions', { method: draft.id ? 'PUT' : 'POST', ...jsonBody({ status: draft.status === 'failed' ? 'planned' : draft.status, reminder_enabled: draft.reminder_enabled, transaction: { type: draft.type, amount: Number(draft.amount), description: draft.description.trim(), notes: draft.notes || '', date: saveDate(draft.date), reporting_month: draft.type === 'transfer' ? null : draft.reporting_month || null, wallet_id: Number(draft.wallet_id), transfer_wallet_id: draft.type === 'transfer' ? Number(draft.transfer_wallet_id) : null, category_id: draft.type === 'transfer' || !draft.category_id ? null : Number(draft.category_id), recurring_frequency: 'none', recurring_until: null } }) })
+      await api(draft.id ? `/api/planned-transactions/${draft.id}` : '/api/planned-transactions', { method: draft.id ? 'PUT' : 'POST', ...jsonBody({ ...(draft.id ? { revision: draft.revision } : {}), status: draft.status === 'failed' ? 'planned' : draft.status, reminder_enabled: draft.reminder_enabled, transaction: { type: draft.type, amount: Number(draft.amount), description: draft.description.trim(), notes: draft.notes || '', date: saveDate(draft.date), reporting_month: draft.type === 'transfer' ? null : draft.reporting_month || null, wallet_id: Number(draft.wallet_id), transfer_wallet_id: draft.type === 'transfer' ? Number(draft.transfer_wallet_id) : null, category_id: draft.type === 'transfer' || !draft.category_id ? null : Number(draft.category_id), recurring_frequency: 'none', recurring_until: null } }) })
       setDraft(null); await load(); void syncPlannedNotifications(user.id).catch(() => {}); notify('Upcoming entry saved')
+    } catch (err) { setError(err.message); setConflict(err.status === 409 && Boolean(draft.id)) } finally { setBusy(false) }
+  }
+  const reloadConflict = async () => {
+    if (!draft?.id || !await confirm('Reload the latest entry? Your unsaved edits in this form will be replaced.')) return
+    setBusy(true)
+    try {
+      const latest = await api('/api/planned-transactions')
+      setRows(latest)
+      const row = latest.find(item => item.id === draft.id)
+      if (row && row.can_edit && row.status !== 'posted') start(row)
+      else { setDraft(null); setConflict(false); setError('This entry was recorded, removed, or your access changed. Review the latest list.') }
     } catch (err) { setError(err.message) } finally { setBusy(false) }
   }
   const remove = async row => {
     if (!await confirm(`Delete "${row.description}" from upcoming entries?`)) return
-    try { await api(`/api/planned-transactions/${row.id}`, { method: 'DELETE' }); await load(); void syncPlannedNotifications(user.id).catch(() => {}); notify('Upcoming entry deleted') } catch (err) { notify(err.message, 'error') }
+    try { await api(`/api/planned-transactions/${row.id}`, { method: 'DELETE', ...(row.revision ? { headers: { 'If-Match': row.revision } } : {}) }); await load(); void syncPlannedNotifications(user.id).catch(() => {}); notify('Upcoming entry deleted') } catch (err) { notify(err.message, 'error') }
   }
 
   return <section className="upcoming-page">
@@ -107,6 +120,7 @@ export default function Upcoming() {
       <span className="upcoming-total">Net planned: {money(total, settings.currency)}</span>
     </div>
     {error && <p className="form-error" role="alert">{error}</p>}
+    {conflict && <button type="button" className="button ghost" disabled={busy} onClick={() => void reloadConflict()}>Reload latest entry</button>}
     {draft && <form ref={editor} className="upcoming-editor stack gap-12" onSubmit={save}>
       <div className="upcoming-editor-heading"><h4>{draft.id ? 'Edit entry' : 'New entry'}</h4><span className="muted">{draft.status === 'scheduled' ? 'Records automatically after the due time' : 'Plan only'}</span></div>
       <DateTimeField value={draft.date} onChange={value => change('date', value)} disabled={busy}/>
@@ -122,7 +136,7 @@ export default function Upcoming() {
       </div>
       <label className="field"><span>Recording</span><select value={draft.status} onChange={event => change('status', event.target.value)}><option value="planned">Plan only</option><option value="scheduled">Auto record</option></select></label>
       <label className="upcoming-reminder"><input type="checkbox" checked={draft.reminder_enabled} onChange={event => change('reminder_enabled', event.target.checked)}/><Bell size={19}/><span>Remind me</span></label>
-      <div className="modal-actions"><button type="button" className="button ghost" onClick={() => { setDraft(null); setError('') }}>Cancel</button><button className="button primary" disabled={busy}>{busy ? 'Saving...' : 'Save entry'}</button></div>
+      <div className="modal-actions"><button type="button" className="button ghost" onClick={() => { setDraft(null); setError(''); setConflict(false) }}>Cancel</button><button className="button primary" disabled={busy || conflict}>{busy ? 'Saving...' : 'Save entry'}</button></div>
     </form>}
     <div className="upcoming-records" aria-live="polite">
       {loading ? <p className="upcoming-empty">Loading upcoming records...</p> : displayed.length === 0 ? <p className="upcoming-empty">No entries in this view.</p> : displayed.map(row => <article className="upcoming-record" key={row.id}>

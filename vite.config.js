@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { createHash } from 'node:crypto'
-import { readdir, writeFile } from 'node:fs/promises'
+import { readdir, readFile, writeFile } from 'node:fs/promises'
 
 async function shellFiles(folder, prefix = '') {
   const entries = await readdir(folder, { withFileTypes: true })
@@ -16,7 +16,8 @@ const offlineShell = () => ({
   apply: 'build',
   async closeBundle() {
     const files = await shellFiles('dist')
-    const revision = createHash('sha256').update(files.sort().join('|')).digest('hex').slice(0, 12)
+    const pushScript = await readFile('public/budgetly-push-sw.js', 'utf8')
+    const revision = createHash('sha256').update(files.sort().join('|')).update(pushScript).digest('hex').slice(0, 12)
     const script = `const CACHE = 'budgetly-shell-${revision}';
 const FILES = ${JSON.stringify(files.map(file => `/${file}`))};
 self.addEventListener('install', event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES)).then(() => self.skipWaiting())));
@@ -32,7 +33,11 @@ self.addEventListener('fetch', event => {
   event.respondWith(caches.match(request).then(cached => cached || fetch(request)));
 });
 `
-    await writeFile('dist/sw.js', script)
+    // One root-scope registration must handle both offline navigation and push.
+    // Registering separate workers for the same scope replaces the prior one.
+    await writeFile('dist/budgetly-push-sw.js', `${pushScript}\n${script}`)
+    // Older installed web bundles still register this URL. Preserve both handlers.
+    await writeFile('dist/sw.js', "importScripts('/budgetly-push-sw.js');\n")
   },
 })
 
