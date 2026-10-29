@@ -58,6 +58,14 @@ try {
     await page.getByRole('button', { name: 'Sign in', exact: true }).click()
     expect((await response).status()).toBe(200)
     await expect(page.locator('.signout-button')).toBeVisible()
+    // A fresh account legitimately receives release notes after the 800 ms
+    // entrance delay. Dismiss them through the real UI before navigating; a
+    // fast page change can otherwise leave this modal pending until a later
+    // offline reload, where it correctly blocks clicks behind its backdrop.
+    const whatsNew = page.getByRole('dialog', { name: "What's new", exact: true })
+    await expect(whatsNew).toBeVisible()
+    await whatsNew.getByRole('button', { name: 'Continue to Budgetly', exact: true }).click()
+    await expect(whatsNew).toBeHidden()
   }
   const records = () => page.evaluate(() => new Promise((resolve, reject) => {
     const request = indexedDB.open('budgetly-offline-v1', 1)
@@ -232,6 +240,7 @@ try {
   expect(await matching()).toHaveLength(1)
   // Leave another A entry pending during the account switch. B must never
   // display or submit it, even though A's durable record remains on the device.
+  stage = 'pending-entry account switch'
   const pendingMarker = 'CI pending A account isolation'
   await page.locator('.add-button').click()
   await expect(dialog.getByRole('button', { name: 'Add transaction', exact: true })).toBeEnabled()
@@ -252,6 +261,7 @@ try {
   await expect(page.getByText(marker, { exact: true })).toHaveCount(0)
   await expect(page.getByText(pendingMarker, { exact: true })).toHaveCount(0)
   await context.setOffline(true)
+  stage = 'account B offline reopening'
   await page.reload({ waitUntil: 'domcontentloaded' })
   await expect(page.locator('.signout-button')).toBeVisible()
   await expect(page.getByText(marker, { exact: true })).toHaveCount(0)
