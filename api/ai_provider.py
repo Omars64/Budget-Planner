@@ -2,7 +2,7 @@
 import json
 import os
 import httpx
-from .ai_settings import MODEL
+from .ai_settings import MODEL, operational_policy, record_ai_metric
 
 ENDPOINT = 'https://api.openai.com/v1/chat/completions'
 
@@ -10,6 +10,7 @@ ENDPOINT = 'https://api.openai.com/v1/chat/completions'
 def check_connection():
     """Check the same endpoint and model without sending any workspace data."""
     with httpx.Client(timeout=httpx.Timeout(35, connect=8), follow_redirects=False) as client:
+        record_ai_metric('ai_attempts')
         response = client.post(ENDPOINT, headers={
             'Authorization': 'Bearer ' + os.environ['OPENAI_API_KEY'].strip(),
             'Content-Type': 'application/json',
@@ -20,6 +21,7 @@ def check_connection():
     content = data['choices'][0]['message']['content']
     if not isinstance(content, str) or not content.strip():
         raise ValueError('Empty provider response')
+    _success(data)
     return {'ok': True, 'reason': 'ready', 'message': 'OpenAI connected successfully. AI requests are working.'}
 
 
@@ -54,15 +56,17 @@ def complete(facts, question, history, guide):
     messages.append({'role': 'user', 'content': question})
     # No automatic retries, alternate models, web tools or provider redirects.
     with httpx.Client(timeout=httpx.Timeout(35, connect=8), follow_redirects=False) as client:
+        record_ai_metric('ai_attempts')
         response = client.post(ENDPOINT, headers={
             'Authorization': 'Bearer ' + os.environ['OPENAI_API_KEY'].strip(),
             'Content-Type': 'application/json',
-        }, json={'model': MODEL, 'messages': messages, 'max_completion_tokens': 1800, 'store': False})
+        }, json={'model': MODEL, 'messages': messages, 'max_completion_tokens': operational_policy()['ai_max_output_tokens'], 'store': False})
         response.raise_for_status()
         data = response.json()
     answer = data['choices'][0]['message']['content']
     if not isinstance(answer, str) or not answer.strip():
         raise ValueError('Empty provider response')
+    _success(data)
     return {'answer': answer.strip()[:22000], 'usage': {
         'provider': 'openai', 'model': MODEL,
         'input_tokens': int(data.get('usage', {}).get('prompt_tokens') or 0),
@@ -83,13 +87,14 @@ def complete_draft(facts, question):
     )
     prompt = instructions + '\nAuthorized wallets:\n' + json.dumps(wallets) + '\nAuthorized categories:\n' + json.dumps(categories)
     with httpx.Client(timeout=httpx.Timeout(35, connect=8), follow_redirects=False) as client:
+        record_ai_metric('ai_attempts')
         response = client.post(ENDPOINT, headers={
             'Authorization': 'Bearer ' + os.environ['OPENAI_API_KEY'].strip(),
             'Content-Type': 'application/json',
         }, json={'model': MODEL, 'messages': [
             {'role': 'system', 'content': prompt},
             {'role': 'user', 'content': question[:4000]},
-        ], 'max_completion_tokens': 500, 'response_format': {'type': 'json_object'}, 'store': False})
+        ], 'max_completion_tokens': min(500, operational_policy()['ai_max_output_tokens']), 'response_format': {'type': 'json_object'}, 'store': False})
         response.raise_for_status()
         data = response.json()
     content = data['choices'][0]['message']['content']
@@ -98,7 +103,17 @@ def complete_draft(facts, question):
     parsed = json.loads(content)
     if not isinstance(parsed, dict):
         raise ValueError('Draft response was not an object')
+    _success(data)
     return {'draft': parsed, 'usage': {
         'provider': 'openai', 'model': MODEL,
         'input_tokens': int(data.get('usage', {}).get('prompt_tokens') or 0),
         'output_tokens': int(data.get('usage', {}).get('completion_tokens') or 0)}}
+
+
+def _success(data):
+    record_ai_metric('ai_successes')
+    usage = data.get('usage') or {}
+    for source, metric in (('prompt_tokens', 'ai_input_tokens'), ('completion_tokens', 'ai_output_tokens')):
+        value = usage.get(source)
+        if type(value) is int and value > 0:
+            record_ai_metric(metric, value)

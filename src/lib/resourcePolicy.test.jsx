@@ -13,7 +13,7 @@ beforeEach(() => {
   vi.useFakeTimers()
   stops = []
   visible('visible'); online(true)
-  updateResourcePolicy({ client_poll_seconds: 60 })
+  updateResourcePolicy({ client_poll_seconds: 60, client_idle_minutes: 30 })
   api.mockReset()
 })
 afterEach(() => {
@@ -24,7 +24,7 @@ afterEach(() => {
 
 test('defaults to 60 seconds and rejects invalid policy values', () => {
   for (const client_poll_seconds of [null, '15', 14, 301, 15.5]) updateResourcePolicy({ client_poll_seconds })
-  expect(readResourcePolicy()).toEqual({ client_poll_seconds: 60 })
+  expect(readResourcePolicy()).toEqual({ client_poll_seconds: 60, client_idle_minutes: 30 })
 })
 
 test('pauses hidden/offline reads and coalesces focus, visibility and online storms', async () => {
@@ -237,4 +237,20 @@ test('a read already in flight finishes normally when the client becomes idle', 
   document.dispatchEvent(new Event('touchstart'))
   await tick(0)
   expect(read).toHaveBeenCalledTimes(2)
+})
+
+
+test('configured inactivity pauses polling, validates runtime values, and manual refresh resumes immediately offline safely', async () => {
+  updateResourcePolicy({ client_idle_minutes: 5 })
+  for (const client_idle_minutes of [0, 61, '10', 5.5]) updateResourcePolicy({ client_idle_minutes })
+  expect(readResourcePolicy().client_idle_minutes).toBe(5)
+  const read = vi.fn(async () => {})
+  const stop = startReadPolling(read); stops.push(stop)
+  await tick(300000)
+  expect(read).toHaveBeenCalledTimes(5)
+  online(false); stop.refresh()
+  await tick(0)
+  expect(read).toHaveBeenCalledTimes(5)
+  online(true); await tick(0)
+  expect(read).toHaveBeenCalledTimes(6)
 })

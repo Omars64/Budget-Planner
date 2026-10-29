@@ -2,12 +2,13 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { api } from '../lib/api'
 import ResourcePolicyPanel from './ResourcePolicyPanel'
+import { policyDefaults } from '../lib/resourcePolicy'
 
 const { confirm } = vi.hoisted(() => ({ confirm: vi.fn() }))
 vi.mock('../App', () => ({ useApp: () => ({ confirm }) }))
 vi.mock('../lib/api', () => ({ api: vi.fn(), jsonBody: value => ({ body: JSON.stringify(value) }) }))
 
-const policy = { client_poll_seconds: 60, idle_recheck_minutes: 180, database_probe_minutes: 60, scheduler_enabled: true, scheduler_interval_minutes: 1 }
+const policy = { ...policyDefaults, client_poll_seconds: 60, idle_recheck_minutes: 180, database_probe_minutes: 60, scheduler_enabled: true, scheduler_interval_minutes: 1 }
 const fixture = (overrides = {}) => ({ policy: { ...policy }, revision: 'revision-1', coordination: { configured: true, healthy: true }, ...overrides })
 const client = () => screen.getByRole('spinbutton', { name: 'Client refresh interval' })
 const idle = () => screen.getByRole('spinbutton', { name: 'Idle recovery rescan interval' })
@@ -82,7 +83,7 @@ test.each([15, 300])('saves client boundary %s with exact revision and public ev
     expect(api).toHaveBeenLastCalledWith('/api/admin/resource-policy', { method: 'PUT', body: expect.any(String) })
     expect(JSON.parse(api.mock.calls.at(-1)[1].body)).toEqual({ policy: next, revision: 'revision-1' })
     expect(listener).toHaveBeenCalledTimes(1)
-    expect(listener.mock.calls[0][0].detail).toEqual({ client_poll_seconds: value })
+    expect(listener.mock.calls[0][0].detail).toEqual({ client_poll_seconds: value, client_idle_minutes: 30 })
     expect(save()).toBeDisabled()
   } finally { window.removeEventListener('budgetly:resource-policy', listener) }
 })
@@ -276,4 +277,61 @@ test.each([{ scheduler_enabled: 'false' }, { scheduler_interval_minutes: 61 }])(
   render(<ResourcePolicyPanel />)
   await screen.findByText(/response is incomplete/)
   expect(schedulerToggle()).toBeDisabled()
+})
+
+
+test('presets stay draft-only and preserve enabled toggles until explicit defaults reset', async () => {
+  await ready(fixture({ policy: { ...policy, scheduler_enabled: false, release_notifications_enabled: false } }))
+  fireEvent.click(screen.getByRole('button', { name: 'Economy' }))
+  expect(client()).toHaveValue(120)
+  expect(screen.getByRole('spinbutton', { name: 'AI requests per day per person' })).toHaveValue(10)
+  expect(schedulerToggle()).not.toBeChecked()
+  expect(screen.getByRole('switch', { name: 'Enable release notifications' })).not.toBeChecked()
+  fireEvent.click(screen.getByRole('button', { name: 'Balanced' }))
+  expect(screen.getByRole('spinbutton', { name: 'AI requests per day per person' })).toHaveValue(10)
+  expect(schedulerToggle()).not.toBeChecked()
+  expect(api).toHaveBeenCalledTimes(1)
+  fireEvent.click(screen.getByRole('button', { name: 'Use safe defaults' }))
+  expect(schedulerToggle()).toBeChecked()
+})
+
+test.each([
+  ['Pause refresh after inactivity', 4], ['AI requests per day for everyone', 1001],
+  ['AI requests per day per person', 501], ['AI requests per minute for everyone', 0],
+  ['Maximum AI answer length', 1801], ['Notifications per batch', 21], ['Backup interval', 5],
+])('validates %s before saving', async (name, value) => {
+  await ready()
+  change(screen.getByRole('spinbutton', { name }), value)
+  expect(save()).toBeDisabled()
+  expect(api).toHaveBeenCalledTimes(1)
+})
+
+test('history and allowlisted metrics refresh independently without blocking controls', async () => {
+  await ready()
+  expect(api).toHaveBeenCalledTimes(1)
+  api.mockRejectedValueOnce(new Error('Unavailable'))
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh history' }))
+  await screen.findByText('History: Unavailable')
+  expect(client()).toBeEnabled()
+  api.mockResolvedValueOnce({ metrics: { ai_attempts: 4, ai_output_tokens: 90, private_data: 'secret', notification_failed: -1 } })
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh metrics' }))
+  await screen.findByText('AI attempts')
+  expect(screen.queryByText('secret')).not.toBeInTheDocument()
+  expect(screen.queryByText('Notifications failed')).not.toBeInTheDocument()
+  api.mockResolvedValueOnce({ items: Array.from({ length: 25 }, (_, i) => ({ actor_id: `admin-${i}`, at: 'today', changes: { client_idle_minutes: { before: 30, after: 10 } } })) })
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh history' }))
+  await screen.findByText('Unavailable - Admin #admin-19')
+  expect(screen.queryByText('Unavailable - Admin #admin-20')).not.toBeInTheDocument()
+})
+
+
+test.each(['Responsive', 'Balanced', 'Economy'])('%s preserves disabled AI and notification services', async name => {
+  await ready(fixture({ policy: { ...policy, ai_global_daily_requests: 0, ai_user_daily_requests: 0, ai_max_output_tokens: 256, scheduler_enabled: false, release_notifications_enabled: false } }))
+  fireEvent.click(screen.getByRole('button', { name }))
+  expect(screen.getByRole('spinbutton', { name: 'AI requests per day for everyone' })).toHaveValue(0)
+  expect(screen.getByRole('spinbutton', { name: 'AI requests per day per person' })).toHaveValue(0)
+  expect(screen.getByRole('spinbutton', { name: 'Maximum AI answer length' })).toHaveValue(256)
+  expect(schedulerToggle()).not.toBeChecked()
+  expect(screen.getByRole('switch', { name: 'Enable release notifications' })).not.toBeChecked()
+  expect(api).toHaveBeenCalledTimes(1)
 })

@@ -3,8 +3,15 @@ const listeners = new Set()
 const interactions = ['pointerdown', 'pointermove', 'keydown', 'input', 'wheel', 'touchstart', 'touchmove']
 const eventOptions = { capture: true, passive: true }
 let lastInteraction = null
+let idleMs = CLIENT_IDLE_MS
 
-export const clientIsActive = () => lastInteraction === null || Date.now() - lastInteraction < CLIENT_IDLE_MS
+export function configureClientIdle(minutes) {
+  if (!Number.isInteger(minutes) || minutes < 5 || minutes > 60) return
+  idleMs = minutes * 60 * 1000
+}
+
+
+export const clientIsActive = () => lastInteraction === null || Date.now() - lastInteraction < idleMs
 
 export function recordClientInteraction() {
   if (document.visibilityState === 'hidden') return

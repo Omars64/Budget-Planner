@@ -44,12 +44,34 @@ DEFAULT_POLICY = {
     "idle_recheck_minutes": 180,
     "database_probe_minutes": 60,
 }
+DEFAULT_POLICY['client_idle_minutes'] = 30
+DEFAULT_POLICY['ai_global_daily_requests'] = 50
+DEFAULT_POLICY['ai_user_daily_requests'] = 50
+DEFAULT_POLICY['ai_global_minute_requests'] = 15
+DEFAULT_POLICY['ai_max_output_tokens'] = 1800
+DEFAULT_POLICY['release_notifications_enabled'] = True
+DEFAULT_POLICY['scheduled_notifications_enabled'] = True
+DEFAULT_POLICY['upcoming_notifications_enabled'] = True
+DEFAULT_POLICY['notification_batch_size'] = 5
+DEFAULT_POLICY['backup_interval_hours'] = 24
+DEFAULT_POLICY['backup_skip_unchanged'] = False
+
 POLICY_BOUNDS = {
     "scheduler_interval_minutes": (1, 60),
     "client_poll_seconds": (15, 300),
     "idle_recheck_minutes": (15, 1440),
     "database_probe_minutes": (15, 1440),
 }
+POLICY_BOUNDS['client_idle_minutes'] = (5, 60)
+POLICY_BOUNDS['ai_global_daily_requests'] = (0, 1000)
+POLICY_BOUNDS['ai_user_daily_requests'] = (0, 500)
+POLICY_BOUNDS['ai_global_minute_requests'] = (1, 60)
+POLICY_BOUNDS['ai_max_output_tokens'] = (128, 1800)
+POLICY_BOUNDS['notification_batch_size'] = (1, 20)
+POLICY_BOUNDS['backup_interval_hours'] = (6, 24)
+
+METRIC_NAMES = frozenset(['ai_attempts', 'ai_successes', 'ai_fallbacks', 'ai_input_tokens', 'ai_output_tokens', 'backup_upload_runs', 'backup_unchanged_runs', 'backup_interval_skips', 'notification_sent', 'notification_failed', 'notification_paused'])
+
 DATABASE_URL_KEYS = (
     "FLOWBUDGET_DATABASE_URL", "FLOWBUDGET_POSTGRES_URL", "DATABASE_URL",
     "FLOWBUDGET_URL", "POSTGRES_URL", "FLOWBUDGET_DATABASE_URL_UNPOOLED",
@@ -77,15 +99,16 @@ class ConflictError(RuntimeError):
 
 
 def _policy(value):
-    required = set(POLICY_BOUNDS) - {'scheduler_interval_minutes'}
+    required = {'client_poll_seconds', 'idle_recheck_minutes', 'database_probe_minutes'}
     allowed = set(DEFAULT_POLICY)
     if not isinstance(value, dict) or not required <= value.keys() or not value.keys() <= allowed:
         raise ValueError("A complete resource policy is required")
     for key, (low, high) in POLICY_BOUNDS.items():
         if key in value and (type(value[key]) is not int or not low <= value[key] <= high):
             raise ValueError("Invalid resource policy: " + key)
-    if 'scheduler_enabled' in value and type(value['scheduler_enabled']) is not bool:
-        raise ValueError("Invalid resource policy: scheduler_enabled")
+    for key, default in DEFAULT_POLICY.items():
+        if type(default) is bool and key in value and type(value[key]) is not bool:
+            raise ValueError('Invalid resource policy: ' + key)
     return dict(value)
 
 
@@ -101,7 +124,7 @@ def _epoch(value):
 # an INCR counter, preventing ABA even if the counter is lost or reset.
 LUA = r'''
 local op, nonce = ARGV[1], ARGV[2]
-local epoch, gen, policy, revision, marker, lease, pending, health, status = unpack(KEYS)
+local epoch, gen, policy, revision, marker, lease, pending, health, status, audit, metrics = unpack(KEYS)
 local function decode(raw)
     if not raw then return nil end
     local ok, value = pcall(cjson.decode, raw)
@@ -137,15 +160,14 @@ if not p then
     if redis.call('EXISTS', policy) == 1 then return redis.error_reply('invalid policy') end
     p = {client_poll_seconds=60, idle_recheck_minutes=180, database_probe_minutes=60}
 end
-if p.scheduler_enabled == nil then p.scheduler_enabled = true end
-if p.scheduler_interval_minutes == nil then p.scheduler_interval_minutes = 1 end
-if type(p.scheduler_enabled) ~= 'boolean' then return redis.error_reply('invalid policy') end
-local bounds = {scheduler_interval_minutes={1,60}, client_poll_seconds={15,300}, idle_recheck_minutes={15,1440}, database_probe_minutes={15,1440}}
-for k, b in pairs(bounds) do
-    local v = p[k]
-    if type(v) ~= 'number' or v ~= math.floor(v) or v < b[1] or v > b[2] then
-        return redis.error_reply('invalid policy')
-    end
+local defaults = {scheduler_enabled=true,scheduler_interval_minutes=1,client_idle_minutes=30,ai_global_daily_requests=50,ai_user_daily_requests=50,ai_global_minute_requests=15,ai_max_output_tokens=1800,release_notifications_enabled=true,scheduled_notifications_enabled=true,upcoming_notifications_enabled=true,notification_batch_size=5,backup_interval_hours=24,backup_skip_unchanged=false}
+for k,v in pairs(defaults) do if p[k] == nil then p[k] = v end end
+local booleans = {scheduler_enabled=true,release_notifications_enabled=true,scheduled_notifications_enabled=true,upcoming_notifications_enabled=true,backup_skip_unchanged=true}
+for k in pairs(booleans) do if type(p[k]) ~= "boolean" then return redis.error_reply("invalid policy") end end
+local bounds = {scheduler_interval_minutes={1,60},client_poll_seconds={15,300},idle_recheck_minutes={15,1440},database_probe_minutes={15,1440},client_idle_minutes={5,60},ai_global_daily_requests={0,1000},ai_user_daily_requests={0,500},ai_global_minute_requests={1,60},ai_max_output_tokens={128,1800},notification_batch_size={1,20},backup_interval_hours={6,24}}
+for k,b in pairs(bounds) do
+ local v=p[k]
+ if type(v) ~= "number" or v ~= math.floor(v) or v < b[1] or v > b[2] then return redis.error_reply("invalid policy") end
 end
 if not redis.call('GET', revision) then redis.call('SET', revision, nonce) end
 local function snapshot()
@@ -158,25 +180,61 @@ local function snapshot()
         coordination={configured=true, healthy=true}, status=s})
 end
 if op == 'state' then return snapshot() end
+if op == 'history' then
+    local events = decode(redis.call('GET', audit)) or {}
+    local result = {}
+    for i=1,math.min(#events, tonumber(ARGV[3]) or 100) do result[i] = events[i] end
+    return cjson.encode({items=result})
+end
+if op == 'metrics' then return redis.call('GET', metrics) or '{"enabled_at":null,"reset_at":null,"counters":{}}' end
+if op == 'metric' then
+    local allowed = {ai_attempts=true,ai_successes=true,ai_fallbacks=true,ai_input_tokens=true,ai_output_tokens=true,backup_upload_runs=true,backup_unchanged_runs=true,backup_interval_skips=true,notification_sent=true,notification_failed=true,notification_paused=true}
+    local v = tonumber(ARGV[4])
+    if not allowed[ARGV[3]] or not v or v ~= math.floor(v) or v < 1 or v > 1000000 then
+        return redis.error_reply('invalid metric')
+    end
+    local counts = decode(redis.call('GET', metrics)) or {}
+    if not counts.counters then
+        counts = {enabled_at=tonumber(redis.call('TIME')[1]), reset_at=cjson.null, counters={}}
+    end
+    counts.counters[ARGV[3]] = math.min(1000000000000, (tonumber(counts.counters[ARGV[3]]) or 0) + v)
+    redis.call('SET', metrics, cjson.encode(counts))
+    return 'ok'
+end
 if op == 'policy' then
     if redis.call('GET', revision) ~= ARGV[3] then return 'conflict' end
     local updated = decode(ARGV[4])
     if not updated then return redis.error_reply('invalid policy') end
     for k, v in pairs(updated) do
-        if k ~= 'scheduler_enabled' and not bounds[k] then return redis.error_reply('invalid policy') end
+        if not booleans[k] and not bounds[k] then return redis.error_reply('invalid policy') end
     end
     for k, b in pairs(bounds) do
         local v = updated[k]
-        if v == nil and k == 'scheduler_interval_minutes' then v = p[k] end
+        if v == nil and k ~= 'client_poll_seconds' and k ~= 'idle_recheck_minutes' and k ~= 'database_probe_minutes' then v = p[k] end
         if type(v) ~= 'number' or v ~= math.floor(v) or v < b[1] or v > b[2] then
             return redis.error_reply('invalid policy')
         end
         updated[k] = v
     end
-    if updated.scheduler_enabled == nil then updated.scheduler_enabled = p.scheduler_enabled end
-    if type(updated.scheduler_enabled) ~= 'boolean' then return redis.error_reply('invalid policy') end
-    redis.call('SET', policy, cjson.encode(updated))
-    redis.call('SET', revision, nonce)
+    for k in pairs(booleans) do
+        if updated[k] == nil then updated[k] = p[k] end
+        if type(updated[k]) ~= 'boolean' then return redis.error_reply('invalid policy') end
+    end
+    local events = decode(redis.call('GET', audit))
+    if not events then
+        if redis.call('EXISTS', audit) == 1 then return redis.error_reply('invalid audit') end
+        events = {}
+    end
+    local changes = {}
+    for k,v in pairs(updated) do
+        if v ~= p[k] then changes[k] = {before=p[k], after=v} end
+    end
+    local stamp = redis.call('TIME')
+    table.insert(events, 1, {actor_id=ARGV[5], at=tonumber(stamp[1]), changes=changes})
+    while #events > 100 do table.remove(events) end
+    -- One MSET commits policy, revision and audit together. Encoding happens first;
+    -- a corrupt audit or rejected command cannot leave an unaudited saved policy.
+    redis.call('MSET', policy, cjson.encode(updated), revision, nonce, audit, cjson.encode(events))
     p = updated
     invalidate()
     return snapshot()
@@ -345,7 +403,7 @@ class Coordinator:
         url, token, prefix = config
         keys = [prefix + name for name in (
             "epoch", "generation", "policy", "revision", "marker", "lease",
-            "pending", "health", "status",
+            "pending", "health", "status", "audit", "metrics",
         )]
         keys[7] = self._health_key(prefix)
         command = ["EVAL", LUA, len(keys), *keys, operation, str(uuid4()), *args]
@@ -403,15 +461,42 @@ class Coordinator:
                     "coordination": {"configured": self.configured(), "healthy": False},
                     "status": {"pending_count": 0}}
 
-    def update_policy(self, policy: dict, revision: str) -> dict:
+    def update_policy(self, policy: dict, revision: str, actor_user_id=None) -> dict:
         """Validate policy then atomically merge optional scheduler fields under CAS."""
         policy = _policy(policy)
         if not isinstance(revision, str) or not revision:
             raise ValueError("A policy revision is required")
-        result = self._call("policy", revision, json.dumps(policy))
+        if actor_user_id is not None and (type(actor_user_id) not in (str, int)
+                                          or not str(actor_user_id) or len(str(actor_user_id)) > 128):
+            raise ValueError("Invalid actor user ID")
+        result = self._call("policy", revision, json.dumps(policy), str(actor_user_id) if actor_user_id is not None else "system")
         if result == "conflict":
             raise ConflictError("Resource policy changed")
         return self._state(result)
+
+    def read_history(self, limit=100):
+        """Newest first, at most 100 operational policy edits."""
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise ValueError("Invalid history limit")
+        result = self._object(self._call("history", limit))
+        if result.get("items") == {}:
+            result["items"] = []  # Redis cjson encodes an empty Lua table as {}.
+        return result
+
+    def record_metric(self, name, value=1):
+        """Best effort bounded counters; False never invalidates manual work."""
+        if name not in METRIC_NAMES or type(value) is not int or not 1 <= value <= 1000000:
+            raise ValueError("Invalid operational metric")
+        try:
+            return self._call("metric", name, value) == "ok"
+        except CoordinationUnavailable:
+            return False
+
+    def read_metrics(self):
+        values = self._object(self._call("metrics"))
+        return {'enabled_at': values.get('enabled_at'), 'reset_at': values.get('reset_at'),
+                'counters': {k: v for k, v in values.get('counters', {}).items() if k in METRIC_NAMES
+                             and type(v) is int and 0 <= v <= 1000000000000}}
 
     def claim_scheduler(self, now_epoch: float) -> dict:
         """Return run (+token/generation), skip, busy, or fail-open fallback.
@@ -530,3 +615,7 @@ begin_change = _coordinator.begin_change
 end_change = _coordinator.end_change
 read_health = _coordinator.read_health
 save_health = _coordinator.save_health
+
+read_history = _coordinator.read_history
+record_metric = _coordinator.record_metric
+read_metrics = _coordinator.read_metrics

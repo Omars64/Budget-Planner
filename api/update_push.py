@@ -17,6 +17,7 @@ from .database import Base, get_db
 from .index import current_user
 from .models import User, utc_now
 from ._version import VERSION
+from .ai_settings import operational_policy, record_ai_metric
 
 router = APIRouter()
 PUSH_HOSTS = {'fcm.googleapis.com', 'updates.push.services.mozilla.com', 'web.push.apple.com', 'wns2-db5p.notify.windows.com'}
@@ -69,6 +70,10 @@ def queue_scheduled(db, plan):
 
 
 def dispatch_scheduled(db):
+    policy = operational_policy()
+    if not policy['scheduled_notifications_enabled']:
+        record_ai_metric('notification_paused')
+        return {'sent': 0, 'failed': 0}
     from .models import PlannedTransaction
     sent = failed = 0
     db.query(ScheduledPush).filter(ScheduledPush.sent_at < utc_now() - timedelta(days=30)).delete(synchronize_session=False)
@@ -76,7 +81,7 @@ def dispatch_scheduled(db):
     if db.bind.dialect.name == 'postgresql':
         query = query.with_for_update(skip_locked=True)
     deadline = time.monotonic() + 15
-    for event in query.limit(5).all():
+    for event in query.limit(policy['notification_batch_size']).all():
         if time.monotonic() >= deadline:
             break
         device = db.get(UpdatePushDevice, event.device_id)
@@ -98,6 +103,8 @@ def dispatch_scheduled(db):
         except Exception:
             failed += 1
     db.commit()
+    record_ai_metric('notification_sent', sent)
+    record_ai_metric('notification_failed', failed)
     return {'sent': sent, 'failed': failed}
 
 
@@ -271,6 +278,10 @@ def test_delivery(device_id: UUID, user=Depends(current_user), db=Depends(get_db
 
 def dispatch_updates(db):
     """Bound each run; unsent devices remain eligible for the next run."""
+    policy = operational_policy()
+    if not policy['release_notifications_enabled']:
+        record_ai_metric('notification_paused')
+        return {'configured': any(configured().values()), 'sent': 0, 'failed': 0}
     ready = configured()
     if not any(ready.values()):
         return {'configured': False, 'sent': 0, 'failed': 0}
@@ -290,7 +301,7 @@ def dispatch_updates(db):
             continue
         rows = db.query(UpdatePushDevice).join(User, User.id == UpdatePushDevice.user_id).filter(
             User.active == True, UpdatePushDevice.platform == platform,
-            (UpdatePushDevice.last_version.is_(None)) | (UpdatePushDevice.last_version != version)).order_by(UpdatePushDevice.updated_at).limit(10).all()
+            (UpdatePushDevice.last_version.is_(None)) | (UpdatePushDevice.last_version != version)).order_by(UpdatePushDevice.updated_at).limit(10).yield_per(policy['notification_batch_size'])
         for row in rows:
             if time.monotonic() >= deadline:
                 break
@@ -310,4 +321,6 @@ def dispatch_updates(db):
             else:
                 failed += 1
         db.commit()
+    record_ai_metric('notification_sent', sent)
+    record_ai_metric('notification_failed', failed)
     return {'configured': True, 'sent': sent, 'failed': failed}

@@ -5,7 +5,7 @@ import logging
 import os
 import time
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import MutableHeaders
@@ -40,6 +40,17 @@ class Policy(BaseModel):
     idle_recheck_minutes: StrictInt = Field(ge=15, le=1440)
     database_probe_minutes: StrictInt = Field(ge=15, le=1440)
 
+    client_idle_minutes: StrictInt = Field(default=30, ge=5, le=60)
+    ai_global_daily_requests: StrictInt = Field(default=50, ge=0, le=1000)
+    ai_user_daily_requests: StrictInt = Field(default=50, ge=0, le=500)
+    ai_global_minute_requests: StrictInt = Field(default=15, ge=1, le=60)
+    ai_max_output_tokens: StrictInt = Field(default=1800, ge=128, le=1800)
+    release_notifications_enabled: StrictBool = True
+    scheduled_notifications_enabled: StrictBool = True
+    upcoming_notifications_enabled: StrictBool = True
+    notification_batch_size: StrictInt = Field(default=5, ge=1, le=20)
+    backup_interval_hours: StrictInt = Field(default=24, ge=6, le=24)
+    backup_skip_unchanged: StrictBool = False
 
 class PolicyUpdate(BaseModel):
     model_config = ConfigDict(extra='forbid')
@@ -55,11 +66,30 @@ def resource_policy(_=Depends(resource_admin)):
 @router.put('/api/admin/resource-policy')
 def save_resource_policy(body: PolicyUpdate, _=Depends(resource_admin)):
     try:
-        return control.update_policy(body.policy.model_dump(exclude_unset=True), body.revision)
+        return control.update_policy(body.policy.model_dump(exclude_unset=True), body.revision, actor_user_id=_.id)
     except control.ConflictError:
         raise HTTPException(409, 'Settings changed. Reload before saving again.') from None
     except control.CoordinationUnavailable:
         raise HTTPException(503, 'Resource settings are temporarily unavailable.') from None
+
+
+@router.get('/api/admin/resource-policy/history')
+def resource_policy_history(limit: int = Query(default=100, ge=1, le=100), _=Depends(resource_admin)):
+    try:
+        return control.read_history(limit)
+    except control.CoordinationUnavailable:
+        raise HTTPException(503, 'Resource history is temporarily unavailable.') from None
+
+
+@router.get('/api/admin/resource-metrics')
+@router.get('/api/admin/resource-policy/metrics')
+def resource_policy_metrics(_=Depends(resource_admin)):
+    try:
+        values = control.read_metrics()
+        return {'metrics': values['counters'], 'since': values['enabled_at'],
+                'reset_at': values['reset_at']}
+    except control.CoordinationUnavailable:
+        raise HTTPException(503, 'Resource metrics are temporarily unavailable.') from None
 
 
 def prepare(request):
@@ -69,7 +99,8 @@ def prepare(request):
         return JSONResponse({'ok': True})
     if path == '/api/runtime-policy' and method == 'GET':
         state = control.read_state()
-        return JSONResponse({'client_poll_seconds': state['policy']['client_poll_seconds']})
+        return JSONResponse({'client_poll_seconds': state['policy']['client_poll_seconds'],
+                             'client_idle_minutes': state['policy']['client_idle_minutes']})
     if path == SCHEDULER and method == 'POST':
         secret = os.getenv('SCHEDULE_RUNNER_SECRET', '')
         if not secret or not hmac.compare_digest(request.headers.get('Authorization', ''), 'Bearer ' + secret):

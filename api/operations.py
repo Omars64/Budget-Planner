@@ -6,7 +6,8 @@ import json
 import logging
 import os
 import secrets
-from contextlib import closing
+from contextlib import closing, ExitStack
+from tempfile import TemporaryFile
 from datetime import datetime, timedelta, timezone
 from fastapi.encoders import jsonable_encoder
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -27,13 +28,26 @@ def external_backup_ready():
     return all(os.getenv(key) for key in BACKUP_KEYS)
 
 
-def external_snapshots(db):
+def external_snapshots(db, *, force=True):
     if not external_backup_ready():
         return 0
     import boto3
     from botocore.config import Config
     from cryptography.fernet import Fernet
     from .index import export_backup
+    from . import backup_efficiency as efficiency
+    settings = efficiency.policy()
+    now = utc_now()
+    if not force:
+        last = db.query(ServiceEvent).filter_by(area='external-backup').order_by(
+            ServiceEvent.created_at.desc(), ServiceEvent.id.desc()).first()
+        # A failure never suppresses a retry; manual backups always run.
+        # Daily cron start time varies by seconds. Allow five minutes of jitter so
+        # a 24-hour interval cannot accidentally become a 48-hour recovery gap.
+        spacing = timedelta(hours=settings.get('backup_interval_hours', 24)) - timedelta(minutes=5)
+        if last and last.status == 200 and now - spacing < last.created_at <= now:
+            efficiency.metric('backup_interval_skips')
+            return 0
     cipher = Fernet(os.environ['BACKUP_ENCRYPTION_KEY'].encode())
     client = boto3.client('s3', region_name=os.environ['BACKUP_S3_REGION'],
                           endpoint_url=os.getenv('BACKUP_S3_ENDPOINT_URL') or None,
@@ -44,21 +58,48 @@ def external_snapshots(db):
     day = utc_now().date().isoformat()
     prefix = f'budgetly/{day}/{secrets.token_hex(16)}'
     count = 0
+    deduplicate = not force and settings.get('backup_skip_unchanged', False)
+    digest = hashlib.sha256()
+    staged = []
     identities = []
-    for user in db.query(User).filter_by(active=True).all():
-        data = json.dumps(jsonable_encoder(export_backup(user, db))).encode()
-        payload = cipher.encrypt(gzip.compress(data))
-        upload = {'Bucket': os.environ['BACKUP_S3_BUCKET'],
-                  'Key': f'{prefix}/user-{user.id}.json.gz.enc', 'Body': payload,
-                  'ContentType': 'application/octet-stream'}
-        if not os.getenv('BACKUP_S3_ENDPOINT_URL'):
-            upload['ServerSideEncryption'] = 'AES256'
-        client.put_object(**upload)
-        identities.append({'id': user.id, 'email': user.email, 'username': user.username,
-                           'role': user.role, 'archive_key': upload['Key'],
-                           'archive_bytes': len(payload),
-                           'archive_sha256': hashlib.sha256(payload).hexdigest()})
-        count += 1
+    with ExitStack() as files:
+        for user in db.query(User).filter_by(active=True).order_by(User.id).all():
+            exported = jsonable_encoder(export_backup(user, db))
+            identity = {'id': user.id, 'email': user.email, 'username': user.username, 'role': user.role}
+            efficiency.update_digest(digest, identity, exported)
+            data = json.dumps(exported).encode()
+            payload = cipher.encrypt(gzip.compress(data))
+            upload = {'Bucket': os.environ['BACKUP_S3_BUCKET'],
+                      'Key': f'{prefix}/user-{user.id}.json.gz.enc', 'Body': payload,
+                      'ContentType': 'application/octet-stream'}
+            if not os.getenv('BACKUP_S3_ENDPOINT_URL'):
+                upload['ServerSideEncryption'] = 'AES256'
+            if deduplicate:
+                # Stage ciphertext only, not plaintext; bound resident memory per account.
+                staged_file = files.enter_context(TemporaryFile())
+                staged_file.write(payload)
+                staged.append(({key: value for key, value in upload.items() if key != 'Body'}, staged_file))
+            else:
+                client.put_object(**upload)
+            identities.append({**identity, 'archive_key': upload['Key'],
+                               'archive_bytes': len(payload),
+                               'archive_sha256': hashlib.sha256(payload).hexdigest()})
+            count += 1
+        if deduplicate:
+            previous = efficiency.read_state(client, cipher, now)
+            if previous and hmac.compare_digest(previous['digest'], digest.hexdigest()):
+                try:
+                    matches = efficiency.verify_existing(client, cipher, previous['manifest_key'], digest.hexdigest(), count)
+                except Exception:
+                    matches = False
+                if matches:
+                    db.add(ServiceEvent(area='external-backup', status=200))
+                    db.commit()
+                    efficiency.metric('backup_unchanged_runs')
+                    return 0
+            for upload, staged_file in staged:
+                staged_file.seek(0)
+                client.put_object(**upload, Body=staged_file.read())
     manifest = {'version': 1, 'kind': 'budgetly-account-recovery-manifest',
                 'exported_at': utc_now().isoformat() + 'Z', 'accounts': identities}
     metadata = {'Bucket': os.environ['BACKUP_S3_BUCKET'],
@@ -71,7 +112,7 @@ def external_snapshots(db):
     # A completed upload is not yet evidence that recovery can read the bytes.
     # Verify the commit marker and every encrypted object before recording success.
     # Digests refer to bytes just encrypted here; no plaintext or keys are logged.
-    for key, length, digest in [
+    for key, length, expected_digest in [
         (row['archive_key'], row['archive_bytes'], row['archive_sha256']) for row in identities
     ] + [(metadata['Key'], len(metadata['Body']), hashlib.sha256(metadata['Body']).hexdigest())]:
         with closing(client.get_object(Bucket=os.environ['BACKUP_S3_BUCKET'], Key=key)['Body']) as body:
@@ -82,14 +123,17 @@ def external_snapshots(db):
                     raise ValueError('External backup read-back was incomplete')
                 actual.update(chunk)
                 remaining -= len(chunk)
-            if body.read(1) or not hmac.compare_digest(actual.hexdigest(), digest):
+            if body.read(1) or not hmac.compare_digest(actual.hexdigest(), expected_digest):
                 raise ValueError('External backup read-back integrity failed')
     db.add(ServiceEvent(area='external-backup', status=200))
     db.commit()
+    if settings.get('backup_skip_unchanged', False):
+        efficiency.write_state(client, cipher, digest.hexdigest(), metadata['Key'], now)
+    efficiency.metric('backup_upload_runs')
     return count
 
 
-def daily_snapshots(db):
+def daily_snapshots(db, *, force_external=True):
     total=0
     for user in db.query(User).filter_by(active=True).all():
         db.query(User).filter_by(id=user.id).with_for_update().first()
@@ -107,7 +151,7 @@ def daily_snapshots(db):
     external = 0
     if external_backup_ready():
         try:
-            external = external_snapshots(db)
+            external = external_snapshots(db, force=force_external)
         except Exception as error:
             import logging
             logging.getLogger('flowbudget').error('External backup failed: %s', type(error).__name__)
@@ -132,7 +176,7 @@ def maintenance(request:Request,db=Depends(get_db)):
     revocations = retry_due(db)
     from .planned import post_due
     posted = post_due(db)
-    result = {**daily_snapshots(db), 'scheduled_transactions_posted': posted, 'provider_revocations': revocations}
+    result = {**daily_snapshots(db, force_external=False), 'scheduled_transactions_posted': posted, 'provider_revocations': revocations}
     from .update_push import dispatch_updates
     try:
         result['update_push'] = dispatch_updates(db)

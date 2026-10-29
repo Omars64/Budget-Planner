@@ -7,10 +7,9 @@ from fastapi import HTTPException
 from .currency import currency_amount
 from .ai_context import build_context, transaction_fact, scope_wallets, ledger_query
 from .ai_actions import target
-from .ai_settings import assistant_status
+from .ai_settings import assistant_status, reserve_ai, record_ai_metric, policy_snapshot
 from .ai_provider import complete, complete_draft
 from .ai_diagnostics import provider_failure, user_notice
-from .account_security import limit
 from .timekeeping import now
 
 LIMITED_MESSAGE = "I'm Ask Budgetly. My built-in guide covers Budgetly features, basic budgeting, and your selected activity. I don't have a built-in answer for that question. Try asking about a wallet, category, budget, goal, or how to use the app. I can't look up live news or market prices."
@@ -399,19 +398,19 @@ def generate(db, user, chat, question, history, research=False, still_active=lam
     if assistant_status(db)['available']:
         try:
             # Provider limits do not prevent built-in answers from working.
-            limit(db, 'openai-minute', 15, 60)
-            limit(db, 'openai-day', 50, 86400)
+            policy = reserve_ai(db, user.id)
             if not still_active():
                 raise HTTPException(409, 'Response stopped')
-            if assistant_status(db)['available']:
-                if draft:
-                    extracted = complete_draft(facts, question)
-                    draft = _merge_provider_draft(draft, extracted.get('draft'), facts, chat)
-                    result['drafts'] = [draft]
-                    result['answer'] = _draft_answer(draft)
-                    result['usage'].update(extracted['usage'])
-                else:
-                    result.update(complete(facts, question, history, '\n'.join(answer for _, answer in FAQS)))
+            with policy_snapshot(policy):
+                if assistant_status(db)['available']:
+                    if draft:
+                        extracted = complete_draft(facts, question)
+                        draft = _merge_provider_draft(draft, extracted.get('draft'), facts, chat)
+                        result['drafts'] = [draft]
+                        result['answer'] = _draft_answer(draft)
+                        result['usage'].update(extracted['usage'])
+                    else:
+                        result.update(complete(facts, question, history, '\n'.join(answer for _, answer in FAQS)))
         except HTTPException as error:
             if error.status_code != 429:
                 raise
@@ -422,6 +421,8 @@ def generate(db, user, chat, question, history, research=False, still_active=lam
         except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError) as error:
             # Never return provider error bodies or credentials to the client or logs.
             result['usage']['fallback'] = _provider_notice(error)
+    if result['usage'].get('provider') == 'built-in':
+        record_ai_metric('ai_fallbacks')
     if result['drafts']:
         result['usage']['drafts'] = result['drafts']
     return result

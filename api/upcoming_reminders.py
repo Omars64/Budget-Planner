@@ -19,6 +19,10 @@ def reminder_at(due, preference):
 
 
 def dispatch_upcoming(db):
+    policy = push.operational_policy()
+    if not policy['upcoming_notifications_enabled']:
+        push.record_ai_metric('notification_paused')
+        return {'sent': 0, 'failed': 0, 'configured': push.configured()['browser']}
     if not push.configured()['browser']:
         return {'sent': 0, 'failed': 0, 'configured': False}
     sent = failed = 0
@@ -29,7 +33,8 @@ def dispatch_upcoming(db):
     if db.bind.dialect.name == 'postgresql':
         query = query.with_for_update(skip_locked=True)
     deadline = time.monotonic() + 6
-    for device in query.all():
+    # Stream bounded chunks without deferring due reminders to a later tick.
+    for device in query.yield_per(policy['notification_batch_size']):
         if time.monotonic() >= deadline:
             break
         stage = 'profile'
@@ -79,4 +84,6 @@ def dispatch_upcoming(db):
             logging.getLogger('flowbudget').warning('upcoming_reminder_failure stage=%s type=%s', stage, type(error).__name__)
             failed += 1
     db.commit()
+    push.record_ai_metric('notification_sent', sent)
+    push.record_ai_metric('notification_failed', failed)
     return {'sent': sent, 'failed': failed, 'configured': True}

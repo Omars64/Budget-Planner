@@ -1,11 +1,11 @@
 import { useSyncExternalStore } from 'react'
 import { api } from './api'
-import { clientIsActive, recordClientInteraction, subscribeClientResume } from './clientActivity'
+import { configureClientIdle, clientIsActive, recordClientInteraction, subscribeClientResume } from './clientActivity'
 
 export const RESOURCE_POLICY_EVENT = 'budgetly:resource-policy'
 const DEFAULT_SECONDS = 60
 const POLICY_REFRESH_MS = 15 * 60 * 1000
-let policy = { client_poll_seconds: DEFAULT_SECONDS }
+let policy = { client_poll_seconds: DEFAULT_SECONDS, client_idle_minutes: 30 }
 const listeners = new Set()
 let listening = false
 
@@ -13,9 +13,14 @@ export const readResourcePolicy = () => policy
 export const canReadResources = () => document.visibilityState !== 'hidden' && navigator.onLine !== false && clientIsActive()
 
 export function updateResourcePolicy(config) {
+  const next = { ...policy }
   const seconds = config?.client_poll_seconds
-  if (!Number.isInteger(seconds) || seconds < 15 || seconds > 300 || seconds === policy.client_poll_seconds) return
-  policy = { client_poll_seconds: seconds }
+  const minutes = config?.client_idle_minutes
+  if (Number.isInteger(seconds) && seconds >= 15 && seconds <= 300) next.client_poll_seconds = seconds
+  if (Number.isInteger(minutes) && minutes >= 5 && minutes <= 60) next.client_idle_minutes = minutes
+  if (next.client_poll_seconds === policy.client_poll_seconds && next.client_idle_minutes === policy.client_idle_minutes) return
+  policy = next
+  configureClientIdle(policy.client_idle_minutes)
   listeners.forEach(listener => listener())
 }
 
@@ -115,3 +120,5 @@ export function startResourcePolicySession() {
   }, { intervalMs: POLICY_REFRESH_MS })
   return () => { alive = false; stop(); unsubscribe() }
 }
+
+export const policyDefaults = { client_idle_minutes: 30, ai_global_daily_requests: 50, ai_user_daily_requests: 50, ai_global_minute_requests: 15, ai_max_output_tokens: 1800, release_notifications_enabled: true, scheduled_notifications_enabled: true, upcoming_notifications_enabled: true, notification_batch_size: 5, backup_interval_hours: 24, backup_skip_unchanged: false, client_poll_seconds: 60, idle_recheck_minutes: 180, database_probe_minutes: 60, scheduler_enabled: true, scheduler_interval_minutes: 1 }

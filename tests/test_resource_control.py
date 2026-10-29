@@ -129,8 +129,8 @@ def test_http_post_array_bearer_timeout_and_no_redirects(monkeypatch):
     assert kwargs["headers"] == {"Authorization": "Bearer synthetic-bearer"}
     assert kwargs["timeout"] == 2.0
     assert kwargs["follow_redirects"] is False
-    assert kwargs["json"][:3] == ["EVAL", rc.LUA, 9]
-    assert kwargs["json"][12] == "state"
+    assert kwargs["json"][:3] == ["EVAL", rc.LUA, 11]
+    assert kwargs["json"][14] == "state"
     assert "synthetic-bearer" not in json.dumps(kwargs["json"])
 
 
@@ -218,7 +218,7 @@ def test_successful_api_arguments_and_non_run_finish():
     commands = []
     def execute(command):
         commands.append(command)
-        operation, nonce = command[12:14]
+        operation, nonce = command[14:16]
         if operation == "begin":
             return nonce
         if operation == "claim":
@@ -229,16 +229,16 @@ def test_successful_api_arguments_and_non_run_finish():
     c = coordinator(execute, SCHEDULE_RUNNER_SECRET="synthetic-cron-secret")
     token = c.begin_change()
     c.end_change(token)
-    assert commands[-1][14:] == [token]
+    assert commands[-1][16:] == [token]
     run = c.claim_scheduler(NOW)
     c.finish_scheduler(run, None, True, NOW)
-    assert commands[-1][14:] == [NOW, run["token"], run["generation"], "1", ""]
+    assert commands[-1][16:] == [NOW, run["token"], run["generation"], "1", ""]
     c.save_health(False, NOW)
-    assert commands[-1][14:] == [NOW, "0", ""]
+    assert commands[-1][16:] == [NOW, "0", ""]
     c.save_health(True, NOW, generation="probe-start")
-    assert commands[-1][14:] == [NOW, "1", "probe-start"]
+    assert commands[-1][16:] == [NOW, "1", "probe-start"]
     assert c.read_health(NOW) == {"cached": True, "ok": True, "needs_probe": False}
-    assert commands[-1][14:] == [NOW, "1"]
+    assert commands[-1][16:] == [NOW, "1"]
     count = len(commands)
     for action in ("fallback", "busy", "skip"):
         c.finish_scheduler({"action": action}, None, True, NOW)
@@ -772,3 +772,82 @@ def test_pause_preserves_running_lease_and_health(live):
     c.save_health(True, NOW, health['generation'])
     assert c.read_health(NOW)['ok'] is True
     assert c.claim_scheduler(NOW + 1000) == {'action': 'skip', 'reason': 'paused'}
+
+
+def test_extended_policy_atomic_legacy_merge_and_audit(store):
+    c = coordinator(store)
+    state = c.read_state()
+    assert state['policy']['ai_user_daily_requests'] == 50
+    updated = dict(state['policy'], client_idle_minutes=45, backup_skip_unchanged=True)
+    saved = c.update_policy(updated, state['revision'], actor_user_id=123)
+    legacy = {k: updated[k] for k in ('client_poll_seconds', 'idle_recheck_minutes', 'database_probe_minutes')}
+    latest = c.update_policy(legacy, saved['revision'], actor_user_id=456)
+    assert latest['policy'] == updated
+    events = c.read_history()['items']
+    assert events[0]['actor_id'] == '456'
+    assert events[1]['changes'] == {
+        'client_idle_minutes': {'before': 30, 'after': 45},
+        'backup_skip_unchanged': {'before': False, 'after': True}}
+    with pytest.raises(rc.ConflictError):
+        c.update_policy(updated, state['revision'], actor_user_id=789)
+    assert len(c.read_history()['items']) == 2
+    for _ in range(105):
+        latest = c.update_policy(legacy, latest['revision'], actor_user_id=123)
+    assert len(c.read_history()['items']) == 100
+    assert len(c.read_history(3)['items']) == 3
+
+
+def test_corrupt_audit_does_not_save_policy(store):
+    c = coordinator(store)
+    state = c.read_state()
+    store(['SET', c._configuration()[2] + 'audit', 'broken'])
+    with pytest.raises(rc.CoordinationUnavailable):
+        c.update_policy(dict(state['policy'], client_idle_minutes=40), state['revision'], 123)
+    assert c.read_state() == state
+
+
+def test_operational_metrics_actual_lua(store):
+    c = coordinator(store)
+    assert c.read_metrics() == {'enabled_at': None, 'reset_at': None, 'counters': {}}
+    for name in rc.METRIC_NAMES:
+        assert c.record_metric(name)
+        assert c.record_metric(name, 2)
+    metrics = c.read_metrics()
+    assert metrics['enabled_at'] > 0
+    assert metrics['reset_at'] is None
+    assert metrics['counters'] == dict.fromkeys(rc.METRIC_NAMES, 3)
+    with pytest.raises(ValueError):
+        c.record_metric('financial_amount')
+    with pytest.raises(ValueError):
+        c.record_metric('ai_attempts', True)
+    unavailable = rc.Coordinator(environ={})
+    assert unavailable.record_metric('ai_attempts') is False
+
+
+@pytest.mark.parametrize('key,bounds', list(rc.POLICY_BOUNDS.items()))
+def test_extended_bounds_reject_bool_and_outside(key, bounds):
+    c = coordinator(lambda _: pytest.fail('invalid policy reached Redis'))
+    for value in (True, bounds[0] - 1, bounds[1] + 1):
+        with pytest.raises(ValueError):
+            c.update_policy(dict(rc.DEFAULT_POLICY, **{key: value}), 'revision')
+
+
+@pytest.mark.parametrize('field,bounds', list(rc.POLICY_BOUNDS.items()))
+def test_lua_enforces_policy_bounds(store, field, bounds):
+    c = coordinator(store)
+    state = c.read_state()
+    for value in (True, bounds[0] - 1, bounds[1] + 1):
+        with pytest.raises(rc.CoordinationUnavailable):
+            c._call('policy', state['revision'], json.dumps(dict(state['policy'], **{field: value})), '7')
+        assert c.read_state()['revision'] == state['revision']
+    assert c.read_history()['items'] == []
+
+
+def test_lua_metric_allowlist_and_concurrency(store):
+    c = coordinator(store)
+    for name, value in [('private_label', 1), ('ai_attempts', -1), ('ai_attempts', 1000001)]:
+        with pytest.raises(rc.CoordinationUnavailable):
+            c._call('metric', name, value)
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        assert all(pool.map(lambda _: c.record_metric('ai_attempts'), range(80)))
+    assert c.read_metrics()['counters'] == {'ai_attempts': 80}

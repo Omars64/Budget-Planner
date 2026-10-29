@@ -1,4 +1,13 @@
 {
+  "6.7.0": [
+    {"title":"Smoother background efficiency","detail":"Background refresh respects inactivity and resumes when you return. Manual saving stays responsive."},
+    {"title":"Administrator efficiency controls","detail":"Configure AI limits, notification delivery, backup spacing, and draft economy presets. Review operational counters and policy change history without exposing credentials or claiming estimated costs are actual provider bills.","audience":"admin"},
+    {"title":"Protected backup optimization","detail":"Optional unchanged-data checks verify existing encrypted archives before skipping redundant uploads. Manual backups create fresh copies, stored backups are retained, and a fresh full copy is required at least weekly.","audience":"admin"},
+    {"title":"Scheduler switch appearance","detail":"Corrected the scheduled-processing switch sizing and keyboard focus on browser and Android layouts.","audience":"admin"}
+  ],
+  "6.6.1": [
+    {"title":"Administrator toggle appearance","detail":"The scheduled-processing switch now has a properly sized track, aligned thumb, and clear keyboard focus on browser and Android layouts.","audience":"admin"}
+  ],
   "6.6.0": [
     {"title":"More reliable scheduled and offline entries","detail":"Scheduled saves are protected against duplicate retries and conflicting edits. Offline reopening and pending-entry controls have been strengthened, and scheduling guidance reflects the configured processing interval."},
     {"title":"Administrator scheduler controls","detail":"Pause or resume automatic scheduled processing and choose a check interval from 1 to 60 minutes. Existing records and manual saving remain available. Intentional pauses are clearly distinguished from service failures.","audience":"admin"},

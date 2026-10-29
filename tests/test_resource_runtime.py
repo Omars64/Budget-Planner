@@ -23,7 +23,7 @@ from api.reliability_models import AccountSession
 
 POLICY = dict(client_poll_seconds=60, idle_recheck_minutes=180,
               database_probe_minutes=60)
-STATE = dict(policy=POLICY, revision='synthetic-revision',
+STATE = dict(policy={**runtime.control.DEFAULT_POLICY, **POLICY}, revision='synthetic-revision',
              coordination=dict(configured=True, healthy=True), status={})
 ORIGIN = 'http://localhost:5173'
 
@@ -129,7 +129,7 @@ def test_scheduler_cold_start_skips_without_initialize_or_dependencies(integrati
 
 @pytest.mark.parametrize('path,body,status', [
     ('/api/health/live', {'ok': True}, 200),
-    ('/api/runtime-policy', {'client_poll_seconds': 60}, 200),
+    ('/api/runtime-policy', {'client_poll_seconds': 60, 'client_idle_minutes': 30}, 200),
     ('/api/health/ready', {'ok': True}, 200),
     ('/api/health/ready', {'ok': False}, 503),
 ])
@@ -400,7 +400,7 @@ def test_admin_read_and_compare_and_swap_use_real_permissions(integration):
                             json={'policy': POLICY, 'revision': 'expected-revision'})
     assert response.status_code == 200
     assert response.json() == STATE
-    s.control.update_policy.assert_called_once_with(POLICY, 'expected-revision')
+    s.control.update_policy.assert_called_once_with(POLICY, 'expected-revision', actor_user_id=ANY)
 
 
 @pytest.mark.parametrize('error,status', [
@@ -413,7 +413,7 @@ def test_admin_compare_and_swap_maps_control_failures(integration, error, status
         json={'policy': POLICY, 'revision': 'expected-revision'})
     assert response.status_code == status
     assert 'synthetic-private-error' not in response.text
-    s.control.update_policy.assert_called_once_with(POLICY, 'expected-revision')
+    s.control.update_policy.assert_called_once_with(POLICY, 'expected-revision', actor_user_id=ANY)
 
 
 @pytest.mark.parametrize('field,low,high', [
@@ -430,7 +430,7 @@ def test_policy_strict_integer_bounds(integration, field, low, high, kind):
                             json={'policy': policy, 'revision': 'revision'})
     if kind in ('low', 'high'):
         assert response.status_code == 200
-        s.control.update_policy.assert_called_once_with(policy, 'revision')
+        s.control.update_policy.assert_called_once_with(policy, 'revision', actor_user_id=ANY)
     else:
         assert response.status_code == 422
         s.control.update_policy.assert_not_called()
@@ -459,7 +459,7 @@ def test_policy_cas_never_uses_financial_pending_envelope(integration, outcome, 
     s.control.begin_change.side_effect = AssertionError('Policy PUT entered financial fence')
     state = {**STATE, 'status': {'pending_count': 2}}
 
-    def compare_and_swap(policy, revision):
+    def compare_and_swap(policy, revision, actor_user_id=None):
         s.control.begin_change.assert_not_called()
         s.control.end_change.assert_not_called()
         assert policy == POLICY
@@ -480,7 +480,7 @@ def test_policy_cas_never_uses_financial_pending_envelope(integration, outcome, 
         assert response.json() == state
         assert response.json()['status']['pending_count'] == 2
     if outcome in ('success', 'conflict', 'unavailable'):
-        s.control.update_policy.assert_called_once_with(POLICY, 'expected-revision')
+        s.control.update_policy.assert_called_once_with(POLICY, 'expected-revision', actor_user_id=ANY)
     else:
         s.control.update_policy.assert_not_called()
     s.control.begin_change.assert_not_called()
@@ -844,3 +844,30 @@ def test_read_and_daily_posting_cannot_bypass_scheduler(isolated):
     db = Mock()
     assert planned.post_due(db) == 0
     db.query.assert_not_called()
+
+
+@pytest.mark.parametrize('path', ['/api/admin/resource-policy/history', '/api/admin/resource-metrics', '/api/admin/resource-policy/metrics'])
+@pytest.mark.parametrize('role,status', [('admin', 200), ('user', 403)])
+def test_operational_admin_read_routes(integration, monkeypatch, path, role, status):
+    history = Mock(return_value={'items': []})
+    metrics = Mock(return_value={'enabled_at': None, 'reset_at': None, 'counters': {}})
+    monkeypatch.setattr(runtime.control, 'read_history', history)
+    monkeypatch.setattr(runtime.control, 'read_metrics', metrics)
+    response = integration.client.get(path, headers=authenticate(integration, role=role))
+    assert response.status_code == status
+    if role == 'admin':
+        assert response.json() == ({'items': []} if path.endswith('history') else {'metrics': {}, 'since': None, 'reset_at': None})
+    else:
+        history.assert_not_called()
+        metrics.assert_not_called()
+
+
+def test_history_limit_bounded(integration, monkeypatch):
+    history = Mock(return_value={'items': []})
+    monkeypatch.setattr(runtime.control, 'read_history', history)
+    headers = authenticate(integration)
+    for limit in (0, 101):
+        assert integration.client.get('/api/admin/resource-policy/history', params={'limit': limit}, headers=headers).status_code == 422
+    history.assert_not_called()
+    assert integration.client.get('/api/admin/resource-policy/history?limit=3', headers=headers).status_code == 200
+    history.assert_called_once_with(3)
