@@ -1,4 +1,9 @@
 {
+  "6.6.0": [
+    {"title":"More reliable scheduled and offline entries","detail":"Scheduled saves are protected against duplicate retries and conflicting edits. Offline reopening and pending-entry controls have been strengthened, and scheduling guidance reflects the configured processing interval."},
+    {"title":"Administrator scheduler controls","detail":"Pause or resume automatic scheduled processing and choose a check interval from 1 to 60 minutes. Existing records and manual saving remain available. Intentional pauses are clearly distinguished from service failures.","audience":"admin"},
+    {"title":"Stronger release verification","detail":"Automated checks cover browser offline persistence, cross-tab queue coordination, PostgreSQL load and scheduled-entry concurrency using isolated synthetic data.","audience":"admin"}
+  ],
   "6.5.7": [
     {"title":"More reliable offline reopening","detail":"When your device is offline, Budgetly opens its matching saved session directly instead of waiting for a network request. Entries saved on the device still need a successful sync before they are confirmed online."},
     {"title":"Clearer service diagnostics","detail":"Health checks preserve genuine outage failures and report only safe status metadata. Hosting quota exhaustion still requires a provider allowance reset or owner-approved upgrade.","audience":"admin"}

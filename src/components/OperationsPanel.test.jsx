@@ -43,3 +43,20 @@ test('backup confirmation reports actual uploaded account count',async()=>{
   fireEvent.click(screen.getByRole('button',{name:'Run recovery and backup'}))
   await waitFor(()=>expect(notify).toHaveBeenCalledWith('Recovery completed; 3 encrypted account backups uploaded.'))
 })
+
+
+test.each([true, false])('intentional scheduler pause overrides healthy=%s and an older failure without an outage style', async healthy => {
+  api.mockResolvedValue({ ...health, jobs: { scheduler: { configured: true, healthy, paused: true, last_status: 'failed', last_failure: 'Previous scheduler check failed' } } })
+  render(<OperationsPanel />)
+  const paused = await screen.findByText('Paused')
+  expect(paused).not.toHaveClass('form-error')
+  expect(screen.queryByText('Healthy')).not.toBeInTheDocument()
+  expect(screen.queryByText('Needs attention')).not.toBeInTheDocument()
+})
+
+test('unpaused unhealthy scheduler still needs attention', async () => {
+  api.mockResolvedValue({ ...health, jobs: { scheduler: { configured: true, healthy: false, paused: false } } })
+  render(<OperationsPanel />)
+  expect(await screen.findByText('Needs attention')).toHaveClass('form-error')
+  expect(screen.queryByText('Paused')).not.toBeInTheDocument()
+})

@@ -28,12 +28,15 @@ def job_status(db):
         fresh = bool(row and row.status == 200 and now - timedelta(minutes=minutes) <= row.created_at <= now)
         result[name] = {'configured': configured, 'healthy': fresh if configured else None,
                         'last_run': row.created_at.isoformat() + 'Z' if row else None}
+    result['scheduler'].update(paused=False, interval_minutes=1)
     if result['scheduler']['configured'] and resource_control.configured():
         scheduler = result['scheduler']
         scheduler.update(healthy=False, last_run=None)
         try:
             state = resource_control.read_state()
             if state['coordination']['healthy']:
+                scheduler.update(paused=not state['policy'].get('scheduler_enabled', True),
+                                 interval_minutes=state['policy'].get('scheduler_interval_minutes', 1))
                 status = state['status']
                 tick = status.get('last_tick')
                 failure = status.get('last_failure')
@@ -56,9 +59,11 @@ def job_status(db):
                    now - timedelta(minutes=2160) <= external.created_at <= now)
     result['external_backup'] = {'configured': configured, 'healthy': healthy if configured else None,
                                 'last_run': external.created_at.isoformat() + 'Z' if external else None}
+    if result['scheduler']['paused']:
+        result['scheduler']['healthy'] = True
     overdue = db.query(PlannedTransaction.id).filter(PlannedTransaction.status == 'scheduled',
-        PlannedTransaction.due_at < ledger_now() - timedelta(minutes=5)).count()
+        PlannedTransaction.due_at < ledger_now() - timedelta(minutes=max(5, result['scheduler']['interval_minutes'] + 5))).count()
     result['scheduler']['overdue_count'] = overdue
-    if overdue and result['scheduler']['configured']:
+    if overdue and result['scheduler']['configured'] and not result['scheduler']['paused']:
         result['scheduler']['healthy'] = False
     return result

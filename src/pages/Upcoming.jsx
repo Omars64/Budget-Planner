@@ -148,6 +148,6 @@ export default function Upcoming() {
         <div className="upcoming-record-end"><strong className={`upcoming-amount ${row.type}`}>{row.type === 'expense' ? '-' : row.type === 'income' ? '+' : ''}{money(row.amount, settings.currency)}</strong>{row.can_edit && row.status !== 'posted' && <div className="button-row"><button type="button" className="icon-button" title="Edit entry" aria-label={`Edit ${row.description}`} onClick={() => start(row)}><Pencil size={17}/></button><button type="button" className="icon-button" title="Delete entry" aria-label={`Delete ${row.description}`} onClick={() => remove(row)}><Trash2 size={17}/></button></div>}</div>
       </article>)}
     </div>
-    <p className="muted upcoming-footnote"><CalendarClock size={15}/> Auto record is processed automatically by the server, normally within a minute of the due time. Planned rows remain estimates until recorded.</p>
+    <p className="muted upcoming-footnote"><CalendarClock size={15}/> Auto record runs at the next automatic server check after the due time. The administrator can pause processing or change its interval. Planned rows remain estimates until recorded.</p>
   </section>
 }

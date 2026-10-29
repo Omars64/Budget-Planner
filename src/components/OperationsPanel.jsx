@@ -31,7 +31,7 @@ export default function OperationsPanel(){
     {data&&<>
       <p>Database: {data.database_engine} · Email: {data.email_configured?'Configured':'Needs configuration'}</p>
       {!data.persistent_storage&&<p className="form-error">Production storage is not persistent. Connect PostgreSQL before accepting records.</p>}
-      {Object.entries(data.jobs || {}).map(([name, job])=><div className="security-item" key={name}><div><strong>{jobNames[name] || name}</strong><small>{job.last_run?showTime(job.last_run)+' Kuwait':'No heartbeat yet'}</small>{job.overdue_count>0&&<small>{job.overdue_count} overdue entries</small>}</div><span className={job.healthy===false?'form-error':'muted'}>{!job.configured?'Not configured':job.healthy?'Healthy':'Needs attention'}</span></div>)}
+      {Object.entries(data.jobs || {}).map(([name, job])=><div className="security-item" key={name}><div><strong>{jobNames[name] || name}</strong><small>{job.last_run?showTime(job.last_run)+' Kuwait':'No heartbeat yet'}</small>{job.overdue_count>0&&<small>{job.overdue_count} overdue entries</small>}</div><span className={name==='scheduler'&&job.paused===true?'muted':job.healthy===false?'form-error':'muted'}>{name==='scheduler'&&job.paused===true?'Paused':!job.configured?'Not configured':job.healthy?'Healthy':'Needs attention'}</span></div>)}
       <p>Daily recovery: {data.last_daily_backup?showTime(data.last_daily_backup)+' Kuwait':'Not run yet'}</p>
       <p>External backup: {data.external_backup_configured?(data.last_external_backup?showTime(data.last_external_backup)+' Kuwait':'Configured, not run yet'):'Not configured'}</p>
       <p className="muted">Daily recovery copies are stored in the same database. External backups are encrypted and stored separately when configured.</p>

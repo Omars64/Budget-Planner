@@ -110,6 +110,11 @@ def serialize(db, row, user):
 
 def post_due(db: Session, limit=100):
     """Claim each due row inside a transaction; concurrent workers skip locked rows."""
+    from . import resource_control
+    from .resource_runtime import scheduler_authorized
+    # Coordinated automation has one entry point; reads/daily cannot bypass its gate.
+    if resource_control.configured() and not scheduler_authorized.get():
+        return 0
     query = db.query(PlannedTransaction).filter(
         PlannedTransaction.status == 'scheduled', PlannedTransaction.due_at <= ledger_now()
     ).order_by(PlannedTransaction.due_at, PlannedTransaction.id)

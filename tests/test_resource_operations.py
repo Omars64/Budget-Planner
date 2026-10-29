@@ -167,7 +167,8 @@ def status(monkeypatch):
 
     db.query.side_effect = query
     configured = Mock(return_value=True)
-    read = Mock(return_value={'coordination': {'healthy': True}, 'status': {
+    read = Mock(return_value={'policy': dict(resource_control.DEFAULT_POLICY),
+                             'coordination': {'healthy': True}, 'status': {
         'last_tick': NOW.timestamp(), 'last_run': NOW.timestamp() - 3600}})
     monkeypatch.setattr(resource_control, 'configured', configured)
     monkeypatch.setattr(resource_control, 'read_state', read)
@@ -261,7 +262,7 @@ def test_missing_runner_secret_preserves_unknown_health_with_coordination(status
     assert result['scheduler'] == {
         'configured': False, 'healthy': None,
         'last_run': s.rows['scheduler-heartbeat'].created_at.isoformat() + 'Z',
-        'overdue_count': overdue,
+        'overdue_count': overdue, 'paused': False, 'interval_minutes': 1,
     }
     assert result['daily_backup']['healthy'] is True
     assert result['external_backup']['healthy'] is True

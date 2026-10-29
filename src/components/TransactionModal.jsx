@@ -127,7 +127,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
         <button type="button" aria-pressed={form.type === 'transfer'} className={form.type === 'transfer' ? 'active' : ''} onClick={() => set('type','transfer')}><ArrowRightLeft size={17}/>Transfer</button>
       </div>
       {!editing && <div className="segment-control" role="group" aria-label="When to record"><button type="button" aria-pressed={!schedule} className={!schedule ? 'active' : ''} onClick={() => setSchedule(false)}>Record now</button><button type="button" aria-pressed={schedule} className={schedule ? 'active' : ''} onClick={() => {if(isGuest){writeDraft(draftKey,form);sessionStorage.setItem('budgetly_guest_schedule','true');notify('Sign in to schedule. Your draft is kept.','success',{label:'Sign in',run:async()=>requestSignIn('scheduled transactions')})}else setSchedule(true)}}>Schedule</button></div>}
-      {schedule && <p className="form-note">Recorded automatically after the selected time, usually within a minute. Save online first. Your balance stays unchanged until recorded.</p>}
+      {schedule && <p className="form-note">Recorded at the next automatic check after the selected time. Administrator settings can delay automatic processing. Save online first. Your balance stays unchanged until recorded.</p>}
 
       <VoiceInputButton disabled={busy || loading || !open} onActiveChange={setVoiceActive} onTranscript={applyVoice} onError={message => setError(message)}/>
       {!editing && !isGuest && helpers.entryTemplates && <TransactionTemplates userId={user.id} scope={spaceKey || 'personal'} draft={form} disabled={busy || loading} onApply={item => {

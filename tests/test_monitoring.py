@@ -130,3 +130,17 @@ def test_latest_failure_wins_timestamp_tie(monitor, monkeypatch, area, secret, n
     record_job(db, area, 200)
     db.refresh(failure)
     assert failure.status == 200
+
+
+def test_intentional_pause_does_not_report_outage(monitor, monkeypatch):
+    from api import resource_control
+    _, db = monitor
+    monkeypatch.setattr(resource_control, 'configured', lambda: True)
+    monkeypatch.setattr(resource_control, 'read_state', lambda: {
+        'coordination': {'healthy': True},
+        'policy': {'scheduler_enabled': False, 'scheduler_interval_minutes': 10},
+        'status': {'last_failure': 1}})
+    scheduler = job_status(db)['scheduler']
+    assert scheduler['paused'] is True
+    assert scheduler['interval_minutes'] == 10
+    assert scheduler['healthy'] is True

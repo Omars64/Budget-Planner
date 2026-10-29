@@ -38,11 +38,14 @@ import httpx
 
 
 DEFAULT_POLICY = {
+    "scheduler_enabled": True,
+    "scheduler_interval_minutes": 1,
     "client_poll_seconds": 60,
     "idle_recheck_minutes": 180,
     "database_probe_minutes": 60,
 }
 POLICY_BOUNDS = {
+    "scheduler_interval_minutes": (1, 60),
     "client_poll_seconds": (15, 300),
     "idle_recheck_minutes": (15, 1440),
     "database_probe_minutes": (15, 1440),
@@ -74,11 +77,15 @@ class ConflictError(RuntimeError):
 
 
 def _policy(value):
-    if not isinstance(value, dict) or value.keys() != POLICY_BOUNDS.keys():
+    required = set(POLICY_BOUNDS) - {'scheduler_interval_minutes'}
+    allowed = set(DEFAULT_POLICY)
+    if not isinstance(value, dict) or not required <= value.keys() or not value.keys() <= allowed:
         raise ValueError("A complete resource policy is required")
     for key, (low, high) in POLICY_BOUNDS.items():
-        if type(value[key]) is not int or not low <= value[key] <= high:
+        if key in value and (type(value[key]) is not int or not low <= value[key] <= high):
             raise ValueError("Invalid resource policy: " + key)
+    if 'scheduler_enabled' in value and type(value['scheduler_enabled']) is not bool:
+        raise ValueError("Invalid resource policy: scheduler_enabled")
     return dict(value)
 
 
@@ -130,7 +137,10 @@ if not p then
     if redis.call('EXISTS', policy) == 1 then return redis.error_reply('invalid policy') end
     p = {client_poll_seconds=60, idle_recheck_minutes=180, database_probe_minutes=60}
 end
-local bounds = {client_poll_seconds={15,300}, idle_recheck_minutes={15,1440}, database_probe_minutes={15,1440}}
+if p.scheduler_enabled == nil then p.scheduler_enabled = true end
+if p.scheduler_interval_minutes == nil then p.scheduler_interval_minutes = 1 end
+if type(p.scheduler_enabled) ~= 'boolean' then return redis.error_reply('invalid policy') end
+local bounds = {scheduler_interval_minutes={1,60}, client_poll_seconds={15,300}, idle_recheck_minutes={15,1440}, database_probe_minutes={15,1440}}
 for k, b in pairs(bounds) do
     local v = p[k]
     if type(v) ~= 'number' or v ~= math.floor(v) or v < b[1] or v > b[2] then
@@ -150,9 +160,24 @@ end
 if op == 'state' then return snapshot() end
 if op == 'policy' then
     if redis.call('GET', revision) ~= ARGV[3] then return 'conflict' end
-    redis.call('SET', policy, ARGV[4])
+    local updated = decode(ARGV[4])
+    if not updated then return redis.error_reply('invalid policy') end
+    for k, v in pairs(updated) do
+        if k ~= 'scheduler_enabled' and not bounds[k] then return redis.error_reply('invalid policy') end
+    end
+    for k, b in pairs(bounds) do
+        local v = updated[k]
+        if v == nil and k == 'scheduler_interval_minutes' then v = p[k] end
+        if type(v) ~= 'number' or v ~= math.floor(v) or v < b[1] or v > b[2] then
+            return redis.error_reply('invalid policy')
+        end
+        updated[k] = v
+    end
+    if updated.scheduler_enabled == nil then updated.scheduler_enabled = p.scheduler_enabled end
+    if type(updated.scheduler_enabled) ~= 'boolean' then return redis.error_reply('invalid policy') end
+    redis.call('SET', policy, cjson.encode(updated))
     redis.call('SET', revision, nonce)
-    p = cjson.decode(ARGV[4])
+    p = updated
     invalidate()
     return snapshot()
 end
@@ -174,6 +199,16 @@ end
 local now = tonumber(ARGV[3])
 if op == 'claim' then
     redis.call('HSET', status, 'last_tick', now)
+    if redis.call('EXISTS', lease) == 1 then return cjson.encode({action='busy'}) end
+    local last_run = tonumber(redis.call('HGET', status, 'last_run'))
+    local reason = nil
+    if not p.scheduler_enabled then reason = 'paused'
+    elseif last_run and now < last_run + p.scheduler_interval_minutes * 60 then reason = 'interval' end
+    if reason then
+        redis.call('HINCRBY', status, 'skips', 1)
+        redis.call('HSET', status, 'last_skip', now)
+        return cjson.encode({action='skip', reason=reason})
+    end
     local warmup_until = tonumber(redis.call('HGET', status, 'warmup_until'))
     if redis.call('HGET', status, 'warmup_pending') or not warmup_until then
         warmup_until = now + 600
@@ -182,7 +217,6 @@ if op == 'claim' then
         redis.call('DEL', marker)
     end
     local g = generation()
-    if redis.call('EXISTS', lease) == 1 then return cjson.encode({action='busy'}) end
     local m = decode(redis.call('GET', marker))
     if now >= warmup_until and redis.call('SCARD', pending) == 0 and m and m.generation == g
         and type(m.next_at) == 'number' and m.next_at > now
@@ -226,7 +260,7 @@ if op == 'health' then
         and type(h.expires_at) == 'number' and h.expires_at > now
         and h.expires_at <= h.checked_at + (h.ok and p.database_probe_minutes * 60 or 60)
     local ok = cached and h.ok or false
-    if ARGV[4] == '1' then
+    if ARGV[4] == '1' and p.scheduler_enabled then
         local tick = tonumber(redis.call('HGET', status, 'last_tick'))
         if not tick or tick > now or now - tick > 300
             or redis.call('HGET', status, 'last_result') == '0' then ok = false end
@@ -343,7 +377,7 @@ class Coordinator:
     def _state(self, raw):
         value = self._object(raw)
         try:
-            policy = _policy(value["policy"])
+            policy = {**DEFAULT_POLICY, **_policy(value["policy"])}
             revision = value["revision"]
             if not isinstance(revision, str) or not revision:
                 raise ValueError()
@@ -370,7 +404,7 @@ class Coordinator:
                     "status": {"pending_count": 0}}
 
     def update_policy(self, policy: dict, revision: str) -> dict:
-        """Strict complete integer policy; durable CAS; raises ConflictError (409)."""
+        """Validate policy then atomically merge optional scheduler fields under CAS."""
         policy = _policy(policy)
         if not isinstance(revision, str) or not revision:
             raise ValueError("A policy revision is required")
@@ -382,8 +416,9 @@ class Coordinator:
     def claim_scheduler(self, now_epoch: float) -> dict:
         """Return run (+token/generation), skip, busy, or fail-open fallback.
 
-        First claim after initialization/reset starts a 600s drain; no skips or
-        future markers are allowed during it, even if pending state was lost.
+        First runnable claim after initialization/reset starts a 600s drain;
+        idle skips/markers are forbidden during it. Explicit pause/interval
+        skips still apply and never clear pending writers.
         """
         now_epoch = _epoch(now_epoch)
         try:
@@ -394,7 +429,10 @@ class Coordinator:
                 if not all(isinstance(claim.get(k), str) and claim[k] for k in ("token", "generation")):
                     raise CoordinationUnavailable("Invalid coordination response")
                 return {k: claim[k] for k in ("action", "token", "generation")}
-            return {"action": claim["action"]}
+            result = {"action": claim["action"]}
+            if claim.get('reason') in ('paused', 'interval'):
+                result['reason'] = claim['reason']
+            return result
         except CoordinationUnavailable:
             return {"action": "fallback"}
 

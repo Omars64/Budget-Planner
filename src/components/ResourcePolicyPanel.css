@@ -15,3 +15,8 @@
   .resource-policy-fields { grid-template-columns: minmax(0, 1fr); }
   .resource-policy-actions .button { flex: 1 1 160px; white-space: normal; }
 }
+
+.resource-policy-scheduler { border: 0; border-top: 1px solid var(--border, #8885); margin: 16px 0 0; padding: 16px 0; min-width: 0; }
+.resource-policy-scheduler legend { font-weight: 600; padding: 0 8px 0 0; }
+.resource-policy-toggle { display: flex; align-items: center; gap: 10px; min-height: 44px; font-weight: 600; }
+.resource-policy-toggle input { width: 20px; height: 20px; flex-shrink: 0; }

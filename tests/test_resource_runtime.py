@@ -706,7 +706,7 @@ def test_real_lua_sql_scheduler_posts_once_skips_and_mutation_invalidates(end_to
     s.sql.clear()
     s.dependencies.clear()
     response = s.client.post(runtime.SCHEDULER, headers=headers)
-    assert response.json() == {'ok': True, 'skipped': True, 'reason': 'skip'}
+    assert response.json() == {'ok': True, 'skipped': True, 'reason': 'interval'}
     assert s.sql == []
     assert s.dependencies == []
     assert ledger_snapshot(s) == first
@@ -732,7 +732,8 @@ def test_real_lua_sql_scheduler_posts_once_skips_and_mutation_invalidates(end_to
     assert len({row[2] for row in final[2]}) == 2
     assert all(row[1] == 'posted' for row in final[2])
 
-    # Force another real dispatch, proving duplicate protection beyond idle skips.
+    # Force another real dispatch after the minimum spacing, proving duplicate protection.
+    s.clock.utc += timedelta(minutes=1)
     token = s.coordinator.begin_change()
     s.coordinator.end_change(token)
     response = s.client.post(runtime.SCHEDULER, headers=headers)
@@ -740,7 +741,7 @@ def test_real_lua_sql_scheduler_posts_once_skips_and_mutation_invalidates(end_to
     assert ledger_snapshot(s) == final
     s.sql.clear()
     s.dependencies.clear()
-    assert s.client.post(runtime.SCHEDULER, headers=headers).json()['reason'] == 'skip'
+    assert s.client.post(runtime.SCHEDULER, headers=headers).json()['reason'] == 'interval'
     assert s.sql == []
     assert s.dependencies == []
     s.initialize.assert_not_called()
@@ -817,3 +818,29 @@ def test_probe_capture_overwrites_conflicting_headers_without_changing_body(isol
     assert response.json() == {'ok': False}
     assert response.headers.get_list('cache-control') == ['no-store']
     assert response.headers.get_list('x-budgetly-readiness-source') == ['probe']
+
+
+@pytest.mark.parametrize('reason', ['paused', 'interval'])
+def test_control_skip_is_database_free(integration, reason):
+    s = integration
+    s.control.claim_scheduler.return_value = {'action': 'skip', 'reason': reason}
+    response = s.client.post(runtime.SCHEDULER, headers={'Authorization': 'Bearer synthetic-runner'})
+    assert response.json() == {'ok': True, 'skipped': True, 'reason': reason}
+    assert not s.events
+    s.initialize.assert_not_called()
+    s.control.begin_change.assert_not_called()
+
+
+def test_scheduler_coordination_outage_fails_closed(integration):
+    s = integration
+    s.control.claim_scheduler.return_value = {'action': 'fallback'}
+    response = s.client.post(runtime.SCHEDULER, headers={'Authorization': 'Bearer synthetic-runner'})
+    assert response.status_code == 503
+    assert not s.events
+    s.initialize.assert_not_called()
+
+
+def test_read_and_daily_posting_cannot_bypass_scheduler(isolated):
+    db = Mock()
+    assert planned.post_due(db) == 0
+    db.query.assert_not_called()

@@ -338,7 +338,7 @@ def test_lua_pending_writer_before_and_after_scheduler_finish(live):
     c.end_change(first)
     assert c.read_state()["status"]["pending_count"] == 1
     # A committed writer whose end request failed still prevents every skip.
-    for tick in (NOW + 1, NOW + 1000000):
+    for tick in (NOW + 60, NOW + 1000000):
         run = c.claim_scheduler(tick)
         assert run["action"] == "run"
         c.finish_scheduler(run, None, True, tick)
@@ -350,7 +350,7 @@ def test_lua_pending_writer_before_and_after_scheduler_finish(live):
     c.finish_scheduler(run, None, True, NOW + 1000001)
     token = c.begin_change()
     assert store(["GET", key("marker")]) is None
-    assert c.claim_scheduler(NOW + 1000002)["action"] == "run"
+    assert c.claim_scheduler(NOW + 1000061)["action"] == "run"
     c.end_change(token)
 
 
@@ -391,7 +391,7 @@ def test_lua_ambiguous_begin_and_failed_end_leave_durable_pending(live):
     assert c.read_state()["status"]["pending_count"] == 2
     run = c.claim_scheduler(NOW)
     c.finish_scheduler(run, None, True, NOW)
-    assert c.claim_scheduler(NOW + 1)["action"] == "run"
+    assert c.claim_scheduler(NOW + 60)["action"] == "run"
 
 
 def test_lua_expired_or_replaced_lease_cannot_publish_or_release(live):
@@ -425,7 +425,7 @@ def test_lua_missing_generation_resets_conservatively_without_clearing_pending(l
     old = c.claim_scheduler(NOW)
     token = c.begin_change()
     store(["DEL", key("generation")])
-    fresh = c.claim_scheduler(NOW + 1)
+    fresh = c.claim_scheduler(NOW + 60)
     assert fresh["action"] == "run"
     assert fresh["generation"] != old["generation"]
     assert c.read_state()["status"]["pending_count"] == 1
@@ -525,11 +525,11 @@ def test_lua_simultaneous_begin_and_finish_cannot_leave_skip_marker(live, iterat
     assert store(["TTL", key("pending")]) == -1
     assert store(["GET", key("marker")]) is None
     assert c.read_state()["status"]["pending_count"] == 1
-    next_claim = c.claim_scheduler(NOW + iteration + 1)
+    next_claim = c.claim_scheduler(NOW + iteration + 60)
     assert next_claim["action"] == "run"
     writer.end_change(token)
     # Completing the writer changes generation again, fencing this in-flight run.
-    c.finish_scheduler(next_claim, None, True, NOW + iteration + 1)
+    c.finish_scheduler(next_claim, None, True, NOW + iteration + 60)
     assert store(["GET", key("marker")]) is None
 
 
@@ -652,7 +652,7 @@ def test_lua_new_store_drains_before_idle_skips(store):
     first = c.claim_scheduler(NOW)
     c.finish_scheduler(first, None, True, NOW)
     assert store(['GET', prefix + 'marker']) is None
-    for offset in (1, 299, 599):
+    for offset in (60, 299, 539):
         claim = c.claim_scheduler(NOW + offset)
         assert claim['action'] == 'run'
         c.finish_scheduler(claim, None, True, NOW + offset)
@@ -725,3 +725,50 @@ def test_health_configuration_changes_do_not_inherit_readiness_or_reset_schedule
     assert other._configuration()[2] == c._configuration()[2]
     assert other.read_health(NOW)['needs_probe'] is True
     assert c.read_health(NOW)['cached'] is True
+
+
+def test_scheduler_controls_legacy_cas_pause_interval_and_pending(live):
+    c, store, key = live
+    legacy = {k: v for k, v in rc.DEFAULT_POLICY.items() if not k.startswith('scheduler_')}
+    store(['SET', key('policy'), json.dumps(legacy)])
+    state = c.read_state()
+    assert state['policy'] == rc.DEFAULT_POLICY
+    paused = c.update_policy(dict(state['policy'], scheduler_enabled=False,
+                                 scheduler_interval_minutes=10), state['revision'])
+    preserved = c.update_policy(legacy, paused['revision'])
+    assert preserved['policy']['scheduler_enabled'] is False
+    assert preserved['policy']['scheduler_interval_minutes'] == 10
+    assert c.claim_scheduler(NOW) == {'action': 'skip', 'reason': 'paused'}
+    with pytest.raises(rc.ConflictError):
+        c.update_policy(rc.DEFAULT_POLICY, paused['revision'])
+    resumed = c.update_policy(dict(preserved['policy'], scheduler_enabled=True), preserved['revision'])
+    claim = c.claim_scheduler(NOW)
+    assert claim['action'] == 'run'
+    token = c.begin_change()
+    c.finish_scheduler(claim, NOW, True, NOW)
+    assert c.claim_scheduler(NOW + 599) == {'action': 'skip', 'reason': 'interval'}
+    assert c.read_state()['status']['pending_count'] == 1
+    c.end_change(token)
+    assert c.claim_scheduler(NOW + 600)['action'] == 'run'
+
+
+@pytest.mark.parametrize('key,value', [('scheduler_enabled', 1), ('scheduler_enabled', 'false'),
+    ('scheduler_interval_minutes', 0), ('scheduler_interval_minutes', 61),
+    ('scheduler_interval_minutes', True), ('scheduler_interval_minutes', 1.5)])
+def test_scheduler_control_bounds(key, value):
+    with pytest.raises(ValueError):
+        coordinator(lambda _: pytest.fail('invalid policy reached Redis')).update_policy(
+            dict(rc.DEFAULT_POLICY, **{key: value}), 'revision')
+
+
+def test_pause_preserves_running_lease_and_health(live):
+    c, store, key = live
+    claim = c.claim_scheduler(NOW)
+    state = c.read_state()
+    c.update_policy(dict(state['policy'], scheduler_enabled=False), state['revision'])
+    assert store(['GET', key('lease')]) == claim['token']
+    c.finish_scheduler(claim, None, False, NOW)
+    health = c.read_health(NOW)
+    c.save_health(True, NOW, health['generation'])
+    assert c.read_health(NOW)['ok'] is True
+    assert c.claim_scheduler(NOW + 1000) == {'action': 'skip', 'reason': 'paused'}

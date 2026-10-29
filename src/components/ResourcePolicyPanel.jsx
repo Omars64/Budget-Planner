@@ -5,15 +5,23 @@ import { useApp } from '../App'
 import './ResourcePolicyPanel.css'
 
 const endpoint = '/api/admin/resource-policy'
-const defaults = { client_poll_seconds: 60, idle_recheck_minutes: 180, database_probe_minutes: 60 }
+const defaults = { client_poll_seconds: 60, idle_recheck_minutes: 180, database_probe_minutes: 60, scheduler_enabled: true, scheduler_interval_minutes: 1 }
 const fields = [
   { key: 'client_poll_seconds', label: 'Client refresh interval', unit: 'seconds', min: 15, max: 300, help: 'How often active clients check for updates. Longer intervals can delay updates appearing on other devices.' },
-  { key: 'idle_recheck_minutes', label: 'Idle recovery rescan interval', unit: 'minutes', min: 15, max: 1440, help: 'Bounds the recovery rescan interval when no work is due. With external coordination configured, scheduled tasks still use their next-due wake; this does not reduce normal due-time precision.' },
+  { key: 'idle_recheck_minutes', label: 'Idle recovery rescan interval', unit: 'minutes', min: 15, max: 1440, help: 'Bounds the recovery rescan interval when no work is due. With external coordination configured, this controls recovery rescans; server-side scheduled recording and background reminders follow the scheduled processing interval below.' },
   { key: 'database_probe_minutes', label: 'Database health probe interval', unit: 'minutes', min: 15, max: 1440, help: 'Time between database health probes. Longer intervals can delay detecting a database availability change.' },
 ]
-const validPolicy = policy => fields.every(({ key, min, max }) => Number.isInteger(policy?.[key]) && policy[key] >= min && policy[key] <= max)
+const intervalFields = [...fields, { key: 'scheduler_interval_minutes', min: 1, max: 60 }]
+const normalizePolicy = policy => ({ ...defaults, ...policy })
+const validPolicy = raw => {
+  const policy = normalizePolicy(raw)
+  return fields.every(({ key }) => raw?.[key] !== undefined) && typeof policy.scheduler_enabled === 'boolean' && intervalFields.every(({ key, min, max }) => Number.isInteger(policy?.[key]) && policy[key] >= min && policy[key] <= max)
+}
 const validResponse = value => validPolicy(value?.policy) && typeof value?.revision === 'string' && value.revision.length > 0 && typeof value?.coordination?.configured === 'boolean' && typeof value?.coordination?.healthy === 'boolean'
-const copyPolicy = policy => Object.fromEntries(fields.map(({ key }) => [key, policy[key]]))
+const copyPolicy = raw => {
+  const policy = normalizePolicy(raw)
+  return { ...Object.fromEntries(intervalFields.map(({ key }) => [key, policy[key]])), scheduler_enabled: policy.scheduler_enabled }
+}
 
 export default function ResourcePolicyPanel() {
   const { confirm } = useApp()
@@ -50,9 +58,9 @@ export default function ResourcePolicyPanel() {
     finally { if (mounted.current) setBusy('') }
   }
 
-  const numericDraft = Object.fromEntries(fields.map(({ key }) => [key, draft[key] === '' ? NaN : Number(draft[key])]))
+  const numericDraft = { ...Object.fromEntries(intervalFields.map(({ key }) => [key, draft[key] === '' ? NaN : Number(draft[key])])), scheduler_enabled: draft.scheduler_enabled }
   const valid = validPolicy(numericDraft)
-  const dirty = data && fields.some(({ key }) => numericDraft[key] !== data.policy[key])
+  const dirty = data && Object.keys(defaults).some(key => numericDraft[key] !== normalizePolicy(data.policy)[key])
   const available = data?.coordination.configured === true
   const disabled = Boolean(busy) || !available
 
@@ -64,7 +72,7 @@ export default function ResourcePolicyPanel() {
     let committed = false
     setBusy('saving'); setError(''); setMessage('')
     try {
-      if (increases.length && !await confirm(`Increase these intervals: ${increases.map(({ label, key, unit }) => `${label} to ${policy[key]} ${unit}`).join(', ')}? Client refresh and database health detection may take longer when their intervals increase. The idle interval changes recovery rescans only; scheduled tasks still use their next-due wake with external coordination configured.`)) return
+      if (increases.length && !await confirm(`Increase these intervals: ${increases.map(({ label, key, unit }) => `${label} to ${policy[key]} ${unit}`).join(', ')}? Client refresh and database health detection may take longer when their intervals increase. The idle interval changes recovery rescans only; server-side scheduled recording and background reminders follow the scheduled processing interval with external coordination configured.`)) return
       if (!mounted.current) return
       const saved = await api(endpoint, { method: 'PUT', ...jsonBody({ policy, revision: data.revision }) })
       committed = true
@@ -108,7 +116,20 @@ export default function ResourcePolicyPanel() {
           <p id={`${id}-${key}-help`} className="muted">{help} Allowed: {min} to {max} {unit}, whole numbers.</p>
         </div>)}
       </fieldset>
-      <p className="muted">Safe defaults: client refresh 60 seconds, idle recovery rescan 180 minutes, database health probe 60 minutes. Defaults are applied only when saved.</p>
+      <fieldset disabled={disabled} className="resource-policy-scheduler">
+        <legend>Automatic scheduled processing</legend>
+        <label className="resource-policy-toggle" htmlFor={`${id}-scheduler-enabled`}>
+          <input id={`${id}-scheduler-enabled`} type="checkbox" role="switch" checked={draft.scheduler_enabled} aria-describedby={`${id}-scheduler-help`} onChange={event => { setDraft(current => ({ ...current, scheduler_enabled: event.target.checked })); setMessage('') }}/>
+          Enable automatic scheduled processing
+        </label>
+        <p id={`${id}-scheduler-help`} className="muted">Turning this off pauses server-side scheduled recording and background reminders only. Phone reminders may still appear; local reminders remain a personal device preference. A check already in progress may finish. Backups and manual saving are unaffected. Longer intervals can delay server-side scheduled recording and background reminders. Cron still contacts the service every minute; Upstash coordination skips database work until the interval is due.</p>
+        <div className="resource-policy-field">
+          <label htmlFor={`${id}-scheduler-interval`}>Scheduled processing interval</label>
+          <div className="resource-policy-input"><input id={`${id}-scheduler-interval`} type="number" inputMode="numeric" min="1" max="60" step="1" required value={draft.scheduler_interval_minutes} aria-describedby={`${id}-scheduler-interval-help`} aria-invalid={!Number.isInteger(numericDraft.scheduler_interval_minutes) || numericDraft.scheduler_interval_minutes < 1 || numericDraft.scheduler_interval_minutes > 60} onChange={event => { setDraft(current => ({ ...current, scheduler_interval_minutes: event.target.value })); setMessage('') }}/><span>minutes</span></div>
+          <p id={`${id}-scheduler-interval-help`} className="muted">Allowed: 1 to 60 minutes, whole numbers. Applies when automatic processing is enabled.</p>
+        </div>
+      </fieldset>
+      <p className="muted">Safe defaults: client refresh 60 seconds, idle recovery rescan 180 minutes, database health probe 60 minutes; automatic scheduled processing on, every 1 minute. Defaults are applied only when saved.</p>
       {!valid && <p className="form-error" role="alert">Enter whole numbers within each interval's allowed range.</p>}
       {error && <p className="form-error" role="alert">{error}</p>}
       {(busy || message) && <p role="status">{busy === 'loading' ? 'Loading resource policy...' : busy === 'saving' ? 'Saving resource policy...' : message}</p>}
