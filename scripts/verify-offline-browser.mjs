@@ -39,10 +39,10 @@ try {
     const url = new URL(request.url())
     if (['http:', 'https:'].includes(url.protocol) && url.origin !== origin) external.push(url.origin)
   })
-  await context.route('**/*', route => {
-    const url = new URL(route.request().url())
-    return url.origin === origin ? route.continue() : route.abort()
-  })
+  // Leave same-origin shell requests untouched so the real worker/cache path
+  // runs. Intercept only external requests; route.continue is a network override.
+  await context.route(url => ['http:', 'https:'].includes(url.protocol) && url.origin !== origin,
+    route => route.abort())
   page = await context.newPage()
   page.on('pageerror', error => pageFailures.push(error.message.slice(0, 300)))
   page.on('requestfailed', request => {
@@ -117,6 +117,19 @@ try {
       return tasks.length
     })).toBeGreaterThan(0)
   }
+  stage = 'shell precache'
+  const shellCache = await page.evaluate(async () => {
+    const files = [...document.querySelectorAll('script[src],link[rel="stylesheet"]')].map(element => element.src || element.href)
+    return {
+      controller: navigator.serviceWorker.controller?.scriptURL,
+      shellCaches: (await caches.keys()).filter(name => name.startsWith('budgetly-shell-')),
+      assets: await Promise.all(files.map(async url => ({ path: new URL(url).pathname, cached: Boolean(await caches.match(url)) }))),
+    }
+  })
+  console.log('Synthetic shell cache:', JSON.stringify(shellCache))
+  expect(shellCache.controller).toBe(`${origin}/budgetly-push-sw.js`)
+  expect(shellCache.shellCaches.length).toBeGreaterThan(0)
+  expect(shellCache.assets.every(asset => asset.cached)).toBe(true)
   await page.locator('.add-button').click()
   const dialog = page.getByRole('dialog', { name: 'Add transaction' })
   await expect(dialog.getByRole('button', { name: 'Add transaction', exact: true })).toBeEnabled()
