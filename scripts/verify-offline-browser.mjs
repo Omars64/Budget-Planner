@@ -12,6 +12,8 @@ const serverExited = new Promise(resolve => {
   server.once('error', error => { serverError = error; resolve() })
 })
 let browser
+let page
+let stage = 'startup'
 try {
   let ready = false
   for (let attempt = 0; attempt < 120; attempt++) {
@@ -39,7 +41,7 @@ try {
     const url = new URL(route.request().url())
     return url.origin === origin ? route.continue() : route.abort()
   })
-  const page = await context.newPage()
+  page = await context.newPage()
   page.setDefaultTimeout(15000)
   page.setDefaultNavigationTimeout(30000)
   const login = async suffix => {
@@ -62,6 +64,7 @@ try {
   }))
   const queued = async marker => (await records()).filter(row => row.description === marker && row.key)
   const marker = 'CI offline persisted A'
+  stage = 'initial sign-in'
   await page.goto(origin)
   await login('a')
   await page.goto(`${origin}/#/transactions`)
@@ -117,6 +120,7 @@ try {
   await expect(dialog).toBeHidden()
   await expect.poll(async () => (await queued(marker)).length).toBe(1)
   const before = (await queued(marker))[0]
+  stage = 'offline reopening'
   await page.reload({ waitUntil: 'domcontentloaded' })
   await expect(page.locator('.signout-button')).toBeVisible()
   await expect.poll(async () => (await queued(marker)).length).toBe(1)
@@ -234,6 +238,17 @@ try {
   await expect(page.getByText(pendingMarker, { exact: true })).toHaveCount(0)
   expect(external).toEqual([])
   console.log('PASS: real sign-in, offline IndexedDB reload, exactly-once reconnect, account isolation')
+} catch (error) {
+  // Only fixed metadata from the isolated synthetic origin. Never log tokens,
+  // session contents, network headers or ledger payloads.
+  const state = await page?.evaluate(() => ({
+    online: navigator.onLine,
+    tokenPresent: Boolean(sessionStorage.getItem('flowbudget_token') || localStorage.getItem('flowbudget_token')),
+    offlineAccountPresent: Boolean(localStorage.getItem('budgetly_offline_user')),
+    headings: [...document.querySelectorAll('h1,h2,h3,[role="status"],[role="alert"]')].map(element => element.textContent).slice(0, 12),
+  })).catch(() => ({ unavailable: true }))
+  console.error('Synthetic browser failure:', JSON.stringify({ stage, state }))
+  throw error
 } finally {
   try { await browser?.close() }
   finally {
