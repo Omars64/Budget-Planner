@@ -9,6 +9,7 @@ for (const entry of [source, legacy]) {
   const handlers = new Map()
   const notifications = []
   const shell = { syntheticShell: true }
+  const asset = { syntheticAsset: true }
   const self = {
     location: { origin: 'https://synthetic.invalid' },
     addEventListener(type, callback) {
@@ -18,7 +19,10 @@ for (const entry of [source, legacy]) {
     registration: { showNotification: async (...args) => notifications.push(args) },
   }
   const context = { self, URL, Response,
-    caches: { match: async path => path === '/index.html' ? shell : undefined },
+    caches: {
+      open: async () => ({ match: async path => path === '/index.html' ? shell : undefined }),
+      match: async path => path === 'https://synthetic.invalid/assets/public.js' ? asset : undefined,
+    },
     fetch: async () => { throw new Error('Synthetic offline network') },
     importScripts(path) {
       assert.equal(path, '/budgetly-push-sw.js')
@@ -35,6 +39,11 @@ for (const entry of [source, legacy]) {
     respondWith(value) { response = value },
   })
   assert.equal(await response, shell, 'Offline navigation uses the cached shell')
+  for (const callback of handlers.get('fetch')) callback({
+    request: { method: 'GET', url: 'https://synthetic.invalid/assets/public.js', mode: 'cors', destination: 'script' },
+    respondWith(value) { response = value },
+  })
+  assert.equal(await response, asset, 'Public module requests use the precached URL key')
   let cachedFinancialRequest = false
   for (const callback of handlers.get('fetch')) callback({
     request: { method: 'GET', url: 'https://synthetic.invalid/api/transactions', mode: 'cors' },

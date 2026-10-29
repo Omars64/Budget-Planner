@@ -27,10 +27,13 @@ self.addEventListener('fetch', event => {
   const url = new URL(request.url);
   if (request.method !== 'GET' || url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
   if (request.mode === 'navigate') {
-    event.respondWith(fetch(request).then(response => response.ok ? response : caches.match('/index.html')).catch(() => caches.match('/index.html')));
+    const shell = () => caches.open(CACHE).then(cache => cache.match('/index.html'));
+    event.respondWith(fetch(request).then(response => response.ok ? response : shell()).catch(shell));
     return;
   }
-  event.respondWith(caches.match(request).then(cached => cached || fetch(request)));
+  // Precached files are public shell assets. Look them up using the same URL
+  // request shape used by addAll, independent of module/style request headers.
+  event.respondWith(caches.match(url.href).then(cached => cached || fetch(request)));
 });
 `
     // One root-scope registration must handle both offline navigation and push.
