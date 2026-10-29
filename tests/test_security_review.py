@@ -268,7 +268,11 @@ def test_daily_maintenance_dispatches_revocation_worker(db, monkeypatch):
     from api import operations, planned, update_push, provider_revocation as worker
     monkeypatch.setenv('CRON_SECRET', 'synthetic-cron')
     monkeypatch.setattr(planned, 'post_due', lambda _: 0)
-    monkeypatch.setattr(operations, 'daily_snapshots', lambda _: {'ok': True})
+    def automatic_snapshots(actual, *, force_external):
+        assert actual is db
+        assert force_external is False
+        return {'ok': True}
+    monkeypatch.setattr(operations, 'daily_snapshots', automatic_snapshots)
     monkeypatch.setattr(update_push, 'dispatch_updates', lambda _: {})
     calls = []
     monkeypatch.setattr(worker, 'retry_due', lambda actual: calls.append(actual) or {'completed': 1, 'failed': 0})
