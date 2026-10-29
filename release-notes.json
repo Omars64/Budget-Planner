@@ -1,4 +1,8 @@
 {
+  "6.5.7": [
+    {"title":"More reliable offline reopening","detail":"When your device is offline, Budgetly opens its matching saved session directly instead of waiting for a network request. Entries saved on the device still need a successful sync before they are confirmed online."},
+    {"title":"Clearer service diagnostics","detail":"Health checks preserve genuine outage failures and report only safe status metadata. Hosting quota exhaustion still requires a provider allowance reset or owner-approved upgrade.","audience":"admin"}
+  ],
   "6.5.6": [
     {"title":"Safer upcoming entries","detail":"Retrying a scheduled save no longer creates duplicate plans. Conflicting edits ask you to reload the latest entry, and Viewer permissions apply consistently after a role change."},
     {"title":"Clearer offline entry controls","detail":"Offline entries distinguish unsent drafts from uploads that may already have reached your wallet, so discarding a local entry cannot silently race with syncing."},

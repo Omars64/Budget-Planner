@@ -8,17 +8,39 @@ from urllib.error import HTTPError, URLError
 from http.client import HTTPException
 
 TITLE = '[Budgetly Monitor] Service needs attention'
+PROBE_ERROR_CODES = frozenset({'STORAGE_UNAVAILABLE', 'COORDINATION_UNAVAILABLE'})
+
+
+def probe_diagnostic(attempt, status, headers, payload):
+    """Print only bounded status and explicitly allowlisted public signals."""
+    status = status if type(status) is int and 100 <= status <= 599 else 'unknown'
+    source = headers.get('X-Budgetly-Readiness-Source') if headers is not None else None
+    source = source if source in ('cached', 'probe') else 'unknown'
+    code = payload.get('code') if isinstance(payload, dict) else None
+    code = code if isinstance(code, str) and code in PROBE_ERROR_CODES else 'unknown'
+    print(f'Probe {attempt}: status={status} source={source} code={code}')
 
 
 def healthy(url):
     for attempt in range(3):
+        status, headers, payload = None, None, None
         try:
             with urlopen(Request(url, headers={'User-Agent': 'Budgetly-Readiness', 'Cache-Control': 'no-cache'}), timeout=15) as response:
+                status, headers = response.status, response.headers
                 payload = json.loads(response.read(4096))
+                probe_diagnostic(attempt + 1, status, headers, payload)
                 if response.status == 200 and isinstance(payload, dict) and payload.get('ok') is True:
                     return True
-        except (HTTPError, URLError, OSError, HTTPException, ValueError):
-            pass
+        except HTTPError as error:
+            status, headers = error.code, error.headers
+            try:
+                with error:
+                    payload = json.loads(error.read(4096))
+            except (OSError, HTTPException, ValueError):
+                pass
+            probe_diagnostic(attempt + 1, status, headers, payload)
+        except (URLError, OSError, HTTPException, ValueError):
+            probe_diagnostic(attempt + 1, status, headers, payload)
         if attempt < 2:
             time.sleep(5)
     return False

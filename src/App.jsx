@@ -347,6 +347,19 @@ export default function App() {
     const resume = async () => {
       if (!auth.token) { if (guestRemembered()) { try { await enterGuest(); return } catch (error) { console.error(error) } } setSession({ loading: false, user: null }); return }
       setGuestActive(false)
+      if (navigator.onLine === false) {
+        // A controlled worker/browser can leave an offline fetch pending. Open
+        // the token-bound local session directly rather than waiting for I/O.
+        const token = auth.token
+        const saved = await restoreOfflineSession(token)
+        if (auth.token !== token) return
+        if (saved) {
+          setOfflineUser(saved.user.id)
+          setSettings(saved.settings)
+          setSession({ loading: false, user: saved.user })
+        } else setSession({ loading: false, user: null })
+        return
+      }
       api('/api/auth/me').then(async user => {
       setOfflineUser(user.id)
       await loadSettings()

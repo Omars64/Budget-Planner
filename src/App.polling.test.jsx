@@ -2,7 +2,8 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import App, { useApp } from './App'
-import { api } from './lib/api'
+import { api, auth } from './lib/api'
+import { restoreOfflineSession, setOfflineUser } from './lib/offlineSync'
 import { syncPlannedNotifications } from './lib/plannedNotifications'
 import { notificationSettingsChangedEvent } from './lib/notificationSettings'
 import { updateResourcePolicy } from './lib/resourcePolicy'
@@ -107,4 +108,25 @@ test('a failed planned notification read releases the scheduler for an explicit 
   window.dispatchEvent(new Event(notificationSettingsChangedEvent))
   await tick(0)
   expect(syncPlannedNotifications).toHaveBeenCalledTimes(2)
+})
+
+test('offline reopening uses the token-bound local session without waiting for authentication I/O',async()=>{
+  vi.spyOn(navigator,'onLine','get').mockReturnValue(false)
+  restoreOfflineSession.mockResolvedValueOnce({user:{id:7,role:'user'},settings:{currency:'KWD'}})
+  api.mockImplementation(()=>new Promise(()=>{}))
+  await openApp()
+  expect(restoreOfflineSession).toHaveBeenCalledWith('signed-in')
+  expect(setOfflineUser).toHaveBeenCalledWith(7)
+  expect(screen.getByRole('button',{name:'Refresh data'})).toBeInTheDocument()
+  expect(api.mock.calls.some(([path])=>path==='/api/auth/me')).toBe(false)
+  expect(auth.clear).not.toHaveBeenCalled()
+})
+
+test('offline reopening without a matching local session keeps authentication locked',async()=>{
+  vi.spyOn(navigator,'onLine','get').mockReturnValue(false)
+  restoreOfflineSession.mockResolvedValueOnce(null)
+  await openApp()
+  expect(screen.getByRole('button',{name:'Sign in',exact:true})).toBeInTheDocument()
+  expect(screen.queryByRole('button',{name:'Refresh data'})).not.toBeInTheDocument()
+  expect(api.mock.calls.some(([path])=>path==='/api/auth/me')).toBe(false)
 })
