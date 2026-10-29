@@ -14,6 +14,8 @@ const serverExited = new Promise(resolve => {
 let browser
 let page
 let stage = 'startup'
+const pageFailures = []
+const failedAssetPaths = []
 try {
   let ready = false
   for (let attempt = 0; attempt < 120; attempt++) {
@@ -42,6 +44,11 @@ try {
     return url.origin === origin ? route.continue() : route.abort()
   })
   page = await context.newPage()
+  page.on('pageerror', error => pageFailures.push(error.message.slice(0, 300)))
+  page.on('requestfailed', request => {
+    const path = new URL(request.url()).pathname
+    if (/\.(js|css)$/.test(path)) failedAssetPaths.push(path)
+  })
   page.setDefaultTimeout(15000)
   page.setDefaultNavigationTimeout(30000)
   const login = async suffix => {
@@ -245,9 +252,11 @@ try {
     online: navigator.onLine,
     tokenPresent: Boolean(sessionStorage.getItem('flowbudget_token') || localStorage.getItem('flowbudget_token')),
     offlineAccountPresent: Boolean(localStorage.getItem('budgetly_offline_user')),
+    rootChildren: document.querySelector('#root')?.childElementCount,
+    appLoading: Boolean(document.querySelector('.app-loading')),
     headings: [...document.querySelectorAll('h1,h2,h3,[role="status"],[role="alert"]')].map(element => element.textContent).slice(0, 12),
   })).catch(() => ({ unavailable: true }))
-  console.error('Synthetic browser failure:', JSON.stringify({ stage, state }))
+  console.error('Synthetic browser failure:', JSON.stringify({ stage, state, pageFailures, failedAssetPaths }))
   throw error
 } finally {
   try { await browser?.close() }

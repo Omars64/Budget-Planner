@@ -19,6 +19,8 @@ export default function FeedbackPrompt({ onReady, signoutRequested, onSignoutCom
   }, [user.id])
   useEffect(() => {
     if (!signoutRequested) return
+    // Optional feedback must never hold a local sign-out behind offline I/O.
+    if (navigator.onLine === false) { onSignoutComplete(); return }
     api('/api/feedback/prompt').then(result => {
       if (result.show_after_next_event) setOpen(true)
       else onSignoutComplete()
