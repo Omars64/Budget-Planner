@@ -16,10 +16,8 @@
 .upcoming-filter-menu button:hover, .upcoming-filter-menu button:focus-visible, .upcoming-filter-menu button[aria-checked=true] { background:var(--surface-hover); }
 .upcoming-filter-menu button svg { color:var(--accent-text); }
 
-.upcoming-editor { max-width:720px; padding:20px; margin:0 0 20px; border:1px solid var(--line); border-radius:7px; background:var(--surface-soft); }
-.upcoming-editor-heading { display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:6px 12px; }
-.upcoming-editor-heading h4 { margin:0; font-size:17px; }
-.upcoming-editor-heading span { font-size:13px; }
+.upcoming-editor { width:100%; min-width:0; margin:0; }
+.upcoming-editor.transaction-form .form-grid.two>.field:first-child { grid-column:auto; }
 .upcoming-editor .field { min-width:0; }
 .upcoming-editor .field>span { font-size:14px; }
 .upcoming-editor .field input, .upcoming-editor .field select { min-width:0; min-height:48px; font:inherit; font-size:15px; background:var(--surface); }
@@ -65,7 +63,6 @@
   .upcoming-filter-button span { white-space:nowrap; }
   .upcoming-filter-menu { right:0; left:auto; }
   .upcoming-total { grid-column:1/-1; }
-  .upcoming-editor { padding:14px; }
   .upcoming-record { grid-template-columns:minmax(0,1fr) auto; gap:10px; }
   .upcoming-record-title strong, .upcoming-amount { font-size:15px; }
   .upcoming-record-details { font-size:12px; gap:4px 10px; }

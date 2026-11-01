@@ -1,4 +1,7 @@
 {
+  "6.7.1": [
+    {"title":"Upcoming entry popup","detail":"Add and edit upcoming entries in a focused popup matching Transactions, with the existing fields, date and time pickers, scheduling options, and reminders. Save and Cancel stay in the popup footer."}
+  ],
   "6.7.0": [
     {"title":"Smoother background efficiency","detail":"Background refresh respects inactivity and resumes when you return. Manual saving stays responsive."},
     {"title":"Administrator efficiency controls","detail":"Configure AI limits, notification delivery, backup spacing, and draft economy presets. Review operational counters and policy change history without exposing credentials or claiming estimated costs are actual provider bills.","audience":"admin"},

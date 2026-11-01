@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Bell, CalendarClock, Check, ChevronDown, ListFilter, Pencil, Plus, Trash2 } from 'lucide-react'
 import { api, jsonBody, money } from '../lib/api'
 import { syncPlannedNotifications } from '../lib/plannedNotifications'
@@ -6,6 +6,7 @@ import { categoryChoices } from '../lib/categoryChoices'
 import { dateInput, saveDate, showTime } from '../lib/time'
 import DateTimeField from '../components/DateTimeField'
 import ReportingMonthField from '../components/ReportingMonthField'
+import Modal from '../components/Modal'
 import { useApp } from '../App'
 import '../upcoming.css'
 
@@ -50,7 +51,8 @@ export default function Upcoming() {
   const [error, setError] = useState('')
   const [conflict, setConflict] = useState(false)
   const [loading, setLoading] = useState(true)
-  const editor = useRef(null)
+  const formId = useId()
+  const baseline = useRef('')
 
   const load = async () => {
     const [plans, owned, ownCategories] = await Promise.all([api('/api/planned-transactions'), api('/api/wallets'), api('/api/categories')])
@@ -65,10 +67,11 @@ export default function Upcoming() {
   const start = row => {
     setError('')
     setConflict(false)
-    if (row) setDraft({ ...row, status: row.status === 'failed' ? 'planned' : row.status, amount: String(row.amount), date: dateInput(row.date), reporting_month: row.reporting_month || String(row.date || '').slice(0, 7), wallet_id: String(row.wallet_id), transfer_wallet_id: row.transfer_wallet_id ? String(row.transfer_wallet_id) : '', category_id: row.category_id ? String(row.category_id) : '' })
-    else setDraft({ ...empty(), wallet_id: String(wallets.find(w => w.editable)?.id || '') })
-    window.requestAnimationFrame?.(() => editor.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' }))
+    const next = row ? { ...row, status: row.status === 'failed' ? 'planned' : row.status, amount: String(row.amount), date: dateInput(row.date), reporting_month: row.reporting_month || String(row.date || '').slice(0, 7), wallet_id: String(row.wallet_id), transfer_wallet_id: row.transfer_wallet_id ? String(row.transfer_wallet_id) : '', category_id: row.category_id ? String(row.category_id) : '' } : { ...empty(), wallet_id: String(wallets.find(w => w.editable)?.id || '') }
+    baseline.current = JSON.stringify(next)
+    setDraft(next)
   }
+  const closeEditor = () => { if (!busy) { setDraft(null); setError(''); setConflict(false) } }
   const change = (key, value) => setDraft(current => ({ ...current, [key]: value, ...(key === 'wallet_id' || key === 'type' ? { category_id: '', transfer_wallet_id: '' } : {}), ...(key === 'type' && value !== 'expense' ? { reporting_month: '' } : {}) }))
   const wallet = wallets.find(w => String(w.id) === String(draft?.wallet_id))
   useEffect(() => {
@@ -119,10 +122,10 @@ export default function Upcoming() {
       <StatusFilter value={filter} onChange={setFilter}/>
       <span className="upcoming-total">Net planned: {money(total, settings.currency)}</span>
     </div>
-    {error && <p className="form-error" role="alert">{error}</p>}
-    {conflict && <button type="button" className="button ghost" disabled={busy} onClick={() => void reloadConflict()}>Reload latest entry</button>}
-    {draft && <form ref={editor} className="upcoming-editor stack gap-12" onSubmit={save}>
-      <div className="upcoming-editor-heading"><h4>{draft.id ? 'Edit entry' : 'New entry'}</h4><span className="muted">{draft.status === 'scheduled' ? 'Records automatically after the due time' : 'Plan only'}</span></div>
+    {error && !draft && <p className="form-error" role="alert">{error}</p>}
+    <Modal open={Boolean(draft)} onClose={closeEditor} title={draft?.id ? 'Edit upcoming entry' : 'Add upcoming entry'} subtitle="Plan ahead without changing your balance." protectChanges isDirty={Boolean(draft && JSON.stringify(draft) !== baseline.current)} footer={close => <div className="modal-actions"><button type="button" className="button ghost" disabled={busy} onClick={close}>Cancel</button><button type="submit" form={formId} className="button primary" disabled={busy || conflict}>{busy ? 'Saving...' : 'Save entry'}</button></div>}>
+    {draft && <form id={formId} className="upcoming-editor stack gap-18 transaction-form" onSubmit={save}>
+      <fieldset className="transaction-fields stack gap-18" disabled={busy}>
       <DateTimeField value={draft.date} onChange={value => change('date', value)} disabled={busy}/>
       <div className="form-grid two">
         <label className="field"><span>Type</span><select value={draft.type} onChange={event => change('type', event.target.value)}><option value="expense">Expense</option><option value="income">Income</option><option value="transfer">Transfer</option></select></label>
@@ -136,8 +139,11 @@ export default function Upcoming() {
       </div>
       <label className="field"><span>Recording</span><select value={draft.status} onChange={event => change('status', event.target.value)}><option value="planned">Plan only</option><option value="scheduled">Auto record</option></select></label>
       <label className="upcoming-reminder"><input type="checkbox" checked={draft.reminder_enabled} onChange={event => change('reminder_enabled', event.target.checked)}/><Bell size={19}/><span>Remind me</span></label>
-      <div className="modal-actions"><button type="button" className="button ghost" onClick={() => { setDraft(null); setError(''); setConflict(false) }}>Cancel</button><button className="button primary" disabled={busy || conflict}>{busy ? 'Saving...' : 'Save entry'}</button></div>
+      </fieldset>
+      {error && <p className="form-error" role="alert">{error}</p>}
+      {conflict && <button type="button" className="button ghost" disabled={busy} onClick={() => void reloadConflict()}>Reload latest entry</button>}
     </form>}
+    </Modal>
     <div className="upcoming-records" aria-live="polite">
       {loading ? <p className="upcoming-empty">Loading upcoming records...</p> : displayed.length === 0 ? <p className="upcoming-empty">No entries in this view.</p> : displayed.map(row => <article className="upcoming-record" key={row.id}>
         <div className="upcoming-record-main">

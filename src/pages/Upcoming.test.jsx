@@ -35,6 +35,10 @@ it('uses the shared calendar and clock and keeps the reminder label visible when
   render(<Upcoming/>)
   await screen.findByText('October rent')
   fireEvent.click(screen.getByRole('button', { name: 'Add plan' }))
+  const editor = screen.getByRole('dialog', { name: 'Add upcoming entry' })
+  expect(editor).toHaveAttribute('aria-modal', 'true')
+  const form = within(editor).getByLabelText('Description').closest('form')
+  expect(within(editor).getByRole('button', { name: 'Save entry' })).toHaveAttribute('form', form.id)
   expect(screen.getByRole('checkbox', { name: 'Remind me' })).toBeChecked()
   expect(document.querySelector('input[type="datetime-local"]')).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: 'Date', exact: true }))
@@ -49,6 +53,39 @@ it('uses the shared calendar and clock and keeps the reminder label visible when
   await waitFor(() => expect(api).toHaveBeenCalledWith('/api/planned-transactions', expect.objectContaining({ method: 'POST' })))
   const body = JSON.parse(api.mock.calls.find(([path, options]) => path === '/api/planned-transactions' && options?.method === 'POST')[1].body)
   expect(body).toMatchObject({ reminder_enabled: true, transaction: { type: 'expense', description: 'Lunch', amount: 2.25, wallet_id: 1 } })
+})
+
+it('retains transfer destination, recording mode, and reminder controls in the popup', async () => {
+  api.mockImplementation(path => Promise.resolve(path === '/api/planned-transactions' ? rows : path === '/api/wallets' ? [
+    { id: 1, name: 'Main', archived: false, is_shared: false },
+    { id: 2, name: 'Savings', archived: false, is_shared: false },
+  ] : []))
+  render(<Upcoming/>)
+  await screen.findByText('October rent')
+  fireEvent.click(screen.getByRole('button', { name: 'Add plan' }))
+  const editor = within(screen.getByRole('dialog', { name: 'Add upcoming entry' }))
+  fireEvent.change(editor.getByLabelText('Type'), { target: { value: 'transfer' } })
+  fireEvent.change(editor.getByLabelText('Destination'), { target: { value: '2' } })
+  fireEvent.change(editor.getByLabelText('Amount (KWD)'), { target: { value: '3.5' } })
+  fireEvent.change(editor.getByLabelText('Description'), { target: { value: 'Planned transfer' } })
+  expect(editor.getByLabelText('Recording')).toHaveValue('planned')
+  fireEvent.click(editor.getByRole('checkbox', { name: 'Remind me' }))
+  fireEvent.click(editor.getByRole('button', { name: 'Save entry' }))
+  await waitFor(() => expect(api).toHaveBeenCalledWith('/api/planned-transactions', expect.objectContaining({ method: 'POST' })))
+  const payload = JSON.parse(api.mock.calls.find(([, options]) => options?.method === 'POST')[1].body)
+  expect(payload).toMatchObject({ status: 'planned', reminder_enabled: false, transaction: { type: 'transfer', amount: 3.5, wallet_id: 1, transfer_wallet_id: 2, category_id: null, reporting_month: null } })
+})
+
+it('protects edited upcoming drafts when closing the popup', async () => {
+  render(<Upcoming/>)
+  fireEvent.click(await screen.findByRole('button', { name: 'Edit October rent' }))
+  const editor = within(screen.getByRole('dialog', { name: 'Edit upcoming entry' }))
+  fireEvent.change(editor.getByLabelText('Description'), { target: { value: 'Keep my draft' } })
+  fireEvent.click(editor.getByRole('button', { name: 'Cancel' }))
+  expect(editor.getByRole('alert')).toHaveTextContent('Discard your unsaved changes?')
+  fireEvent.click(editor.getByRole('button', { name: 'Keep editing' }))
+  expect(editor.getByLabelText('Description')).toHaveValue('Keep my draft')
+  expect(api.mock.calls.some(([, options]) => options?.method === 'PUT')).toBe(false)
 })
 
 it('keeps a conflicting draft visible and reloads the current revision only after confirmation', async () => {
