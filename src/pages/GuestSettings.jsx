@@ -1,3 +1,4 @@
+import SeasonalSettings from '../components/SeasonalSettings'
 import { useEffect, useRef, useState } from 'react'
 import { Download, LogIn, Save, Trash2 } from 'lucide-react'
 import { useApp } from '../App'
@@ -32,7 +33,7 @@ export default function GuestSettings() {
   }
   return <SettingsWorkspace guest>
     <SettingsSection title="Guest workspace"><p>Stored only on this device. Clearing browser storage or uninstalling can remove these records.</p><button className="button primary" onClick={() => requestSignIn('cloud storage and account features')}><LogIn size={18}/>Sign in or create an account</button></SettingsSection>
-    <SettingsSection title="Personal preferences"><h4>Motion & feedback</h4><ComfortSettings/><form className="stack gap-16" onSubmit={save}>
+    <SeasonalSettings settingsId="appearance"/><SettingsSection title="Personal preferences"><h4>Motion & feedback</h4><ComfortSettings/><form className="stack gap-16" onSubmit={save}>
       <label className="field"><span>Appearance</span><select aria-label="Appearance" value={form.theme} onChange={event => setForm({ ...form, theme: event.target.value })}><option value="system">Match device</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
       <AccentPicker value={form.accent_color || '#0a4173'} onChange={value => setForm({ ...form, accent_color: value })}/>
       <label className="field"><span>Wallpaper</span><select aria-label="Wallpaper" value={form.wallpaper_style} onChange={event => setForm({ ...form, wallpaper_style: event.target.value, wallpaper_enabled: event.target.value !== 'none' })}><option value="none">None</option><option value="budgetly">Budgetly</option></select></label>

@@ -1,3 +1,4 @@
+import SeasonalAtmosphere from './components/SeasonalAtmosphere'
 import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -420,7 +421,7 @@ export default function App() {
 
   return <AppContext.Provider value={value}>
     {!isGuest && <Experience />}
-    <div className="ambient" aria-hidden="true"><i/><i/><i/></div>
+    <SeasonalAtmosphere settings={settings}/><div className="ambient" aria-hidden="true"><i/><i/><i/></div>
     <RouteMotion key={`${session.user.id}:${activeSpace?.id || 'personal'}:${activeSpace?.role || 'owner'}`}>{routeLocation => <AppShell>
       <Suspense fallback={<div role="status">Loading page...</div>}>
       {isGuest && !guestRoutes.has(routeLocation.pathname) ? <GuestGate/> : <Routes>

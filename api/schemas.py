@@ -200,6 +200,10 @@ class SettingsPayload(BaseModel):
     font_family: Literal['system', 'arial', 'georgia', 'verdana'] = 'system'
     text_color: Literal['ink', 'charcoal', 'forest'] = 'ink'
     theme: Literal['light', 'dark', 'system'] = 'light'
+    seasonal_mode: Literal['off', 'automatic', 'manual'] = 'off'
+    seasonal_theme: Literal['halloween', 'rain', 'winter', 'summer', 'autumn', 'spring'] = 'winter'
+    seasonal_hemisphere: Literal['north', 'south'] = 'north'
+    seasonal_effects: Literal['off', 'subtle', 'full'] = 'subtle'
     wallpaper_enabled: bool = True
     wallpaper_style: Literal['none', 'budgetly', 'custom'] = 'none'
     reminder_interval_hours: Literal[1, 2, 3, 4, 6, 8, 12, 24] = 4

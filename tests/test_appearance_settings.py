@@ -22,3 +22,20 @@ def test_appearance_and_reminder_preferences_persist():
             assert client.put('/api/settings', headers=headers, json={**changed, 'reminder_interval_hours': 0}).status_code == 422
         finally:
             client.put('/api/settings', headers=headers, json=original)
+
+
+def test_seasonal_preferences_partial_save_and_validation():
+    with TestClient(app) as client:
+        headers = auth_headers(client)
+        original = client.get('/api/settings', headers=headers).json()
+        values = dict(seasonal_mode='automatic', seasonal_theme='rain', seasonal_hemisphere='south', seasonal_effects='full')
+        try:
+            assert client.put('/api/settings', headers=headers, json=values).status_code == 200
+            loaded = client.get('/api/settings', headers=headers).json()
+            assert all(loaded[k] == v for k, v in values.items())
+            assert loaded['wallpaper_style'] == original['wallpaper_style']
+            assert loaded['accent_color'] == original['accent_color']
+            assert client.put('/api/settings', headers=headers, json={'seasonal_mode':'invalid'}).status_code == 422
+            assert client.put('/api/settings', headers=headers, json={'seasonal_effects':'invalid'}).status_code == 422
+        finally:
+            client.put('/api/settings', headers=headers, json=original)

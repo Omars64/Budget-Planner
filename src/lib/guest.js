@@ -102,7 +102,7 @@ function filterTransactions(rows, params) {
   const offset = Math.max(0, Number(params.get('offset') || 0)), limit = Math.min(1000, Number(params.get('limit') || 200))
   return result.slice(offset, offset + limit)
 }
-const allowedSettings = new Set(['currency', 'theme', 'compact_numbers', 'week_starts_on', 'font_family', 'text_color', 'accent_color', 'wallpaper_style', 'wallpaper_enabled'])
+const allowedSettings = new Set(['seasonal_mode','seasonal_theme','seasonal_hemisphere','seasonal_effects','currency', 'theme', 'compact_numbers', 'week_starts_on', 'font_family', 'text_color', 'accent_color', 'wallpaper_style', 'wallpaper_enabled'])
 async function handle(path, options) {
   options.signal?.throwIfAborted()
   const url = new URL(path, 'https://guest.invalid'), route = url.pathname, params = url.searchParams

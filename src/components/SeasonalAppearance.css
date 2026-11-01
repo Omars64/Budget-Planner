@@ -1,0 +1,14 @@
+.seasonal-scene{position:absolute;inset:0;overflow:hidden;pointer-events:none;color:var(--season-colour)}
+.seasonal-global{position:fixed;z-index:0;contain:strict}
+.seasonal-glow{position:absolute;inset:0;background:radial-gradient(ellipse at 95% 12%,color-mix(in srgb,var(--season-colour) 20%,transparent),transparent 60%),linear-gradient(160deg,transparent 45%,color-mix(in srgb,var(--season-colour) 9%,transparent))}
+.seasonal-emblem{position:absolute;right:24px;top:20px;font-size:48px;opacity:.18}
+.seasonal-particle{position:absolute;left:var(--x);top:-50px;font-style:normal;font-size:18px;opacity:.35;animation:seasonal-drift var(--duration) linear var(--delay) infinite;animation-play-state:paused}
+.seasonal-scene[data-moving=true] .seasonal-particle{animation-play-state:running}
+.seasonal-scene[data-season=rain] .seasonal-particle{width:1px;height:28px;background:currentColor;transform:rotate(12deg)}
+.seasonal-scene[data-season=summer] .seasonal-particle{width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 20px currentColor}
+@keyframes seasonal-drift{from{translate:0 -5vh}to{translate:30px 110vh}}
+.seasonal-controls{border:0;padding:0;margin:0;display:grid;gap:20px;min-width:0}.seasonal-controls legend{font-weight:700;margin-bottom:14px}
+.seasonal-mode{display:flex;gap:20px;flex-wrap:wrap}.seasonal-theme-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.seasonal-theme-choice{text-align:left;display:grid;gap:8px;padding:18px;border:2px solid var(--line);border-radius:20px;background:var(--surface);color:var(--text);cursor:pointer}.seasonal-theme-choice>span{font-size:28px}.seasonal-theme-choice small{color:var(--muted);line-height:1.5}.seasonal-theme-choice[aria-pressed=true]{border-color:var(--accent);background:var(--accent-soft)}
+.seasonal-preview-frame{position:relative;isolation:isolate;min-height:230px;border:1px solid var(--line);border-radius:24px;background:var(--page);overflow:hidden}.seasonal-preview-content{position:relative;padding:28px}.seasonal-preview-content h4{font-size:24px;margin:10px 0}.seasonal-preview-content p{max-width:380px}.seasonal-sample{margin-top:20px;padding:16px;border-radius:16px;background:var(--surface);border:1px solid var(--line)}
+@media(prefers-reduced-motion:reduce){.seasonal-particle{animation:none!important}}
