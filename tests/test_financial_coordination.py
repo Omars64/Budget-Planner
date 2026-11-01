@@ -617,6 +617,80 @@ def test_deletion_serializes_drive_callback_installation(api, monkeypatch):
         assert db.get(api.drive.GoogleDriveConnection, ident) is None
 
 
+@pytest.mark.parametrize('change', ['write', 'rename', 'ai-context'])
+def test_space_delete_waits_for_owner_and_rechecks_name(api, ledger, change):
+    from fastapi import HTTPException
+    started = threading.Event(); pid = []
+    def deletion():
+        with Session(api.engine, autoflush=False) as db:
+            pid.append(db.scalar(text('SELECT pg_backend_pid()'))); started.set()
+            try:
+                result = api.spaces.delete_space(ledger.space,
+                    api.spaces.SpaceDeleteIn(confirmation_name='Synthetic'),
+                    db.get(api.m.User, ledger.owner), db)
+                return result.status_code
+            except HTTPException as error:
+                return error.status_code
+    with Session(api.engine, autoflush=False) as db, ThreadPoolExecutor(max_workers=1) as pool:
+        api.c.lock_owners(db, ledger.owner)
+        blocker = db.scalar(text('SELECT pg_backend_pid()'))
+        future = pool.submit(deletion)
+        try:
+            wait(started); blocked(api.engine, pid[0], blocker)
+            if change == 'rename':
+                db.get(api.m.Space, ledger.space).name = 'Renamed'
+            elif change == 'ai-context':
+                from api.ai_models import AIChat
+                db.add(AIChat(id=f'context-{ledger.space}', user_id=ledger.member,
+                    scope='shared', wallet_id=ledger.wallet, month='2026-11'))
+            else:
+                db.add(api.m.Transaction(user_id=ledger.owner, wallet_id=ledger.wallet,
+                    type='expense', amount=2, description='Committed before deletion'))
+            db.commit()
+        finally:
+            db.rollback()
+        assert future.result(timeout=5) == (409 if change == 'rename' else 204)
+    with Session(api.engine) as db:
+        if change != 'rename':
+            assert db.get(api.m.Space, ledger.space) is None
+            recovery = json.loads(db.query(api.m.RecoveryPoint).filter_by(user_id=ledger.owner).one().payload)
+            assert len(recovery['transactions']) == (2 if change == 'write' else 1)
+            if change == 'ai-context':
+                from api.ai_models import AIChat
+                chat = db.get(AIChat, f'context-{ledger.space}')
+                assert chat.scope == 'general' and chat.wallet_id is None
+        else:
+            assert db.get(api.m.Space, ledger.space).name == 'Renamed'
+            assert db.query(api.m.RecoveryPoint).filter_by(user_id=ledger.owner).count() == 0
+
+
+def test_space_delete_blocks_then_denies_stale_financial_write(api, ledger):
+    from fastapi import HTTPException
+    from api.space_deletion import delete_owned_space
+    started = threading.Event(); pid = []
+    def stale_write():
+        with Session(api.engine, autoflush=False) as db:
+            actor = db.get(api.m.User, ledger.member)
+            pid.append(db.scalar(text('SELECT pg_backend_pid()'))); started.set()
+            try:
+                api.spaces.establish_scope(request(f'/api/transactions?space_id={ledger.space}', 'POST'), db, actor)
+                pytest.fail('deleted Space authorized a stale write')
+            except HTTPException as error:
+                return error.status_code
+    with Session(api.engine, autoflush=False) as db, ThreadPoolExecutor(max_workers=1) as pool:
+        owner = db.get(api.m.User, ledger.owner)
+        space = api.spaces.require_owner(db, ledger.space, owner)
+        blocker = db.scalar(text('SELECT pg_backend_pid()'))
+        future = pool.submit(stale_write)
+        try:
+            wait(started); blocked(api.engine, pid[0], blocker)
+            delete_owned_space(db, space, owner)
+            db.commit()
+        finally:
+            db.rollback()
+        assert future.result(timeout=5) == 404
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--url', required=True)

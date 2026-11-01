@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, hasPendingWrites } from './api'
 import { setApiSpace, readSpaceSelection, rememberSpaceSelection } from './spaces'
+import { clearDeletedSpaceCache } from './deletedSpaceCache'
 
 export default function useSpaces(user, notify, confirm) {
   const [spaces, setSpaces] = useState([])
@@ -56,5 +57,15 @@ export default function useSpaces(user, notify, confirm) {
     if (document.querySelector('form[data-dirty="true"]') && !await confirm('Switch spaces? Saved drafts stay in their original space.')) return false
     apply(space, user?.id); navigation.current('/', {replace:true}); return true
   }, [apply, user?.id, notify, confirm])
-  return { activeSpace, spaces, switchSpace, reloadSpaces, spacesReady: !user || user.role === 'guest' || loadedUser === user.id }
+  const forgetDeletedSpace = useCallback(id => {
+    if (identity.current !== user?.id) return
+    available.current = available.current.filter(space => space.id !== id)
+    setSpaces(available.current)
+    void clearDeletedSpaceCache(user.id, id).catch(() => { notify('Space deleted online. Reconnect to refresh this device’s saved Space data.', 'error') })
+    if (active.current?.id === id) {
+      apply(null, user.id)
+      navigation.current('/', { replace: true })
+    }
+  }, [apply, user?.id, notify])
+  return { activeSpace, spaces, switchSpace, reloadSpaces, forgetDeletedSpace, spacesReady: !user || user.role === 'guest' || loadedUser === user.id }
 }

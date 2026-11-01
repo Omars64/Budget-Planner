@@ -15,7 +15,7 @@ beforeEach(() => {
     activeSpace: { id: 7, name: 'Home', role: 'owner', color: 'green', currency: 'KWD',
       members: [{ email: 'owner@test.example', role: 'owner' }, { email: 'manager@test.example', role: 'edit' }] },
     spaces: [], settings: { currency: 'KWD' }, switchSpace: vi.fn(), reloadSpaces: vi.fn(),
-    notify: vi.fn(), confirm: vi.fn().mockResolvedValue(true),
+    notify: vi.fn(), confirm: vi.fn().mockResolvedValue(true), forgetDeletedSpace: vi.fn(),
   }
   mocks.app.spaces = [mocks.app.activeSpace, { ...mocks.app.activeSpace, id: 8, name: 'Trip' }]
 })
@@ -30,6 +30,51 @@ function openMembers(name = 'Home', readOnly = false) {
   openWorkspace(name, readOnly)
   fireEvent.click(screen.getByRole('button', { name: 'Members', exact: true }))
 }
+
+function openDelete(name = 'Home') {
+  openWorkspace(name)
+  fireEvent.click(screen.getByRole('button', { name: 'Delete Space', exact: true }))
+}
+
+it('requires the current Space name and a final confirmation before deletion', async () => {
+  render(<SpaceSwitcher/>)
+  openDelete('Trip')
+  const remove = screen.getByRole('button', { name: 'Delete Space permanently' })
+  expect(remove).toBeDisabled()
+  const name = screen.getByLabelText('Type the Space name to confirm')
+  fireEvent.change(name, { target: { value: 'Home' } })
+  expect(remove).toBeDisabled()
+  fireEvent.change(name, { target: { value: 'Trip' } })
+  mocks.app.confirm.mockResolvedValueOnce(false)
+  fireEvent.click(remove)
+  await waitFor(() => expect(mocks.app.confirm).toHaveBeenCalledOnce())
+  expect(mocks.api).not.toHaveBeenCalled()
+  expect(mocks.app.forgetDeletedSpace).not.toHaveBeenCalled()
+})
+
+it('clears the deleted scope only after success, even when refreshing the list fails', async () => {
+  mocks.api.mockResolvedValue(undefined)
+  mocks.app.reloadSpaces.mockRejectedValueOnce(new Error('Synthetic offline refresh'))
+  render(<SpaceSwitcher/>)
+  openDelete()
+  fireEvent.change(screen.getByLabelText('Type the Space name to confirm'), { target: { value: 'Home' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Delete Space permanently' }))
+  await waitFor(() => expect(mocks.app.forgetDeletedSpace).toHaveBeenCalledExactlyOnceWith(7))
+  expect(mocks.api).toHaveBeenCalledWith('/api/spaces/7', { method: 'DELETE', body: JSON.stringify({ confirmation_name: 'Home' }) })
+  await waitFor(() => expect(mocks.app.notify).toHaveBeenCalledWith(expect.stringContaining('could not refresh')))
+  expect(screen.queryByRole('form', { name: 'Confirm Space deletion' })).not.toBeInTheDocument()
+})
+
+it('keeps the Space and confirmation available when deletion fails', async () => {
+  mocks.api.mockRejectedValueOnce(new Error('Only the space owner can manage this space.'))
+  render(<SpaceSwitcher/>)
+  openDelete()
+  fireEvent.change(screen.getByLabelText('Type the Space name to confirm'), { target: { value: 'Home' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Delete Space permanently' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('Only the space owner')
+  expect(mocks.app.forgetDeletedSpace).not.toHaveBeenCalled()
+  expect(mocks.app.reloadSpaces).not.toHaveBeenCalled()
+})
 
 it('offers only Viewer and Manager, defaults to Viewer and preserves an existing Manager', () => {
   render(<SpaceSwitcher/> )
@@ -50,6 +95,7 @@ it.each(['edit', 'add', 'view'])('keeps settings and membership read-only for %s
   expect(screen.getByText('KWD')).toBeInTheDocument()
   expect(screen.queryByRole('textbox', { name: 'Space name' })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Save Space details' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Delete Space', exact: true })).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Members', exact: true }))
   expect(screen.getByText('manager@test.example')).toBeInTheDocument()
   expect(screen.queryByRole('combobox', { name: 'Role' })).not.toBeInTheDocument()

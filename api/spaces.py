@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import event, or_
 from sqlalchemy.orm import Session, with_loader_criteria
@@ -189,6 +189,8 @@ def scope_queries(state):
 
 @event.listens_for(Session, 'before_flush')
 def scope_writes(db, *_):
+    from .space_deletion import guard_context_writes
+    guard_context_writes(db)
     context = db.info.get('space')
     if not context:
         return
@@ -288,6 +290,26 @@ def require_owner(db, space_id, actor):
     if not space or space.owner_id != actor.id:
         raise HTTPException(403, 'Only the space owner can manage this space.')
     return space
+
+
+class SpaceDeleteIn(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
+    confirmation_name: str = Field(min_length=1, max_length=80)
+
+
+@router.delete('/{space_id}', status_code=204)
+def delete_space(space_id: int, payload: SpaceDeleteIn, actor=Depends(authenticated), db: Session = Depends(get_db)):
+    from .space_deletion import delete_owned_space
+    try:
+        space = require_owner(db, space_id, actor)
+        if payload.confirmation_name != space.name:
+            raise HTTPException(409, 'The space name does not match. Refresh and enter its current name exactly.')
+        delete_owned_space(db, space, actor)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return Response(status_code=204)
 
 
 @router.put('/{space_id}')

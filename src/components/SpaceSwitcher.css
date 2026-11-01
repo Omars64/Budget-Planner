@@ -43,6 +43,12 @@
   cursor: pointer;
 }
 .space-switcher-dialog .space-management-views button[aria-pressed=true] { color: var(--text); border-bottom-color: var(--accent); }
+.space-switcher-dialog .space-management-views .space-delete-tab { color: var(--negative, #b34343); }
+.space-switcher-dialog .space-management-views .space-delete-tab[aria-pressed=true] { border-bottom-color: var(--negative, #b34343); }
+.space-switcher-dialog .space-delete-panel { padding: 16px; border: 1px solid var(--negative, #b34343); border-radius: 16px; min-width: 0; }
+.space-switcher-dialog .space-delete-panel h3 { margin-top: 0; }
+.space-switcher-dialog .space-delete-panel p { line-height: 1.6; }
+.space-switcher-dialog .space-delete-panel .button { min-height: 44px; white-space: normal; }
 .space-switcher-dialog .space-form-fields { min-width: 0; margin: 0; padding: 0; border: 0; }
 .space-switcher-dialog .space-form-fields:disabled { opacity: .7; }
 .space-switcher-dialog .space-member-form { margin-top: 22px; }

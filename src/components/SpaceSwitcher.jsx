@@ -5,6 +5,7 @@ import { api, jsonBody } from '../lib/api'
 import { SPACE_COLORS } from '../lib/spaces'
 import Modal from './Modal'
 import CurrencyField from './CurrencyField'
+import { syncPlannedNotifications } from '../lib/plannedNotifications'
 import './SpaceSwitcher.css'
 
 const roleNames = { owner: 'Owner', edit: 'Manager', add: 'Manager', view: 'Viewer' }
@@ -13,7 +14,7 @@ const emptyMember = () => ({ email: '', role: 'view' })
 const details = space => ({ name: space.name, color: space.color, currency: space.currency })
 
 export default function SpaceSwitcher() {
-  const { activeSpace, spaces = [], switchSpace, reloadSpaces, settings, isGuest, requestSignIn, notify, confirm } = useApp()
+  const { user, activeSpace, spaces = [], switchSpace, reloadSpaces, forgetDeletedSpace, settings, isGuest, requestSignIn, notify, confirm } = useApp()
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState(null)
   const [manage, setManage] = useState(false)
@@ -26,6 +27,8 @@ export default function SpaceSwitcher() {
   const [detailStatus, setDetailStatus] = useState('')
   const [memberStatus, setMemberStatus] = useState('')
   const [memberError, setMemberError] = useState('')
+  const [deleteName, setDeleteName] = useState('')
+  const [deleteError, setDeleteError] = useState('')
   const owner = editing?.role === 'owner'
   const dirty = (owner || !editing) && (
     JSON.stringify(form) !== JSON.stringify(editing ? details(editing) : fresh(settings.currency)) ||
@@ -37,6 +40,7 @@ export default function SpaceSwitcher() {
     if (!space && isGuest) { requestSignIn('shared spaces'); return }
     setEditing(space); setForm(space ? details(space) : fresh(settings.currency))
     setMember(emptyMember()); setError(''); setMemberError(''); setMemberStatus(''); setDetailStatus('')
+    setDeleteName(''); setDeleteError('')
     setView('details'); setOpen(false); setManage(true)
   }
   const refresh = async () => {
@@ -86,6 +90,24 @@ export default function SpaceSwitcher() {
   }
   const changeMember = next => { setMember(next); setMemberError(''); setMemberStatus('') }
   const changeDetails = next => { setForm(next); setError(''); setDetailStatus('') }
+  const deleteSpace = async event => {
+    event.preventDefault()
+    if (pending.current || !owner || deleteName.trim() !== editing.name) return
+    const target = editing
+    pending.current = true; setBusy('delete-confirm'); setDeleteError('')
+    try {
+      if (!await confirm(`Permanently delete "${target.name}" and its records for everyone in this Space? This cannot be undone from Space settings. Personal records and other Spaces are not deleted.`)) return
+      setBusy('delete')
+      await api(`/api/spaces/${target.id}`, { method: 'DELETE', ...jsonBody({ confirmation_name: deleteName.trim() }) })
+      // Clear a deleted active scope immediately, even if the list refresh fails.
+      forgetDeletedSpace(target.id)
+      void syncPlannedNotifications(user?.id).catch(() => {})
+      setManage(false); setEditing(null); setDeleteName('')
+      notify('Space deleted. Personal records and other Spaces are unchanged.')
+      try { await reloadSpaces() } catch { notify('Space deleted. The Spaces list could not refresh; reopen it to try again.') }
+    } catch (err) { setDeleteError(err.network ? 'Deletion could not be confirmed. Reopen the Spaces list to check before trying again.' : err.message || 'Space could not be deleted. Try again.') }
+    finally { pending.current = false; setBusy('') }
+  }
 
   return <div className="space-switcher">
     <button className="space-selector" onClick={() => setOpen(true)} aria-label={`Switch space. Current: ${activeSpace?.name || 'Personal'}`} aria-haspopup="dialog"><span className="space-symbol">{activeSpace ? <Users size={18}/> : <UserRound size={18}/>}</span><span className="space-selector-label">{activeSpace?.name || 'Personal'}<small>{activeSpace ? roleNames[activeSpace.role] : 'Only you'}</small></span><ChevronDown size={16}/></button>
@@ -104,6 +126,7 @@ export default function SpaceSwitcher() {
         {editing && <nav className="space-management-views" aria-label="Workspace settings views">
           <button type="button" aria-pressed={view === 'details'} onClick={() => setView('details')}>Space details</button>
           <button type="button" aria-pressed={view === 'members'} onClick={() => setView('members')}>Members</button>
+          {owner && <button type="button" className="space-delete-tab" aria-pressed={view === 'delete'} disabled={Boolean(busy)} onClick={() => setView('delete')}>Delete Space</button>}
         </nav>}
         {editing && !owner && <p className="muted">{editing.owner_name} manages this space. Your role: {roleNames[editing.role]}. Only the owner can change Space details and membership.</p>}
         {view === 'details' && ((!editing || owner) ? <form onSubmit={save} className="stack gap-16" aria-label="Space details" aria-busy={busy === 'details'}>
@@ -127,6 +150,18 @@ export default function SpaceSwitcher() {
               <div className="space-save-row"><button className="button primary" disabled={Boolean(busy)}>{busy === 'members' ? 'Saving membership...' : busy === 'confirm' ? 'Awaiting confirmation...' : 'Save membership'}</button><span role="status" aria-live="polite">{busy === 'members' ? 'Saving membership...' : memberStatus}</span>{memberError && <p id="space-member-error" className="form-error" role="alert">{memberError}</p>}</div>
             </fieldset>
           </form>}
+        </section>}
+        {editing && owner && view === 'delete' && <section className="space-delete-panel" aria-label="Delete Space">
+          <h3>Delete this Space permanently</h3>
+          <p>This removes <strong>{editing.name}</strong> and its wallets, transactions, upcoming entries, budgets, goals, debts, categories, notes, and memberships for everyone in the Space.</p>
+          <p>Your Personal records and other Spaces are not deleted. This cannot be undone from Space settings. Existing recovery and backup copies may retain the deleted records.</p>
+          <p className="muted">Unsynced offline entries for this Space will no longer be able to sync. Other devices refresh their saved records and reminders when they reconnect.</p>
+          <form onSubmit={deleteSpace} className="stack gap-16" aria-label="Confirm Space deletion" aria-busy={busy === 'delete'}>
+            <label className="field"><span>Type the Space name to confirm</span><input autoComplete="off" spellCheck={false} value={deleteName} onChange={event => { setDeleteName(event.target.value); setDeleteError('') }} disabled={Boolean(busy)} aria-describedby="space-delete-help"/></label>
+            <p id="space-delete-help" className="muted">Enter exactly: <strong>{editing.name}</strong></p>
+            <button type="submit" className="button danger" disabled={Boolean(busy) || deleteName.trim() !== editing.name}><Trash2 size={17}/>{busy === 'delete' ? 'Deleting Space...' : busy === 'delete-confirm' ? 'Awaiting confirmation...' : 'Delete Space permanently'}</button>
+            {deleteError && <p className="form-error" role="alert">{deleteError}</p>}
+          </form>
         </section>}
       </div>
     </Modal>

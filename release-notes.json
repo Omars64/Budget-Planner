@@ -1,4 +1,7 @@
 {
+  "6.8.0": [
+    {"title":"Owner-controlled Space deletion","detail":"Owners can open Manage workspace → Delete Space, confirm the Space name, and remove the Space and its records. Personal records and other Spaces are preserved. Deleting the active Space returns you to Personal."}
+  ],
   "6.7.1": [
     {"title":"Upcoming entry popup","detail":"Add and edit upcoming entries in a focused popup matching Transactions, with the existing fields, date and time pickers, scheduling options, and reminders. Save and Cancel stay in the popup footer."}
   ],
