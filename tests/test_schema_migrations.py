@@ -9,7 +9,21 @@ from api.database import Base
 from api.index import ensure_note_columns
 from api.schema_migrations import apply_migrations
 
-LATEST_REVISION = 'f62a810bc943'
+LATEST_REVISION = 'f73b921cd054'
+
+
+def test_feedback_conversation_upgrade_keeps_existing_reply_and_status():
+    engine = create_engine('sqlite://')
+    config = Config(str(Path(__file__).resolve().parents[1] / 'alembic.ini'))
+    with engine.begin() as connection:
+        config.attributes['connection'] = connection
+        command.upgrade(config, 'f62a810bc943')
+        connection.execute(text("INSERT INTO users (id, username, email, password_hash, role, active) VALUES (1, 'Kept', 'thread@migration.test', 'hash', 'user', 1)"))
+        connection.execute(text("INSERT INTO feedback (id, user_id, subject, content, category, status, reply, created_at) VALUES (1, 1, 'Kept feedback', 'Original', 'question', 'reviewing', 'Existing admin answer', '2026-11-01 09:00:00')"))
+        command.upgrade(config, 'head')
+        assert connection.execute(text('SELECT reply, status FROM feedback WHERE id=1')).one() == ('Existing admin answer', 'reviewing')
+        assert 'feedback_comments' in inspect(connection).get_table_names()
+    engine.dispose()
 
 
 def test_new_and_existing_schemas_reach_baseline_without_losing_rows():
@@ -22,6 +36,7 @@ def test_new_and_existing_schemas_reach_baseline_without_losing_rows():
         assert 'update_push_devices' in inspect(connection).get_table_names()
         assert 'scheduled_push_outbox' in inspect(connection).get_table_names()
         assert 'upcoming_push_receipts' in inspect(connection).get_table_names()
+        assert 'feedback_comments' in inspect(connection).get_table_names()
         assert 'bank_transaction_candidates' in inspect(connection).get_table_names()
         assert 'bank_source_mappings' in inspect(connection).get_table_names()
         assert 'bank_merchant_memory' in inspect(connection).get_table_names()

@@ -41,20 +41,22 @@ test('feedback follows policy updates, pauses hidden/offline, and cleans up on u
 
 const feedback={id:1,subject:'Synthetic suggestion',content:'Test content',sender_name:'Synthetic user',sender_email:'test@example.test',status:'new',reply:'',revision:'original',reply_revision:'empty',created_at:'2026-11-02T08:00:00Z'}
 
-test('admin sends the exact reply and base revision, then shows the confirmed saved response without an extra read', async()=>{
+test('admin status autosaves independently and reply posting appends a visible conversation', async()=>{
   context.user.role='admin'
-  api.mockResolvedValueOnce([feedback]).mockResolvedValueOnce({...feedback,status:'reviewing',reply:'Fixed for you.',revision:'saved'})
+  api.mockResolvedValueOnce([feedback]).mockResolvedValueOnce({...feedback,status:'reviewing',revision:'saved'}).mockResolvedValueOnce({...feedback,status:'reviewing',revision:'saved',comments:[{id:'posted',author_name:'Omar',is_admin:true,content:'Fixed for you.'}]})
   render(<Feedback/>)
   fireEvent.click(await screen.findByRole('button',{name:/Synthetic suggestion/}))
   fireEvent.change(screen.getByLabelText('Reply to user'),{target:{value:'Fixed for you.'}})
   fireEvent.change(screen.getByLabelText('Status',{exact:true}),{target:{value:'reviewing'}})
-  fireEvent.click(screen.getByRole('button',{name:'Save reply & status'}))
-  await waitFor(()=>expect(context.notify).toHaveBeenCalledWith('Reply saved to the user’s Feedback section'))
-  expect(JSON.parse(api.mock.calls[1][1].body)).toEqual({status:'reviewing',reply:'Fixed for you.',revision:'original'})
-  expect(api).toHaveBeenCalledTimes(2)
+  await screen.findByText('Saved',{exact:true})
+  expect(JSON.parse(api.mock.calls[1][1].body)).toEqual({status:'reviewing',revision:'original'})
   expect(screen.getByLabelText('Reply to user')).toHaveValue('Fixed for you.')
-  expect(screen.getByText('Reply saved',{exact:true})).toBeInTheDocument()
-  expect(screen.getByRole('region',{name:'Saved reply'})).toHaveTextContent('Fixed for you.')
+  fireEvent.click(screen.getByRole('button',{name:'Post reply'}))
+  await waitFor(()=>expect(context.notify).toHaveBeenCalledWith('Reply posted'))
+  expect(api.mock.calls[2][0]).toBe('/api/feedback/1/comments')
+  expect(JSON.parse(api.mock.calls[2][1].body)).toEqual({content:'Fixed for you.',request_id:expect.any(String)})
+  expect(screen.getByRole('region',{name:'Conversation'})).toHaveTextContent('Fixed for you.')
+  expect(screen.getByLabelText('Reply to user')).toHaveValue('')
 })
 
 test('a recipient sees an unread reply and only acknowledges the exact displayed reply revision', async()=>{

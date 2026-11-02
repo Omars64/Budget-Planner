@@ -12,6 +12,8 @@ test.each([false,true])('linked Google account can enroll with Google even when 
  render(<BiometricEnrollment {...base} user={{google_linked:true,has_password}} onEnable={onEnable}/>)
  expect(screen.queryByText('Confirm password to register a passkey')).not.toBeInTheDocument()
  fireEvent.click(screen.getByRole('button',{name:'Confirm with Google'}))
+ expect(onEnable).not.toHaveBeenCalled()
+ fireEvent.click(screen.getByRole('button',{name:'Enable biometric sign-in'}))
  await waitFor(()=>expect(onEnable).toHaveBeenCalledWith('google'))
 })
 test('password accounts explain why registration is unavailable and linked users can choose password fallback',()=>{

@@ -261,7 +261,7 @@ def test_same_email_requires_explicit_recent_link(env):
         assert google.google_account_payload(db.get(User, uid))['signup_provider'] == 'password'
 
 
-@pytest.mark.parametrize('failure', ['wrong_subject', 'stale_auth', 'revoked', 'none'])
+@pytest.mark.parametrize('failure', ['wrong_subject', 'stale_auth', 'missing_auth', 'revoked', 'none'])
 def test_reauth_confirms_only_initiating_session(env, failure):
     client, factory, settings = env
     uid, headers = account(factory)
@@ -276,12 +276,18 @@ def test_reauth_confirms_only_initiating_session(env, failure):
         settings['claims']['sub'] = 'other'
     if failure == 'stale_auth':
         settings['claims']['auth_time'] = int(time.time()) - 600
+    if failure == 'missing_auth':
+        settings['claims']['auth_time'] = None
     if failure == 'revoked':
         with factory() as db:
             db.get(AccountSession, 'session').revoked = True
             db.commit()
     callback(client, query)
-    assert poll(client, flow).json()['status'] == ('reauthenticated' if failure == 'none' else 'failed')
+    result = poll(client, flow).json()
+    assert result['status'] == ('reauthenticated' if failure == 'none' else 'failed')
+    if failure == 'missing_auth':
+        assert result['code'] == 'failed_claim'
+        assert 'configuration needs attention' in result['message']
     with factory() as db:
         assert (db.get(AccountSession, 'session').verified_at is not None) == (failure == 'none')
 

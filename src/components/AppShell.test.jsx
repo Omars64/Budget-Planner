@@ -23,6 +23,14 @@ beforeEach(() => {
   vi.stubGlobal('requestAnimationFrame', callback => callback())
 })
 
+test('current account appears in the shared header, while sidebar sign-out stays separate', () => {
+  render(<MemoryRouter><AppShell/></MemoryRouter>)
+  expect(within(screen.getByRole('banner')).getByLabelText('Current account')).toHaveTextContent('Omar')
+  expect(within(screen.getByRole('banner')).queryByRole('button', {name:'Sign out'})).not.toBeInTheDocument()
+  expect(within(document.querySelector('.sidebar')).getByRole('button', {name:'Sign out'})).toBeInTheDocument()
+  expect(document.querySelector('.sidebar-foot')).toBeNull()
+})
+
 test('only admins can hide their own sidebar link', () => {
   preferences.role = 'admin'; preferences.sidebar = false
   const view = render(<MemoryRouter><AppShell/></MemoryRouter>)

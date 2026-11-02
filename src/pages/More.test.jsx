@@ -16,6 +16,15 @@ it('keeps all existing tools available with their real routes', () => {
   expect(screen.getByRole('link', {name:/Settings/})).toHaveAttribute('href','/settings')
   expect(screen.getByRole('link', {name:/Spaces/})).toHaveAttribute('href','/spaces')
 })
+
+it('keeps sign out as the final More action', () => {
+  mocks.app.lock = vi.fn()
+  render(<MemoryRouter><More/></MemoryRouter>)
+  const signout = screen.getByRole('button', {name:/Sign out/})
+  expect(document.querySelector('.more-page').lastElementChild).toContainElement(signout)
+  fireEvent.click(signout)
+  expect(mocks.app.lock).toHaveBeenCalledOnce()
+})
 it('preserves guest restrictions while leaving the directory accessible', () => {
   mocks.app.isGuest = true
   render(<MemoryRouter><More/></MemoryRouter>)

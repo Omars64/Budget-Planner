@@ -13,11 +13,13 @@ from sqlalchemy.orm import Session
 from .database import get_db
 from .spaces import workspace_user
 from .index import current_user, admin_user, normalize_email, set_setting, setting
-from .models import Note, NoteFolder, NoteShare, Feedback, User, utc_now
+from .models import Note, NoteFolder, NoteShare, Feedback, FeedbackComment, User, utc_now
 from .models import RecoveryPoint, NoteRevision
 from .data_safety import save_recovery, clear_budget, clear_notes
 import json
 import hashlib
+import uuid
+from sqlalchemy.exc import IntegrityError
 
 router = APIRouter()
 
@@ -98,6 +100,11 @@ class FeedbackUpdate(BaseModel):
 
 class FeedbackRead(BaseModel):
     reply_revision: str = Field(min_length=64, max_length=64)
+
+
+class FeedbackCommentIn(BaseModel):
+    content: str = Field(min_length=1, max_length=10000)
+    request_id: str = Field(min_length=36, max_length=36, pattern=r'^[a-f0-9-]{36}$')
 
 
 class RatingIn(BaseModel):
@@ -372,17 +379,56 @@ def feedback_revision(row):
     return hashlib.sha256(json.dumps([row.id, row.status, row.reply]).encode()).hexdigest()
 
 
-def reply_revision(row):
-    return hashlib.sha256((row.reply or '').encode()).hexdigest()
+def reply_revision(row, comments=None):
+    if comments is None:
+        from sqlalchemy.orm import object_session
+        session = object_session(row)
+        comments = session.query(FeedbackComment).filter_by(feedback_id=row.id).order_by(FeedbackComment.created_at, FeedbackComment.id).all() if session else []
+    admin_replies = [comment.id for comment in comments if comment.is_admin]
+    text = row.reply or ''
+    if admin_replies:
+        text += json.dumps(admin_replies)
+    return hashlib.sha256(text.encode()).hexdigest()
 
 
-def feedback_payload(db, row, seen=None):
+def feedback_payload(db, row, seen=None, comments=None):
     sender = db.get(User, row.user_id)
+    if comments is None:
+        comments = db.query(FeedbackComment).filter_by(feedback_id=row.id).order_by(FeedbackComment.created_at, FeedbackComment.id).all()
+    thread = ([{'id': 'legacy', 'author_name': 'Budgetly', 'is_admin': True, 'content': row.reply, 'created_at': None}] if row.reply else [])
+    thread += [{'id': c.id, 'author_name': c.author_name, 'is_admin': c.is_admin, 'content': c.content, 'created_at': c.created_at.isoformat() + 'Z'} for c in comments]
+    revision = reply_revision(row, comments)
     return {"id": row.id, "subject": row.subject, "content": row.content,
             "category": row.category, "status": row.status, "reply": row.reply,
-            "revision": feedback_revision(row), "reply_revision": reply_revision(row),
-            "reply_unread": bool(row.reply and seen is not None and seen.get(f'feedback_read:{row.id}') != reply_revision(row)),
-            "created_at": row.created_at.isoformat() + "Z", "sender_name": sender.username, "sender_email": sender.email}
+            "comments": thread, "revision": feedback_revision(row), "reply_revision": revision,
+            "reply_unread": bool(any(c['is_admin'] for c in thread) and seen is not None and seen.get(f'feedback_read:{row.id}') != revision),
+            "created_at": row.created_at.isoformat() + "Z", "sender_name": sender.username if sender else 'Deleted account', "sender_email": sender.email if sender else ''}
+
+
+@router.post('/api/feedback/{feedback_id}/comments', status_code=201)
+def post_feedback_comment(feedback_id: int, payload: FeedbackCommentIn, user=Depends(current_user), db: Session = Depends(get_db)):
+    row = db.query(Feedback).filter_by(id=feedback_id).with_for_update().first()
+    if not row or (user.role != 'admin' and row.user_id != user.id):
+        raise HTTPException(404, 'Feedback not found')
+    existing = db.get(FeedbackComment, payload.request_id)
+    if existing:
+        if existing.feedback_id != row.id or existing.author_id != user.id or existing.content != payload.content.strip():
+            raise HTTPException(409, 'Reply identifier already used. Refresh and try again.')
+    else:
+        content = nonblank(payload.content)
+        recent = db.query(FeedbackComment).filter(FeedbackComment.author_id == user.id, FeedbackComment.created_at > utc_now() - timedelta(minutes=1)).count()
+        if recent >= 10:
+            raise HTTPException(429, 'Please wait a minute before posting more replies')
+        db.add(FeedbackComment(id=payload.request_id, feedback_id=row.id, author_id=user.id,
+            author_name=user.username, is_admin=user.role == 'admin', content=content))
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            existing = db.get(FeedbackComment, payload.request_id)
+            if not existing or existing.feedback_id != row.id or existing.author_id != user.id or existing.content != content:
+                raise HTTPException(409, 'Reply identifier already used. Refresh and try again.')
+    return feedback_payload(db, row)
 
 
 @router.get("/api/feedback")
@@ -392,7 +438,12 @@ def feedback(user=Depends(current_user), db: Session = Depends(get_db)):
     from .models import AppSetting
     seen = None if user.role == 'admin' else {row.key: row.value for row in db.query(AppSetting).filter(
         AppSetting.user_id == user.id, AppSetting.key.like('feedback_read:%')).all()}
-    return [feedback_payload(db, r, seen) for r in query.order_by(Feedback.created_at.desc()).all()]
+    rows = query.order_by(Feedback.created_at.desc()).all()
+    threads = {row.id: [] for row in rows}
+    if threads:
+        for comment in db.query(FeedbackComment).filter(FeedbackComment.feedback_id.in_(threads)).order_by(FeedbackComment.created_at, FeedbackComment.id).all():
+            threads[comment.feedback_id].append(comment)
+    return [feedback_payload(db, r, seen, threads[r.id]) for r in rows]
 
 
 @router.post('/api/feedback/{feedback_id}/read')
@@ -427,7 +478,13 @@ def update_feedback(feedback_id: int, payload: FeedbackUpdate, user=Depends(admi
         raise HTTPException(409, 'This feedback changed. Refresh before saving; your draft has been kept.')
     # Status-only changes, including older clients sending an empty textarea,
     # must never silently erase a reply already sent to the user.
-    reply = payload.reply.strip() if payload.reply and payload.reply.strip() else row.reply
+    submitted = payload.reply.strip() if payload.reply else ''
+    reply = submitted if submitted and not row.reply else row.reply
+    # Older clients still use PUT to send replies. Preserve their previous
+    # answer and append instead of replacing conversation history.
+    if submitted and row.reply and submitted != row.reply:
+        db.add(FeedbackComment(id=str(uuid.uuid4()), feedback_id=row.id, author_id=user.id,
+            author_name=user.username, is_admin=True, content=submitted))
     changed = db.query(Feedback).filter_by(id=row.id, status=row.status, reply=row.reply).update(
         {'status': payload.status, 'reply': reply}, synchronize_session=False)
     if changed != 1:

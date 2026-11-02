@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { ChevronRight, Coffee, Compass, ExternalLink, LockKeyhole, ShieldCheck } from 'lucide-react'
+import { ChevronRight, Coffee, Compass, ExternalLink, LockKeyhole, LogOut, ShieldCheck } from 'lucide-react'
 import { useApp } from '../App'
 import { workspaceNavigation } from '../lib/workspaceNavigation'
 import { useWorkspacePreferences } from '../lib/workspacePreferences'
@@ -7,7 +7,7 @@ import { guestRoutes } from '../lib/guest'
 import { SUPPORT_URL } from '../lib/support'
 
 export default function More() {
-  const { user, activeSpace, isGuest, requestSignIn, settings } = useApp()
+  const { user, activeSpace, isGuest, requestSignIn, settings, lock } = useApp()
   const [preferences] = useWorkspacePreferences(user?.id)
   const pages = workspaceNavigation.filter(([path]) => path !== '/more' && (!activeSpace || path !== '/ask-ai'))
   const groups = [...new Set(pages.map(page => page[3]))]
@@ -25,5 +25,6 @@ export default function More() {
     {!isGuest && <button type="button" className="more-tool glass" data-tour="tutorial" onClick={() => window.dispatchEvent(new Event('budgetly:open-tutorial'))}><Compass/><span><strong>Budgetly walkthrough</strong><small>A guided tour of the app</small></span><ChevronRight/></button>}
     {user?.role === 'admin' && <Link className="more-tool glass" to="/admin"><ShieldCheck/><span><strong>Admin controls</strong><small>Service health, users and resource controls</small></span><ChevronRight/></Link>}
     {(user?.role !== 'admin' || settings.support_sidebar_enabled !== false) && <a className="more-tool glass" href={SUPPORT_URL} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer"><Coffee/><span><strong>Buy me a coffee</strong><small>Optional support for Budgetly</small></span><ExternalLink size={16}/></a>}
+    <div className="more-signout-section"><button type="button" className="more-tool glass" onClick={lock}><LogOut/><span><strong>{isGuest ? 'Sign in' : 'Sign out'}</strong><small>{isGuest ? 'Continue with your Budgetly account' : 'Leave this session on this device'}</small></span><ChevronRight size={17}/></button></div>
   </div>
 }

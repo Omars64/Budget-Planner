@@ -284,6 +284,17 @@ class Feedback(Base):
     created_at = Column(DateTime, nullable=False, default=utc_now)
 
 
+class FeedbackComment(Base):
+    __tablename__ = 'feedback_comments'
+    id = Column(String(36), primary_key=True)
+    feedback_id = Column(Integer, ForeignKey('feedback.id', ondelete='CASCADE'), nullable=False, index=True)
+    author_id = Column(Integer, ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    author_name = Column(String(80), nullable=False)
+    is_admin = Column(Boolean, nullable=False, default=False)
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=utc_now)
+
+
 class RecoveryPoint(Base):
     __tablename__ = "recovery_points"
     id = Column(Integer, primary_key=True)

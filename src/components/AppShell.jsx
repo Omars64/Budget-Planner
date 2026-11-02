@@ -122,9 +122,6 @@ export default function AppShell({ children }) {
       </nav>
       {(user?.role !== 'admin' || settings.support_sidebar_enabled !== false) && <a className="sidebar-support-link" aria-label="Buy me a coffee" title="Buy me a coffee - support Budgetly" href={SUPPORT_URL} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer"><Coffee size={21}/><span>Buy me a coffee<small>Support Budgetly</small></span><ExternalLink size={14}/></a>}
       <button className="button ghost sidebar-signout" onClick={lock}><LogOut size={17}/><span>{isGuest ? 'Sign in' : 'Sign out'}</span></button>
-      <div className="sidebar-foot glass-subtle">
-        {appearance.profile_image ? <img className="sidebar-avatar" src={appearance.profile_image} alt="Profile"/> : <span className="default-avatar"><Mountain size={24}/></span>}<div><strong>{user?.username || 'Budgetly'}</strong><small>{user?.role === 'admin' ? 'Admin account' : 'Personal workspace'}</small></div>
-      </div>
     </aside>
     {menu && <div className="sidebar-scrim" onClick={() => setMenu(false)} />}
 
@@ -136,7 +133,11 @@ export default function AppShell({ children }) {
           {location.pathname === '/ask-ai' && <button className="icon-button mobile-only" title="Open conversations" aria-label="Open conversations" onClick={() => window.dispatchEvent(new window.Event('budgetly:toggle-ai-history'))}><PanelLeftOpen size={20}/></button>}
           <div><p className="eyebrow">{activeSpace?.name || settings.display_name}</p><h2>{title}</h2></div>
         </div>
-        <div className="button-row top-actions">{location.pathname === '/' && !isGuest && <button className="button ghost tutorial-button" data-tour="tutorial" title="Tutorial" aria-label="Tutorial" onClick={() => { setMenu(false); setTutorialRequest(value => value + 1) }}><Compass size={18}/><span>Tutorial</span></button>}<button className="button ghost signout-button" title={isGuest ? 'Sign in' : 'Sign out'} aria-label={isGuest ? 'Sign in' : 'Sign out'} onClick={lock}><LogOut size={17}/><span>{isGuest ? 'Sign in' : 'Sign out'}</span></button>{(isLedger || isOverview) && canAdd !== false && (!nativeAndroid || isOverview) && <button data-tour="add-transaction" className="button primary add-button" onClick={addTransaction}><Plus size={18}/><span>Add transaction</span></button>}</div>
+        <div className="header-user-tag glass-subtle" aria-label="Current account">
+          {appearance.profile_image ? <img className="header-user-avatar" src={appearance.profile_image} alt=""/> : <span className="header-user-avatar"><Mountain size={21}/></span>}
+          <div><strong>{isGuest ? 'Guest' : user?.username || 'Budgetly'}</strong><small>{isGuest ? 'On this device' : user?.role === 'admin' ? 'Admin account' : 'Personal account'}</small></div>
+        </div>
+        <div className="button-row top-actions">{location.pathname === '/' && !isGuest && <button className="button ghost tutorial-button" data-tour="tutorial" title="Tutorial" aria-label="Tutorial" onClick={() => { setMenu(false); setTutorialRequest(value => value + 1) }}><Compass size={18}/><span>Tutorial</span></button>}{(isLedger || isOverview) && canAdd !== false && (!nativeAndroid || isOverview) && <button data-tour="add-transaction" className="button primary add-button" onClick={addTransaction}><Plus size={18}/><span>Add transaction</span></button>}</div>
       </header>
       <div className="mobile-space"><SpaceSwitcher/></div>
       <AndroidUpdate userId={user?.id} role={user?.role} guest={isGuest}/>

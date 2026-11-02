@@ -338,13 +338,16 @@ def callback(state: str, code: str = '', error: str = '', db=Depends(get_db)):
             auth_time = claims.get('auth_time')
             started = row.expires_at - timedelta(seconds=TTL)
             from datetime import timezone
-            if (not identity or identity.user_id != row.user_id or not user or not user.active
+            if not identity or identity.user_id != row.user_id:
+                raise HTTPException(401, 'google_account_mismatch')
+            if type(auth_time) not in (int, float) or not math.isfinite(auth_time):
+                raise HTTPException(401, 'google_claim_missing')
+            if auth_time < started.replace(tzinfo=timezone.utc).timestamp() - 5 or auth_time > time.time() + 60:
+                raise HTTPException(401, 'google_auth_stale')
+            if (not user or not user.active
                     or not session or session.revoked or session.user_id != user.id
                     or session.created_at <= utc_now() - timedelta(days=1)
-                    or not hmac.compare_digest(row.credential, digest(user.password_hash))
-                    or type(auth_time) not in (int, float) or not math.isfinite(auth_time)
-                    or auth_time < started.replace(tzinfo=timezone.utc).timestamp() - 5
-                    or auth_time > time.time() + 60):
+                    or not hmac.compare_digest(row.credential, digest(user.password_hash))):
                 raise HTTPException(401, 'Fresh Google confirmation required')
             session.verified_at = utc_now()
             audit(db, user.id, user.id, 'Confirmed account with Google')
@@ -377,9 +380,12 @@ def callback(state: str, code: str = '', error: str = '', db=Depends(get_db)):
             grant.expires_at = row.expires_at if row.user_id is None else None
         row.verifier = ''
         db.commit()
-    except Exception:
+    except Exception as exc:
         db.rollback()
-        db.query(GoogleAuthState).filter_by(digest=digest(state), status='exchanging').update({'status': 'failed', 'verifier': ''})
+        failure = {'google_account_mismatch': 'failed_account', 'google_claim_missing': 'failed_claim',
+                   'google_auth_stale': 'failed_fresh'}.get(getattr(exc, 'detail', ''), 'failed')
+        # Store only a fixed failure category, never tokens, claims or identity details.
+        db.query(GoogleAuthState).filter_by(digest=digest(state), status='exchanging').update({'status': failure, 'verifier': ''})
         db.commit()
     from .google_return import completion_page
     if state.startswith('android-auth-tab.'):
@@ -448,8 +454,13 @@ def poll(payload: PollIn, request: Request, response: Response, db=Depends(get_d
             raise HTTPException(400, 'Google sign-in already used')
         return {'status': status}
     status = row.status if row.status != 'exchanging' else 'pending'
-    if status == 'failed':
-        return {'status': status, 'message': 'Google sign-in could not be completed. Start again.'}
+    if status.startswith('failed'):
+        messages = {
+            'failed_account': 'Choose the Google account already linked to this Budgetly account.',
+            'failed_claim': 'Google did not provide its authentication-time check. Budgetly’s Google sign-in configuration needs attention. You can use Budgetly password if you have one.',
+            'failed_fresh': 'Google returned an older verification. Sign out of Google in the confirmation window, then confirm again.',
+        }
+        return {'status': 'failed', 'code': status, 'message': messages.get(status, 'Google sign-in could not be completed. Start again.')}
     if status == 'link_required':
         return {'status': status, 'message': 'Sign in to your existing Budgetly account, confirm it, then link Google in Account security.'}
     return {'status': status}

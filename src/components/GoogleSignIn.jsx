@@ -40,7 +40,7 @@ export default function GoogleSignIn({onLogin,disabled=false,onBusyChange,onActi
       if(result.status==='name_required')setPending(flow)
       else if(result.status==='complete'&&result.token){flowSecret.current=null;await onLogin(result)}
       else if(['linked','reauthenticated'].includes(result.status)){flowSecret.current=null;await onComplete?.(result)}
-      else throw new Error(result.status==='link_required'?'This email already has a Budgetly account. Sign in with your existing method, then link Google in Account security.':'Google sign-in was not completed. Please try again.')
+      else throw new Error(result.message || (result.status==='link_required'?'This email already has a Budgetly account. Sign in with your existing method, then link Google in Account security.':'Google sign-in was not completed. Please try again.'))
     }catch(err){popup?.close();if(mounted.current&&!abort?.signal.aborted&&err.name!=='AbortError')setError(err.network?'Could not connect for Google sign-in. Check your connection, then try again.':err.message)}
     finally{if(!abort||controller.current===abort)setWorking(false)}
   }
