@@ -20,16 +20,25 @@ export const biometricSupported = () => !passwordOnlyEnabled() && (nativePasskey
 let activeRequest = null
 export const cancelBiometric = () => activeRequest?.abort()
 
-async function withCredentialRequest(action) {
+async function withCredentialRequest(action, { confirmation = false } = {}) {
   if (!biometricSupported()) throw new Error('Passkeys are unavailable on this device. Use your password.')
   if (document.visibilityState === 'hidden') throw new Error('Open Budgetly before using your passkey.')
   if (activeRequest) throw new Error('A passkey request is already in progress.')
   const controller = new AbortController()
   activeRequest = controller
   const cancel = () => controller.abort()
-  window.addEventListener('pagehide', cancel)
-  const timeout = setTimeout(cancel, 120000)
-  try { return await action(controller.signal) }
+  // Google confirmation can legitimately leave the app. Only the actual device
+  // credential operation uses page-hide cancellation and its two-minute limit.
+  let timeout = setTimeout(cancel, confirmation ? 600000 : 120000)
+  const beginCredential = () => {
+    controller.signal.throwIfAborted()
+    if (document.visibilityState === 'hidden') throw new Error('Return to Budgetly to finish registering this device.')
+    clearTimeout(timeout)
+    timeout = setTimeout(cancel, 120000)
+    window.addEventListener('pagehide', cancel)
+  }
+  if (!confirmation) window.addEventListener('pagehide', cancel)
+  try { return await action(controller.signal, beginCredential) }
   catch (error) { controller.signal.throwIfAborted(); throw error }
   finally {
     clearTimeout(timeout)
@@ -62,9 +71,9 @@ async function nativeCredential(method, options, signal) {
   } finally { signal.removeEventListener('abort', cancel) }
 }
 export async function setupBiometric(email, password) {
-  return withCredentialRequest(async signal => {
+  return withCredentialRequest(async (signal, beginCredential) => {
   const request = await api('/api/passkeys/register/options', { method:'POST', signal, ...jsonBody({password}) })
-  signal.throwIfAborted()
+  beginCredential()
   if (nativePasskeys()) {
     const credential = await nativeCredential('create', request.options, signal)
     return api('/api/passkeys/register/verify', {method:'POST', signal, ...jsonBody({challenge_id:request.challenge_id, credential})})
@@ -77,7 +86,7 @@ export async function setupBiometric(email, password) {
   signal.throwIfAborted()
   if (!credential) throw new Error('Passkey setup cancelled.')
   return api('/api/passkeys/register/verify', {method:'POST', signal, ...jsonBody({challenge_id:request.challenge_id, credential:serialize(credential)})})
-  })
+  }, { confirmation: password === undefined })
 }
 export async function unlockBiometric() {
   return withCredentialRequest(async signal => {

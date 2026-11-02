@@ -399,3 +399,15 @@ def test_web_return_closes_popup_and_android_rejects_unverified_hosts(env):
     page = callback(client, query)
     assert 'window.close()' in page.text
     assert 'intent://' not in page.text and flow['poll_secret'] not in page.text
+
+
+def test_auth_tab_uses_http_return_after_server_commits_confirmation(env, monkeypatch):
+    client, _, _ = env
+    monkeypatch.setenv('GOOGLE_REDIRECT_URI', 'https://budget-planner-ecru-seven.vercel.app/api/auth/google/callback')
+    flow, query = begin(client, json={'return_to':'android_auth_tab'})
+    assert query['state'][0].startswith('android-auth-tab.')
+    page = client.get('/api/auth/google/callback', params={'state':query['state'][0],'code':'code'}, follow_redirects=False)
+    assert page.status_code == 303
+    assert page.headers['location'] == 'https://budget-planner-ecru-seven.vercel.app/api/auth/google/return'
+    assert flow['poll_secret'] not in page.headers['location']
+    assert poll(client, flow).json()['status'] == 'name_required'

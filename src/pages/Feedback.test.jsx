@@ -54,6 +54,7 @@ test('admin sends the exact reply and base revision, then shows the confirmed sa
   expect(api).toHaveBeenCalledTimes(2)
   expect(screen.getByLabelText('Reply to user')).toHaveValue('Fixed for you.')
   expect(screen.getByText('Reply saved',{exact:true})).toBeInTheDocument()
+  expect(screen.getByRole('region',{name:'Saved reply'})).toHaveTextContent('Fixed for you.')
 })
 
 test('a recipient sees an unread reply and only acknowledges the exact displayed reply revision', async()=>{

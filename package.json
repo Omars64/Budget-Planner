@@ -1,8 +1,8 @@
 {
   "name": "flowbudget",
   "private": true,
-  "version": "6.11.1",
-  "androidVersionCode": 104,
+  "version": "6.11.2",
+  "androidVersionCode": 105,
   "type": "module",
   "scripts": {
     "version:sync": "node scripts/version.mjs",

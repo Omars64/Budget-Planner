@@ -123,7 +123,7 @@ class PollIn(BaseModel):
 
 class StartIn(BaseModel):
     mode: Literal['signin', 'link', 'reauth'] = 'signin'
-    return_to: Literal['browser', 'android'] = 'browser'
+    return_to: Literal['browser', 'android', 'android_auth_tab'] = 'browser'
 
 
 class CompleteIn(PollIn):
@@ -169,12 +169,12 @@ def start_flow(request, db, user=None, mode='signin', return_to='browser'):
     if mode == 'reauth' and not db.query(GoogleIdentity).filter_by(user_id=user.id).first():
         raise HTTPException(409, 'Link Google before using Google confirmation')
     state, poll, nonce, verifier = [secrets.token_urlsafe(32) for _ in range(4)]
-    if return_to == 'android':
+    if return_to in ('android', 'android_auth_tab'):
         from .android_identity import ANDROID_RP_ID
         if urlsplit(redirect).hostname != ANDROID_RP_ID:
             raise HTTPException(503, 'Android Google return is unavailable on this host')
         # Platform choice is bound to the stored digest of this exact opaque state.
-        state = 'android.' + state
+        state = ('android-auth-tab.' if return_to == 'android_auth_tab' else 'android.') + state
     db.query(GoogleRevocationCredential).filter(
         GoogleRevocationCredential.user_id.is_(None), GoogleRevocationCredential.expires_at <= utc_now()
     ).delete(synchronize_session=False)
@@ -328,7 +328,7 @@ def callback(state: str, code: str = '', error: str = '', db=Depends(get_db)):
         if changed != 1:
             db.rollback()
             from .google_return import completion_page
-            return completion_page(native=state.startswith('android.'), successful=False)
+            return completion_page(native=state.startswith(('android.', 'android-auth-tab.')), successful=False)
         db.refresh(row)
         row.subject, row.email = claims['sub'], claims['email'].strip().lower()
         identity = db.get(GoogleIdentity, row.subject)
@@ -382,6 +382,10 @@ def callback(state: str, code: str = '', error: str = '', db=Depends(get_db)):
         db.query(GoogleAuthState).filter_by(digest=digest(state), status='exchanging').update({'status': 'failed', 'verifier': ''})
         db.commit()
     from .google_return import completion_page
+    if state.startswith('android-auth-tab.'):
+        from fastapi.responses import RedirectResponse
+        from .google_return import RETURN_URL
+        return RedirectResponse(RETURN_URL, status_code=303, headers={'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer'})
     return completion_page(native=state.startswith('android.'), successful=row.status in ('ready', 'linked', 'reauthenticated', 'name_required'))
 
 

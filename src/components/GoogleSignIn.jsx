@@ -4,8 +4,10 @@ import { openGoogleFlow, reserveGoogleWindow } from '../lib/googleFlow'
 import { Capacitor } from '@capacitor/core'
 import GoogleMark from './GoogleMark'
 
-export default function GoogleSignIn({onLogin,disabled=false,onBusyChange,onActiveChange,mode='signin',onComplete}) {
+export default function GoogleSignIn({onLogin,disabled=false,onBusyChange,onActiveChange,mode='signin',onComplete,unavailableMessage=''}) {
   const [enabled,setEnabled]=useState(false)
+  const [configured,setConfigured]=useState(false)
+  const [configAttempt,setConfigAttempt]=useState(0)
   const [busy,setBusy]=useState(false)
   const [error,setError]=useState('')
   const [pending,setPending]=useState(null)
@@ -18,9 +20,10 @@ export default function GoogleSignIn({onLogin,disabled=false,onBusyChange,onActi
   useEffect(()=>{
     mounted.current=true
     const abort=new AbortController()
-    api('/api/auth/google/config',{signal:abort.signal}).then(value=>setEnabled(value.enabled === true)).catch(()=>{})
+    setConfigured(false)
+    api('/api/auth/google/config',{signal:abort.signal}).then(value=>setEnabled(value.enabled === true)).catch(()=>{ if (!abort.signal.aborted) setEnabled(false) }).finally(()=>{ if (!abort.signal.aborted) setConfigured(true) })
     return ()=>{mounted.current=false;abort.abort();controller.current?.abort();if(flowSecret.current)void api('/api/auth/google/cancel',{method:'POST',...jsonBody({poll_secret:flowSecret.current})}).catch(()=>{})}
-  },[])
+  },[configAttempt])
   const setWorking=value=>{if(mounted.current){setBusy(value);onBusyChange?.(value)}}
   const cancel=()=>{controller.current?.abort();if(flowSecret.current)void api('/api/auth/google/cancel',{method:'POST',...jsonBody({poll_secret:flowSecret.current})}).catch(()=>{});flowSecret.current=null;setPending(null);setName('');setError('');setActive(false);setWorking(false)}
   const start=async()=>{
@@ -30,7 +33,7 @@ export default function GoogleSignIn({onLogin,disabled=false,onBusyChange,onActi
     try {
       popup=reserveGoogleWindow();setError('');setWorking(true)
       abort=new AbortController();controller.current=abort
-      const flow=await api('/api/auth/google/start',{method:'POST',...jsonBody({mode,return_to:Capacitor.isNativePlatform()?'android':'browser'}),signal:abort.signal})
+      const flow=await api('/api/auth/google/start',{method:'POST',...jsonBody({mode,return_to:Capacitor.isNativePlatform()?'android_auth_tab':'browser'}),signal:abort.signal})
       flowSecret.current=flow.poll_secret
       const result=await openGoogleFlow(flow,{popup,signal:abort.signal,pollPath:'/api/auth/google/poll',pollBody:{poll_secret:flow.poll_secret}})
       if(!mounted.current||abort.signal.aborted)return
@@ -50,7 +53,7 @@ export default function GoogleSignIn({onLogin,disabled=false,onBusyChange,onActi
       if(mounted.current)await onLogin(result)
     }catch(err){if(mounted.current)setError(err.message)}finally{setWorking(false)}
   }
-  if(!enabled)return null
+  if(!enabled)return unavailableMessage ? <div>{configured ? <><p role="alert" className="form-error">{unavailableMessage}</p><button type="button" className="button ghost small" onClick={() => setConfigAttempt(value => value + 1)}>Retry Google connection</button></> : <p role="status">Checking Google confirmation…</p>}</div> : null
   return <div className="google-flow-status">
     {pending?<form className="auth-form" onSubmit={complete}>
       <p role="status">Google verified your email. Enter the name you want to use, then tap Create Google account to finish signing up.</p>

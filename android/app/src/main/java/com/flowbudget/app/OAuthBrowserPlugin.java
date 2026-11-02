@@ -33,8 +33,7 @@ public class OAuthBrowserPlugin extends Plugin {
             return;
         }
         try {
-            getActivity().startActivity(new Intent(Intent.ACTION_VIEW, uri)
-                    .addCategory(Intent.CATEGORY_BROWSABLE));
+            ((MainActivity) getActivity()).openGoogleAuthTab(uri);
             call.resolve(new JSObject());
         } catch (Exception error) {
             call.reject("Install or enable a browser to continue with Google");

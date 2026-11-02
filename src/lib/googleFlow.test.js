@@ -38,6 +38,23 @@ it('does not retry an authorization error',async()=>{
   expect(api).toHaveBeenCalledTimes(1)
 })
 
+it('waits for the native WebView to resume before continuing from an Auth Tab into passkey enrollment', async()=>{
+  vi.useFakeTimers()
+  const visibility=vi.spyOn(document,'visibilityState','get').mockReturnValue('hidden')
+  api.mockResolvedValue({status:'reauthenticated'})
+  let completed=false
+  const request=openGoogleFlow(flow,options).then(value=>{completed=true;return value})
+  await vi.advanceTimersByTimeAsync(0)
+  window.dispatchEvent(new CustomEvent('budgetly:oauth-return',{detail:{canceled:false}}))
+  await vi.advanceTimersByTimeAsync(1800)
+  expect(api).toHaveBeenCalledTimes(1)
+  expect(completed).toBe(false)
+  visibility.mockReturnValue('visible')
+  await vi.advanceTimersByTimeAsync(1800)
+  expect(await request).toEqual({status:'reauthenticated'})
+  expect(api).toHaveBeenCalledTimes(1)
+})
+
 it('can cancel while waiting for the Android app to resume',async()=>{
   vi.useFakeTimers()
   vi.spyOn(document,'visibilityState','get').mockReturnValue('hidden')

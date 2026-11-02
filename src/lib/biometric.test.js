@@ -18,7 +18,7 @@ beforeEach(() => {
   vi.mocked(api).mockReset()
   vi.mocked(api).mockResolvedValue({challenge_id:'one', options:{challenge:'dGVzdA', user:{id:'dGVzdA'}, excludeCredentials:[]}})
 })
-afterEach(() => { cancelBiometric(); vi.unstubAllGlobals() })
+afterEach(() => { cancelBiometric(); vi.unstubAllGlobals(); vi.useRealTimers() })
 
 it('password-only mode persists without deleting account passkeys or invoking any credential API', async () => {
   setPasswordOnly(true)
@@ -75,6 +75,22 @@ it('finishes a user-initiated enrollment without requesting device permissions',
   const verification = JSON.parse(api.mock.calls[1][1].body)
   expect(verification.credential.rawId).toBe('AQID')
   expect(navigator.credentials.create.mock.calls[0][0].signal).toBeInstanceOf(AbortSignal)
+})
+
+it('keeps Google confirmation alive across page hide, then starts the device enrollment deadline', async () => {
+  vi.useFakeTimers()
+  let confirm
+  const rawId = new Uint8Array([1,2,3]).buffer
+  navigator.credentials.create.mockResolvedValue({id:'AQID',rawId,type:'public-key',response:{clientDataJSON:rawId,attestationObject:rawId},getClientExtensionResults:()=>({})})
+  api.mockImplementationOnce(()=>new Promise(resolve=>{confirm=resolve})).mockResolvedValueOnce({enabled:true})
+  const request=setupBiometric('google@example.test')
+  window.dispatchEvent(new Event('pagehide'))
+  await vi.advanceTimersByTimeAsync(125000)
+  expect(navigator.credentials.create).not.toHaveBeenCalled()
+  confirm({challenge_id:'google',options:{challenge:'dGVzdA',user:{id:'dGVzdA'},excludeCredentials:[]}})
+  await expect(request).resolves.toEqual({enabled:true})
+  expect(JSON.parse(api.mock.calls[0][1].body)).toEqual({})
+  vi.useRealTimers()
 })
 
 it('uses Android Credential Manager and sends its unchanged credential to the server', async () => {

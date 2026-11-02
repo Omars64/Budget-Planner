@@ -24,8 +24,11 @@ export async function openGoogleFlow(flow, {popup, signal, pollPath, pollBody}) 
     popup?.close(); throw new Error('Google sign-in is unavailable. Please try again later.')
   }
   let returned = false
+  let returnCanceled = false
   let returnListener
+  const authTabReturn = event => { returned = true; returnCanceled = event.detail?.canceled === true }
   try {
+    window.addEventListener('budgetly:oauth-return', authTabReturn)
     if (Capacitor.isNativePlatform() && browser.addListener) returnListener = await browser.addListener('returnToApp', () => { returned = true })
     if (Capacitor.isNativePlatform()) await browser.open({url:url.href})
     else {
@@ -48,7 +51,18 @@ export async function openGoogleFlow(flow, {popup, signal, pollPath, pollBody}) 
         // Android can suspend the WebView connection while the external browser is open.
         if (!error.network && ![502,503,504].includes(error.status)) throw error
       }
-      if (result && !['pending','processing','exchanging'].includes(result.status)) return result
+      if (result && !['pending','processing','exchanging'].includes(result.status)) {
+        // Auth Tab can deliver its activity result just before the WebView
+        // becomes visible. Keep the collected result in memory until resume;
+        // otherwise a following passkey request is rejected as background work.
+        while (Capacitor.isNativePlatform() && document.visibilityState === 'hidden') {
+          if (signal?.aborted) throw new DOMException('Google sign-in cancelled','AbortError')
+          if (Date.now() >= deadline) throw new Error('Return to Budgetly and start Google confirmation again.')
+          await pause(signal)
+        }
+        return result
+      }
+      if (returnCanceled) throw new Error('Google confirmation was closed or its return link could not be verified. Please try again.')
       // Completion closes the popup after committing the result. A poll already
       // in flight may still say pending; allow a final bounded poll to collect it.
       if (popup?.closed) {
@@ -58,5 +72,5 @@ export async function openGoogleFlow(flow, {popup, signal, pollPath, pollBody}) 
       await pause(signal)
     }
     throw new Error('Google sign-in expired. Please try again.')
-  } finally { popup?.close(); try { await returnListener?.remove() } catch { /* A closed native activity may already have removed it. */ } }
+  } finally { window.removeEventListener('budgetly:oauth-return', authTabReturn); popup?.close(); try { await returnListener?.remove() } catch { /* A closed native activity may already have removed it. */ } }
 }
