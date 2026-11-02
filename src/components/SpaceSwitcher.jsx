@@ -110,11 +110,12 @@ export default function SpaceSwitcher({ library = false }) {
   }
 
   const options = <div className="space-options">
-        <button className={!activeSpace ? 'selected' : ''} onClick={() => choose(null)}><UserRound/><span>Personal<small>Private records</small></span>{!activeSpace && <Check size={18}/>}</button>
-        {spaces.map(space => <div className={`space-option-row${space.id === activeSpace?.id ? ' selected' : ''}`} key={space.id}>
-          <button className="space-option-choose" onClick={() => choose(space.id)} aria-label={`Switch to ${space.name}`} aria-current={space.id === activeSpace?.id ? 'true' : undefined}><Users style={{ color: space.accent }}/><span>{space.name}<small>{space.owner_name} · {space.members.length} members · {roleNames[space.role]}</small></span>{space.id === activeSpace?.id && <Check size={18}/>}</button>
-          <button className="space-option-manage" onClick={() => show(space)}><Settings2 size={16}/><span>{space.role === 'owner' ? 'Manage workspace' : 'View settings & members'} {space.name}</span></button>
+        <button className={`${!activeSpace ? 'selected' : ''}${library ? ' space-library-personal' : ''}`} onClick={() => choose(null)} aria-current={!activeSpace ? 'true' : undefined}><UserRound/><span><strong>Personal</strong><small>{library ? 'Your private wallets, transactions and plans' : 'Private records'}</small></span>{!activeSpace && <>{library && <span className="space-current-label">Current workspace</span>}<Check size={18}/></>}</button>
+        {spaces.map(space => <div className={`space-option-row${space.id === activeSpace?.id ? ' selected' : ''}`} key={space.id} style={library ? {'--space-accent':space.accent} : undefined}>
+          <button className="space-option-choose" onClick={() => choose(space.id)} aria-label={`Switch to ${space.name}`} aria-current={space.id === activeSpace?.id ? 'true' : undefined}><Users style={{ color: space.accent }}/><span><strong>{space.name}</strong><small>{library ? `Created by ${space.owner_name}` : `${space.owner_name} · ${space.members.length} members · ${roleNames[space.role]}`}</small>{library && <span className="space-library-meta"><span>{space.members.length} {space.members.length === 1 ? 'member' : 'members'}</span><span>{roleNames[space.role]}</span><span>{space.currency}</span></span>}</span>{space.id === activeSpace?.id && <>{library && <span className="space-current-label">Current workspace</span>}<Check size={18}/></>}</button>
+          <button className="space-option-manage" aria-label={`${space.role === 'owner' ? 'Manage workspace' : 'View settings & members'} ${space.name}`} onClick={() => show(space)}><Settings2 size={16}/><span>{space.role === 'owner' ? 'Manage workspace' : 'View settings & members'}{!library && ` ${space.name}`}</span></button>
         </div>)}
+        {library && !spaces.length && <p className="muted space-library-empty">No shared Spaces yet. Create one for household expenses, a trip or a shared goal.</p>}
         <button className={library ? 'button primary space-library-create' : undefined} onClick={() => show()}><Plus/><span>Create space</span></button>
       </div>
 

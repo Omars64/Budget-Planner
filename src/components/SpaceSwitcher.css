@@ -1,4 +1,4 @@
-.space-switcher-dialog .space-option-row {
+:is(.space-switcher-dialog,.space-library-options) .space-option-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(120px, 42%);
   align-items: center;
@@ -7,9 +7,9 @@
   border-radius: 8px;
   padding: 6px;
 }
-.space-switcher-dialog .space-option-row.selected { background: var(--accent-soft); }
-.space-switcher-dialog .space-option-choose,
-.space-switcher-dialog .space-option-manage {
+:is(.space-switcher-dialog,.space-library-options) .space-option-row.selected { background: var(--accent-soft); }
+:is(.space-switcher-dialog,.space-library-options) .space-option-choose,
+:is(.space-switcher-dialog,.space-library-options) .space-option-manage {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -24,11 +24,11 @@
   font: inherit;
   cursor: pointer;
 }
-.space-switcher-dialog .space-option-choose > span { display: grid; gap: 5px; flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.space-switcher-dialog .space-option-row svg { flex: none; }
-.space-switcher-dialog .space-option-manage { font-size: 12px; font-weight: 650; overflow-wrap: anywhere; }
-.space-switcher-dialog .space-option-manage > span { min-width: 0; }
-.space-switcher-dialog .space-option-row button:hover { background: var(--accent-soft); }
+:is(.space-switcher-dialog,.space-library-options) .space-option-choose > span { display: grid; gap: 5px; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+:is(.space-switcher-dialog,.space-library-options) .space-option-row svg { flex: none; }
+:is(.space-switcher-dialog,.space-library-options) .space-option-manage { font-size: 12px; font-weight: 650; overflow-wrap: anywhere; }
+:is(.space-switcher-dialog,.space-library-options) .space-option-manage > span { min-width: 0; }
+:is(.space-switcher-dialog,.space-library-options) .space-option-row button:hover { background: var(--accent-soft); }
 .space-switcher-dialog button:focus-visible { outline: 3px solid var(--accent-text, var(--accent)); outline-offset: 2px; }
 .space-switcher-dialog .space-management { min-width: 0; overflow-wrap: anywhere; }
 .space-switcher-dialog .space-management-views { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
@@ -61,8 +61,8 @@
 .space-switcher-dialog .space-readonly-details dt { color: var(--muted); }
 .space-switcher-dialog .space-readonly-details dd { margin: 0; }
 @media (max-width: 540px) {
-  .space-switcher-dialog .space-option-row { grid-template-columns: minmax(0, 1fr); gap: 0; }
-  .space-switcher-dialog .space-option-manage { border-top: 1px solid var(--line); border-radius: 0; }
+  :is(.space-switcher-dialog,.space-library-options) .space-option-row { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  :is(.space-switcher-dialog,.space-library-options) .space-option-manage { border-top: 1px solid var(--line); border-radius: 0; }
   .space-switcher-dialog .space-management-views button { padding: 8px; }
   .space-switcher-dialog .space-member .button-row { flex: none; }
 }
