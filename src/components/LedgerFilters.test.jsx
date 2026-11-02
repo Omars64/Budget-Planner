@@ -31,3 +31,13 @@ it('starts settings groups collapsed', () => {
   const {container}=render(<SettingsSection title="Trash"><button>Delete backup</button></SettingsSection>)
   expect(container.querySelector('details').open).toBe(false)
 })
+
+
+it('submits quick search explicitly rather than requesting on every keystroke', () => {
+  const onChange = vi.fn()
+  render(<LedgerFilters value={defaultLedgerFilters} onChange={onChange} wallets={[]}/>)
+  fireEvent.change(screen.getByRole('searchbox', {name:'Search transactions'}), {target:{value:'Coffee'}})
+  expect(onChange).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', {name:'Search',exact:true}))
+  expect(onChange).toHaveBeenCalledWith({...defaultLedgerFilters,search:'Coffee'})
+})

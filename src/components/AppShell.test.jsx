@@ -37,7 +37,8 @@ test('desktop sidebar collapse is saved and page finder expands it', () => {
   fireEvent.click(screen.getByRole('button', {name:'Collapse sidebar'}))
   expect(document.querySelector('.app-shell')).toHaveClass('sidebar-collapsed')
   expect(localStorage.getItem('budgetly-sidebar-collapsed')).toBe('true')
-  expect(screen.getByRole('link', {name:'Calendar'})).toHaveAttribute('title', 'Calendar')
+  expect(screen.queryByRole('link', {name:'Calendar'})).not.toBeInTheDocument()
+  expect(screen.getByRole('link', {name:'Spaces'})).toBeInTheDocument()
   fireEvent.keyDown(window, {key:'k',ctrlKey:true})
   expect(document.querySelector('.app-shell')).not.toHaveClass('sidebar-collapsed')
   expect(screen.getByRole('searchbox', {name:'Find a page'})).toHaveFocus()
@@ -58,9 +59,9 @@ test('page finder filters grouped navigation and Ctrl+K focuses it', () => {
 
 test('More is active for secondary pages but not a primary tab', () => {
   const { rerender } = render(<MemoryRouter initialEntries={['/notes']}><AppShell/></MemoryRouter>)
-  expect(screen.getByRole('button', { name: 'More' })).toHaveAttribute('aria-current', 'page')
+  expect(screen.getByRole('link', { name: 'More tools' })).toHaveAttribute('aria-current', 'page')
   rerender(<MemoryRouter initialEntries={['/']} key="overview"><AppShell/></MemoryRouter>)
-  expect(screen.getByRole('button', { name: 'More' })).not.toHaveAttribute('aria-current')
+  expect(screen.getByRole('link', { name: 'More tools' })).not.toHaveAttribute('aria-current')
 })
 
 test('the highlighted support link stays at the sidebar bottom when filtered or collapsed', () => {
@@ -74,4 +75,12 @@ test('the highlighted support link stays at the sidebar bottom when filtered or 
   fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }))
   expect(link).toBeInTheDocument()
   expect(link).toHaveAttribute('title', 'Buy me a coffee - support Budgetly')
+})
+
+
+test('page search still finds less-used tools and the mobile More link navigates', () => {
+  render(<MemoryRouter><AppShell/></MemoryRouter>)
+  expect(screen.getByRole('link', {name:'More tools'})).toHaveAttribute('href', '/more')
+  fireEvent.change(screen.getByRole('searchbox', {name:'Find a page'}), {target:{value:'calendar'}})
+  expect(screen.getByRole('link', {name:'Calendar'})).toHaveAttribute('href', '/calendar')
 })

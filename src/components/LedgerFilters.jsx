@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ChevronLeft, ChevronRight, ListFilter, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ListFilter, Search, X } from 'lucide-react'
 import Modal from './Modal'
 import { dateInput } from '../lib/time'
 import { phraseSearch, savedSearches, saveSearch, removeSearch } from '../lib/phraseSearch'
@@ -9,6 +9,8 @@ export const defaultLedgerFilters = { search: '', type: 'all', wallet: '', month
 export default function LedgerFilters({ value, onChange, wallets, categories = [], shared = false, userId, children }) {
   const scope=shared?'shared':'personal'
   const [phrase,setPhrase]=useState('')
+  const [searchText,setSearchText]=useState(value.search || '')
+  useEffect(() => setSearchText(value.search || ''), [value.search,userId])
   const [saved,setSaved]=useState(()=>savedSearches(userId,scope))
   useEffect(()=>{setSaved(savedSearches(userId,scope));setSaveError('');setSaveName('')},[userId,scope])
   const [saveName,setSaveName]=useState('')
@@ -26,17 +28,21 @@ export default function LedgerFilters({ value, onChange, wallets, categories = [
   }
   const label = key => key === 'exclude_opening' ? 'Starting balances excluded' : key === 'date_from' ? `From ${value.date_from.slice(0,10)}` : key === 'date_to' ? `To ${value.date_to.slice(0,10)}` : key === 'reporting_from' ? `Reporting from ${value.reporting_from}` : key === 'reporting_to' ? `Reporting through ${value.reporting_to}` : key === 'category' ? (value.category === '0' ? 'Uncategorized' : categories.find(c => String(c.id) === value.category)?.name || 'Category') : key === 'wallet' ? wallets.find(w => String(w.wallet_id ?? w.id) === value.wallet)?.name || 'Wallet' : key === 'month' ? monthLabel : key === 'search' ? 'Search: ' + value.search : key === 'sort' ? 'Oldest first' : value.type
   return <section className="ledger-filter-bar" aria-label="Transaction filters">
+    <form className="everyday-ledger-search" role="search" aria-label="Search recorded transactions" onSubmit={event => { event.preventDefault(); onChange({...value,search:searchText.trim()}) }}>
+      <label className="everyday-search-field"><Search size={18}/><input type="search" aria-label="Search transactions" placeholder="Search descriptions or notes" maxLength={160} value={searchText} onChange={event => setSearchText(event.target.value)}/></label>
+      <button type="submit" className="button ghost small">Search</button>
+    </form>
     <div className="ledger-toolbar">
       <div className="ledger-month"><button className="icon-button" aria-label="Previous month" onClick={() => shiftMonth(-1)}><ChevronLeft size={18}/></button><strong>{monthLabel}</strong><button className="icon-button" aria-label="Next month" onClick={() => shiftMonth(1)}><ChevronRight size={18}/></button></div>
-      <div className="button-row">{children}<button className="icon-button filter-trigger" title="Filter transactions" aria-label="Filter transactions" onClick={() => { setDraft(value); setOpen(true) }}><ListFilter size={20}/>{active.length > 0 && <i aria-label={active.length + ' active filters'}/>}</button></div>
+      <div className="button-row">{children}<button className="button ghost small filter-trigger" title="Filter transactions" aria-label="Filter transactions" onClick={() => { setDraft(value); setOpen(true) }}><ListFilter size={18}/><span>Filters</span>{active.length > 0 && <i aria-label={active.length + ' active filters'}/>}</button></div>
     </div>
     <div className="ledger-quick-types" role="group" aria-label="Transaction type">{[['all','All'],['expense','Expenses'],['income','Income'],['transfer','Transfers']].map(([type, title]) => <button key={type} aria-pressed={value.type === type} onClick={() => onChange({ ...value, type, category: '' })}>{title}</button>)}</div>
     {active.length > 0 && <div className="active-filters">{active.map(key => <button key={key} onClick={() => onChange({ ...value, [key]: defaultLedgerFilters[key] })} aria-label={'Remove ' + key + ' filter'}><span>{label(key)}</span><X size={13}/></button>)}</div>}
-    <Modal open={open} onClose={() => setOpen(false)} title="Filters">
+    <Modal open={open} onClose={() => setOpen(false)} title="Filter transactions">
       <form className="stack gap-16" onSubmit={e => { e.preventDefault(); onChange(draft); setOpen(false) }}>
         <label className="field"><span>Find transactions</span><input value={phrase} onChange={event=>setPhrase(event.target.value)} placeholder="Groceries last month" maxLength={160}/></label>
         <button type="button" className="button ghost" disabled={!phrase.trim()} onClick={()=>setDraft({...defaultLedgerFilters,...phraseSearch(phrase,categories)})}>Use search</button>
-        <details><summary>Saved searches</summary><div className="stack gap-12">
+        <details className="everyday-form-options"><summary>Saved searches</summary><div className="stack gap-12">
           {saved.map(item=><div className="section-row" key={item.name}><button type="button" className="button ghost" onClick={()=>setDraft({...defaultLedgerFilters,...Object.fromEntries(Object.entries(item.filters).filter(([key])=>key in defaultLedgerFilters))})}>{item.name}</button><button type="button" className="icon-button" title={`Remove ${item.name}`} aria-label={`Remove saved search ${item.name}`} onClick={()=>{try{setSaved(removeSearch(userId,scope,item.name))}catch{setSaveError('Device storage is unavailable.')}}}><X size={16}/></button></div>)}
           <label className="field"><span>Search name</span><input value={saveName} maxLength={60} onChange={event=>setSaveName(event.target.value)}/></label>
           <button type="button" className="button ghost" disabled={!saveName.trim()} onClick={()=>{try{setSaved(saveSearch(userId,scope,saveName,draft));setSaveName('');setSaveError('')}catch(error){setSaveError(error.message)}}}>Save current filters</button>

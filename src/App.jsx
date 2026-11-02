@@ -28,6 +28,8 @@ const Feedback = lazy(() => import('./pages/Feedback'))
 const Upcoming = lazy(() => import('./pages/Upcoming'))
 const Planner = lazy(() => import('./pages/Planner'))
 const Attention = lazy(() => import('./pages/Attention'))
+const More = lazy(() => import('./pages/More'))
+const Spaces = lazy(() => import('./pages/Spaces'))
 const BankMessages = lazy(() => import('./pages/BankMessages'))
 import BrandLogo from './components/BrandLogo'
 import BrandFooter from './components/BrandFooter'
@@ -436,6 +438,8 @@ export default function App() {
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/budgets" element={<Budgets />} />
         <Route path="/goals" element={<GoalsDebts />} />
+        <Route path="/more" element={<More />} />
+        <Route path="/spaces" element={<Spaces />} />
         <Route path="/wallets" element={<Wallets />} />
         <Route path="/notes" element={<Notes />} />
         <Route path="/feedback" element={<Feedback />} />

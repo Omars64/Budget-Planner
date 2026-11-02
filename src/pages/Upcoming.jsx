@@ -9,8 +9,10 @@ import ReportingMonthField from '../components/ReportingMonthField'
 import Modal from '../components/Modal'
 import { useApp } from '../App'
 import '../upcoming.css'
+import '../everyday-planning.css'
 
-const statuses = [['upcoming', 'Upcoming'], ['all', 'All records'], ['planned', 'Planned'], ['scheduled', 'Scheduled'], ['failed', 'Needs attention'], ['posted', 'Recorded']]
+const statuses = [['upcoming', 'Upcoming'], ['all', 'All records'], ['planned', 'Manual / reminder only'], ['scheduled', 'Automatic'], ['failed', 'Needs attention'], ['posted', 'Recorded']]
+const planLabel = row => row.status === 'posted' ? 'Recorded' : row.status === 'failed' ? 'Needs attention' : row.status === 'scheduled' ? 'Automatic' : row.reminder_enabled && row.type === 'expense' ? 'Reminder only' : 'Plan only'
 const empty = () => ({ type: 'expense', amount: '', description: '', notes: '', date: dateInput(new Date(Date.now() + 86400000)), reporting_month: '', wallet_id: '', transfer_wallet_id: '', category_id: '', status: 'planned', reminder_enabled: true })
 const reportingMonthLabel = month => new Intl.DateTimeFormat('en', { month: 'short', year: 'numeric' }).format(new Date(`${month}-01T12:00:00`))
 
@@ -115,15 +117,16 @@ export default function Upcoming() {
     try { await api(`/api/planned-transactions/${row.id}`, { method: 'DELETE', ...(row.revision ? { headers: { 'If-Match': row.revision } } : {}) }); await load(); void syncPlannedNotifications(user.id).catch(() => {}); notify('Upcoming entry deleted') } catch (err) { notify(err.message, 'error') }
   }
 
-  return <section className="upcoming-page">
-    <header className="upcoming-toolbar"><div><h3>Upcoming records</h3><p className="muted">Plan ahead without changing your balance.</p></div><button type="button" className="button primary" data-tour="new-plan" disabled={!canAdd} onClick={() => start(null)}><Plus size={17}/>Add plan</button></header>
+  return <section className="upcoming-page everyday-page">
+    <header className="upcoming-toolbar"><div><h3>Upcoming</h3><p className="muted">Know what happens next. Plans affect your balance only once recorded.</p></div><button type="button" className="button primary" data-tour="new-plan" disabled={!canAdd} onClick={() => start(null)}><Plus size={17}/>Add plan</button></header>
+    <div className="everyday-guidance"><strong>Automatic or reminder only?</strong><p className="muted">Automatic entries record after their due time when processing runs. Plans stay unrecorded until you add a transaction yourself. Expense reminders follow your notification settings.</p></div>
     <div className="upcoming-controls">
       <div className="segment-control three" role="group" aria-label="Wallet context">{[['all', 'All'], ['personal', 'Personal'], ['shared', 'Shared']].map(([value, label]) => <button key={value} type="button" className={scope === value ? 'active' : ''} aria-pressed={scope === value} onClick={() => setScope(value)}>{label}</button>)}</div>
       <StatusFilter value={filter} onChange={setFilter}/>
       <span className="upcoming-total">Net planned: {money(total, settings.currency)}</span>
     </div>
     {error && !draft && <p className="form-error" role="alert">{error}</p>}
-    <Modal open={Boolean(draft)} onClose={closeEditor} title={draft?.id ? 'Edit upcoming entry' : 'Add upcoming entry'} subtitle="Plan ahead without changing your balance." protectChanges isDirty={Boolean(draft && JSON.stringify(draft) !== baseline.current)} footer={close => <div className="modal-actions"><button type="button" className="button ghost" disabled={busy} onClick={close}>Cancel</button><button type="submit" form={formId} className="button primary" disabled={busy || conflict}>{busy ? 'Saving...' : 'Save entry'}</button></div>}>
+    <Modal layerClass="everyday-page" open={Boolean(draft)} onClose={closeEditor} title={draft?.id ? 'Edit upcoming entry' : 'Add upcoming entry'} subtitle="Plan ahead without changing your balance." protectChanges isDirty={Boolean(draft && JSON.stringify(draft) !== baseline.current)} footer={close => <div className="modal-actions"><button type="button" className="button ghost" disabled={busy} onClick={close}>Cancel</button><button type="submit" form={formId} className="button primary" disabled={busy || conflict}>{busy ? 'Saving...' : 'Save entry'}</button></div>}>
     {draft && <form id={formId} className="upcoming-editor stack gap-18 transaction-form" onSubmit={save}>
       <fieldset className="transaction-fields stack gap-18" disabled={busy}>
       <DateTimeField value={draft.date} onChange={value => change('date', value)} disabled={busy}/>
@@ -137,19 +140,24 @@ export default function Upcoming() {
         <label className="field"><span>Wallet</span><select required value={draft.wallet_id} onChange={event => change('wallet_id', event.target.value)}><option value="">Choose wallet</option>{wallets.filter(w => w.editable).map(w => <option key={w.id} value={w.id}>{w.name}{w.shared ? ' · Shared' : ''}</option>)}</select></label>
         <label className="field"><span>{draft.type === 'transfer' ? 'Destination' : 'Category'}</span>{draft.type === 'transfer' ? <select required value={draft.transfer_wallet_id} onChange={event => change('transfer_wallet_id', event.target.value)}><option value="">Choose destination</option>{wallets.filter(w => w.editable && w.owner_id === wallet?.owner_id && String(w.id) !== String(wallet?.id)).map(w => <option key={w.id} value={w.id}>{w.name}</option>)}</select> : <select value={draft.category_id} onChange={event => change('category_id', event.target.value)}><option value="">Uncategorized</option>{choices.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>}</label>
       </div>
-      <label className="field"><span>Recording</span><select value={draft.status} onChange={event => change('status', event.target.value)}><option value="planned">Plan only</option><option value="scheduled">Auto record</option></select></label>
+      <label className="field"><span>Recording</span><select aria-describedby={`${formId}-recording-help`} value={draft.status} onChange={event => change('status', event.target.value)}><option value="planned">Plan only / remind me</option><option value="scheduled">Record automatically</option></select></label>
+      <p id={`${formId}-recording-help`} className="muted everyday-help">{draft.status === 'scheduled' ? 'Records at the next automatic server check after the due time, unless processing is paused. No bank payment is made.' : 'Stays a plan after the due time. Add the actual transaction yourself when it happens; this plan will not record automatically.'}</p>
       <label className="upcoming-reminder"><input type="checkbox" checked={draft.reminder_enabled} onChange={event => change('reminder_enabled', event.target.checked)}/><Bell size={19}/><span>Remind me</span></label>
+      <p className="muted everyday-help">Reminders apply to expense entries only and depend on notification settings and permissions. Manage timing and delivery in Settings.</p>
+      <label className="field"><span>Notes (optional)</span><textarea value={draft.notes || ''} onChange={event => change('notes', event.target.value)}/></label>
       </fieldset>
       {error && <p className="form-error" role="alert">{error}</p>}
       {conflict && <button type="button" className="button ghost" disabled={busy} onClick={() => void reloadConflict()}>Reload latest entry</button>}
     </form>}
     </Modal>
+    <h4 className="everyday-section-title">{filter === 'posted' ? 'Recorded entries' : filter === 'failed' ? 'Needs attention' : filter === 'all' ? 'Upcoming & recorded entries' : 'Coming up'}</h4>
     <div className="upcoming-records" aria-live="polite">
       {loading ? <p className="upcoming-empty">Loading upcoming records...</p> : displayed.length === 0 ? <p className="upcoming-empty">No entries in this view.</p> : displayed.map(row => <article className="upcoming-record" key={row.id}>
         <div className="upcoming-record-main">
-          <div className="upcoming-record-title"><strong>{row.description}</strong><span className={`upcoming-status ${row.status}`}>{row.status === 'posted' ? 'Recorded' : row.status === 'failed' ? 'Needs attention' : row.status}</span></div>
-          <div className="upcoming-record-details"><span><CalendarClock size={15}/>{showTime(row.date)}</span><span className="upcoming-type">{row.type}</span>{row.reporting_month && row.reporting_month !== String(row.date || '').slice(0, 7) && <span>For {reportingMonthLabel(row.reporting_month)}</span>}<span>{row.wallet_name}{row.shared ? ` · Shared with ${row.owner_name}` : ''}</span><span>{categoryLabel(row)}</span>{row.reminder_enabled && row.status !== 'posted' && <span><Bell size={15}/>Reminder on</span>}</div>
+          <div className="upcoming-record-title"><strong>{row.description}</strong><span className={`upcoming-status ${row.status}`}>{planLabel(row)}</span></div>
+          <div className="upcoming-record-details"><span><CalendarClock size={15}/>{showTime(row.date)}</span><span className="upcoming-type">{row.type}</span>{row.reporting_month && row.reporting_month !== String(row.date || '').slice(0, 7) && <span>For {reportingMonthLabel(row.reporting_month)}</span>}<span>{row.wallet_name}{row.shared ? ` · Shared with ${row.owner_name}` : ''}</span><span>{categoryLabel(row)}</span>{row.reminder_enabled && row.type === 'expense' && ['planned', 'scheduled'].includes(row.status) && <span><Bell size={15}/>Reminder on</span>}</div>
           {row.error && <p className="upcoming-error" role="status">{row.error}</p>}
+          <p className="muted everyday-help">{row.status === 'posted' ? 'Already recorded in your transactions.' : row.status === 'failed' ? 'Not recorded. Review this entry and choose how to record it again.' : row.status === 'scheduled' ? 'Records automatically after the due time when processing runs.' : 'Will not record automatically. Add the transaction yourself when it happens.'}</p>
         </div>
         <div className="upcoming-record-end"><strong className={`upcoming-amount ${row.type}`}>{row.type === 'expense' ? '-' : row.type === 'income' ? '+' : ''}{money(row.amount, settings.currency)}</strong>{row.can_edit && row.status !== 'posted' && <div className="button-row"><button type="button" className="icon-button" title="Edit entry" aria-label={`Edit ${row.description}`} onClick={() => start(row)}><Pencil size={17}/></button><button type="button" className="icon-button" title="Delete entry" aria-label={`Delete ${row.description}`} onClick={() => remove(row)}><Trash2 size={17}/></button></div>}</div>
       </article>)}

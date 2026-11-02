@@ -47,18 +47,19 @@ export default function Transactions() {
     notify(isGuest ? 'Transaction deleted from this device' : 'Transaction moved to Trash', 'success', result?.trash_id && (!activeSpace || activeSpace.role === 'owner') ? {label:'Undo',run:async()=>{await api(`/api/trash/${result.trash_id}/restore`,{method:'POST'});refresh();notify('Transaction restored')}} : null)
   } catch (err) { notify(err.message, 'error') } }
 
-  return <div className="ledger-page stack">
+  return <div className="ledger-page everyday-page transactions-page stack">
     {!isGuest && <OfflinePending scope={spaceKey}/>}
     <LedgerFilters userId={`${user?.id}:${spaceKey}`} value={filters} onChange={setFilters} wallets={wallets} categories={categories}>{!isGuest && !activeSpace && <StatementImport wallets={wallets} compact/>}</LedgerFilters>
     {ledger.error && <div className="form-error" role="alert">{ledger.error}<button className="button ghost small" onClick={ledger.retry}>Retry</button></div>}
     {ledger.error && ledger.updatedAt && <small className="muted">Showing records last updated at {new Date(ledger.updatedAt).toLocaleTimeString()}.</small>}
 
 
+    <details className="everyday-disclosure transaction-balances"><summary>Current wallet balances<small>View available money without changing your filters</small></summary>
     <section className="transaction-wallets" aria-label="Current wallet balances">
       {wallets.filter(wallet => filters.wallet ? String(wallet.id) === filters.wallet : !wallet.archived).map(wallet => <div className="transaction-wallet-balance glass" key={wallet.id}><span><Wallet size={15}/>{wallet.name}</span><strong><AnimatedMoney value={wallet.balance} currency={settings.currency} compact={settings.compact_numbers}/></strong></div>)}
-    </section>
+    </section></details>
 
-    <section className="ledger-list">
+    <section className="ledger-list" aria-label="Recorded transactions">
       <div className="ledger-count">{rows.length}{ledger.hasMore ? '+' : ''} transaction{rows.length === 1 ? '' : 's'}</div>
       {loading && !rows.length ? <div className="list-skeleton"><i/><i/><i/><i/></div> : !rows.length ? <EmptyState title="No matching transactions" text="Try another filter or add a transaction." action={<div className="button-row"><button className="button ghost" onClick={() => setFilters({...defaultLedgerFilters})}>Clear filters</button><button className="button primary" disabled={!canAdd} onClick={() => {setEditing(null);setModal(true)}}>Add transaction</button></div>}/> : <div className="date-groups">
         {Object.entries(grouped).map(([day, txs]) => <div className="date-group" key={day}>

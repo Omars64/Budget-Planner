@@ -13,7 +13,7 @@ const fresh = currency => ({ name: '', color: 'green', currency })
 const emptyMember = () => ({ email: '', role: 'view' })
 const details = space => ({ name: space.name, color: space.color, currency: space.currency })
 
-export default function SpaceSwitcher() {
+export default function SpaceSwitcher({ library = false }) {
   const { user, activeSpace, spaces = [], switchSpace, reloadSpaces, forgetDeletedSpace, settings, isGuest, requestSignIn, notify, confirm } = useApp()
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState(null)
@@ -109,18 +109,20 @@ export default function SpaceSwitcher() {
     finally { pending.current = false; setBusy('') }
   }
 
-  return <div className="space-switcher">
-    <button className="space-selector" onClick={() => setOpen(true)} aria-label={`Switch space. Current: ${activeSpace?.name || 'Personal'}`} aria-haspopup="dialog"><span className="space-symbol">{activeSpace ? <Users size={18}/> : <UserRound size={18}/>}</span><span className="space-selector-label">{activeSpace?.name || 'Personal'}<small>{activeSpace ? roleNames[activeSpace.role] : 'Only you'}</small></span><ChevronDown size={16}/></button>
-    <Modal open={open} onClose={() => setOpen(false)} title="Your spaces" layerClass="space-switcher-dialog">
-      <div className="space-options">
+  const options = <div className="space-options">
         <button className={!activeSpace ? 'selected' : ''} onClick={() => choose(null)}><UserRound/><span>Personal<small>Private records</small></span>{!activeSpace && <Check size={18}/>}</button>
         {spaces.map(space => <div className={`space-option-row${space.id === activeSpace?.id ? ' selected' : ''}`} key={space.id}>
           <button className="space-option-choose" onClick={() => choose(space.id)} aria-label={`Switch to ${space.name}`} aria-current={space.id === activeSpace?.id ? 'true' : undefined}><Users style={{ color: space.accent }}/><span>{space.name}<small>{space.owner_name} · {space.members.length} members · {roleNames[space.role]}</small></span>{space.id === activeSpace?.id && <Check size={18}/>}</button>
           <button className="space-option-manage" onClick={() => show(space)}><Settings2 size={16}/><span>{space.role === 'owner' ? 'Manage workspace' : 'View settings & members'} {space.name}</span></button>
         </div>)}
-        <button onClick={() => show()}><Plus/><span>Create space</span></button>
+        <button className={library ? 'button primary space-library-create' : undefined} onClick={() => show()}><Plus/><span>Create space</span></button>
       </div>
-    </Modal>
+
+  return <div className={`space-switcher${library ? ' space-library-options' : ''}`}>
+    {library ? options : <>
+    <button className="space-selector" onClick={() => setOpen(true)} aria-label={`Switch space. Current: ${activeSpace?.name || 'Personal'}`} aria-haspopup="dialog"><span className="space-symbol">{activeSpace ? <Users size={18}/> : <UserRound size={18}/>}</span><span className="space-selector-label">{activeSpace?.name || 'Personal'}<small>{activeSpace ? roleNames[activeSpace.role] : 'Only you'}</small></span><ChevronDown size={16}/></button>
+    <Modal open={open} onClose={() => setOpen(false)} title="Your spaces" layerClass="space-switcher-dialog">{options}</Modal>
+    </>}
     <Modal protectChanges isDirty={Boolean(dirty)} open={manage} onClose={() => !pending.current && setManage(false)} title={editing ? editing.name : 'Create space'} layerClass="space-switcher-dialog">
       <div className="space-management stack gap-22">
         {editing && <nav className="space-management-views" aria-label="Workspace settings views">

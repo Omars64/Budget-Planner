@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, Wallet } from 'lucide-react'
+import { ArrowRight, CalendarClock, Inbox, Wallet } from 'lucide-react'
 import { dateInput } from '../lib/time'
 import { api, money } from '../lib/api'
 import { useApp } from '../App'
@@ -14,6 +14,7 @@ import { frequentPages } from '../lib/pageUsage'
 import { guestRoutes } from '../lib/guest'
 import WeeklySummary from '../components/WeeklySummary'
 import PlannerSummary from '../components/PlannerSummary'
+import '../everyday-money.css'
 
 export default function Overview() {
   const { user, settings, refreshKey, isGuest, activeSpace } = useApp()
@@ -38,28 +39,38 @@ export default function Overview() {
   const filteredLink = { aiFilters: { month: displayedMonth } }
   if (!data && !error) return <div className="skeleton-page"><div/><div/><div/></div>
 
-  return <div className="overview-page">
+  return <div className="overview-page everyday-page everyday-overview">
     <section className="overview-balance">
       <div><p className="muted">{activeSpace ? 'Space balance now' : 'Personal balance now'}</p><h1>{data ? <AnimatedMoney value={data.total_balance} currency={settings.currency} compact={settings.compact_numbers}/> : '-'}</h1></div>
       <div className="overview-controls"><label className="field"><span>Month</span><input type="month" min="1000-01" max="9999-12" value={month} onChange={e => e.target.value && setMonth(e.target.value)}/></label></div>
     </section>
     {error && <div className="form-error" role="alert">{error}<button className="button ghost small" onClick={()=>setRetry(v=>v+1)}>Retry</button>{data && <small>Showing the last loaded summary for {data.month}.</small>}</div>}
     {data && <div aria-busy={data.month !== month} className={data.month !== month ? 'overview-loading' : ''}>
-      {preferences.personalizedShortcuts !== false && <details className="overview-disclosure"><summary>Your shortcuts</summary><nav className="overview-shortcuts" aria-label="Your shortcuts">{frequentPages(user?.id,isGuest ? guestRoutes : null).map(([path,label]) => <Link key={path} to={path}>{label}<ArrowRight size={16}/></Link>)}</nav></details>}
       <section key={data.month} className="overview-metrics month-reveal" aria-label="Selected month summary">
         <Link to="/transactions" state={{aiFilters:{month:data.month,type:'income'}}}><span>Money in</span><strong className="tx-amount income">{fmt(data.income)}</strong>{data.opening_funds > 0 && <small>{fmt(data.earned_income)} income + {fmt(data.opening_funds)} starting funds</small>}</Link>
         <Link to="/transactions" state={{aiFilters:{month:displayedMonth,type:'expense',exclude_opening:true}}}><span>Spent</span><strong className="tx-amount expense">{fmt(data.expense)}</strong></Link>
-        <Link to="/transactions" state={filteredLink}><span>Money in minus out</span><strong>{fmt(data.net)}</strong><small>After spending{data.opening_debt > 0 ? ' and starting debt' : ''}. Transfers are separate.</small></Link>
       </section>
-      {preferences.weeklySummary !== false && data.weekly && <WeeklySummary value={data.weekly} fmt={fmt}/>}
-      {!isGuest && <PlannerSummary refreshKey={refreshKey} fmt={fmt}/>}
+      {!isGuest && <nav className="everyday-overview-actions" aria-label="Next actions">
+        <Link to="/upcoming"><CalendarClock size={22}/><span><strong>Upcoming payments</strong><small>Due dates, reminders and automatic entries</small></span><ArrowRight size={17}/></Link>
+        <Link to="/bank-messages"><Inbox size={22}/><span><strong>Review bank alerts</strong><small>Check alerts before adding them to your records</small></span><ArrowRight size={17}/></Link>
+      </nav>}
+      <section className="overview-section overview-recent">
+        <div className="panel-head"><h3>Recent activity</h3><Link to="/transactions" state={filteredLink} className="overview-link">View all transactions <ArrowRight size={15}/></Link></div>
+        {data.recent_transactions.length ? data.recent_transactions.map(tx => <LedgerRow key={tx.id} tx={tx} fmt={fmt} showDate onOpen={() => setSelected(tx)}/>) : <EmptyState title="No transactions this month" text="Add a transaction to start recording your activity."/>}
+      </section>
       {!isGuest && <Link className="overview-attention-link" to="/attention">{attention === null ? 'Review reminders' : attention === 0 ? 'All caught up' : `${attention} ${attention === 1 ? 'item needs' : 'items need'} attention`} <ArrowRight size={16}/></Link>}
       {data.shared?.wallet_count > 0 && <section className="overview-shared" aria-label="Shared wallets summary"><div><span>Shared balance</span><strong>{fmt(data.shared.balance)}</strong><small>{data.shared.wallet_count} shared wallets, separate from personal</small></div><Link to="/shared-transactions">View shared <ArrowRight size={16}/></Link></section>}
+      <details className="overview-disclosure"><summary>Wallet balances</summary>
       <section className="overview-wallets" aria-label="Personal wallets">
         {[...(data.wallets || [])].sort((a,b) => Number(preferences.favoriteWallets.includes(b.id))-Number(preferences.favoriteWallets.includes(a.id))).map(w => <Link key={w.id} to="/transactions" state={{ aiFilters: { wallet: String(w.id), month: '' } }}><span><Wallet size={16}/>{w.name}</span><strong>{fmt(w.balance)}</strong></Link>)}
         {!data.wallets?.length && <Link to="/wallets">Add {activeSpace ? 'a space' : 'a personal'} wallet <ArrowRight size={16}/></Link>}
       </section>
-      <details className="overview-disclosure"><summary>Spending details</summary><div className="overview-columns">
+      </details>
+      {((preferences.weeklySummary !== false && data.weekly) || !isGuest) && <details className="overview-disclosure"><summary>Weekly summary & planning</summary>
+      {preferences.weeklySummary !== false && data.weekly && <WeeklySummary value={data.weekly} fmt={fmt}/>}
+      {!isGuest && <PlannerSummary refreshKey={refreshKey} fmt={fmt}/>}
+      </details>}
+      <details className="overview-disclosure"><summary>Monthly spending & budget details</summary><div className="everyday-net-summary"><Link to="/transactions" state={filteredLink}><span>Money in minus out</span><strong>{fmt(data.net)}</strong><small>After spending{data.opening_debt > 0 ? ' and starting debt' : ''}. Transfers are separate.</small></Link></div><div className="overview-columns">
         <section className="overview-section">
           <div className="panel-head"><h3>Budget progress</h3><Link to="/budgets" className="overview-link">View all <ArrowRight size={15}/></Link></div>
           {data.budgets.length ? <div className="overview-budgets">{[...data.budgets].sort((a, b) => b.progress - a.progress).slice(0, 3).map(b => <Link className="record-link" key={b.id} to="/transactions" state={{aiFilters:{type:'expense',category:b.category_id ? String(b.category_id) : '',month:b.records_month || '',date_from:b.records_month ? '' : b.records_from,date_to:b.records_month ? '' : b.records_to,exclude_opening:true}}}>
@@ -73,10 +84,9 @@ export default function Overview() {
           {data.category_spending.length ? <div className="overview-categories">{data.category_spending.slice(0, 3).map(c => <Link className="record-link" key={c.id} to="/transactions" state={{aiFilters:{month:displayedMonth,type:'expense',category:String(c.id),exclude_opening:true}}}><div className="overview-pair"><span>{c.name}</span><strong>{fmt(c.value)}</strong></div><div className="mini-track"><i style={{ width: `${Math.min(100, c.value / (data.expense || 1) * 100)}%`, background: c.color }}/></div></Link>)}</div> : <EmptyState title="No spending this month" text="Your expenses will appear here."/>}
         </section>
       </div></details>
-      <section className="overview-section overview-recent">
-        <div className="panel-head"><h3>Recent activity</h3><Link to="/transactions" state={filteredLink} className="overview-link">View all transactions <ArrowRight size={15}/></Link></div>
-        {data.recent_transactions.length ? data.recent_transactions.map(tx => <LedgerRow key={tx.id} tx={tx} fmt={fmt} showDate onOpen={() => setSelected(tx)}/>) : <EmptyState title="No transactions this month" text="Add a transaction to start recording your activity."/>}
-      </section>
+      {preferences.personalizedShortcuts !== false && <details className="overview-disclosure"><summary>Your shortcuts</summary><nav className="overview-shortcuts" aria-label="Your shortcuts">{frequentPages(user?.id,isGuest ? guestRoutes : null).map(([path,label]) => <Link key={path} to={path}>{label}<ArrowRight size={16}/></Link>)}</nav></details>}
+
+
     </div>}
     <TransactionDetails tx={selected} fmt={fmt} onClose={() => setSelected(null)}/>
   </div>

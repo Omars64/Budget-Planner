@@ -1,0 +1,30 @@
+/* Page-local layout only: existing theme and wallet card surfaces stay authoritative. */
+.everyday-page .everyday-wallet-actions {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.everyday-page .everyday-wallet-actions > :is(a, button) {
+  min-height: 44px;
+}
+.everyday-budgets .card-top .button-row {
+  flex-wrap: wrap;
+}
+.everyday-budgets .budget-foot {
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+.everyday-budgets .budget-foot strong {
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+.everyday-budgets .everyday-budget-repeat {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.everyday-overview .overview-recent .panel-head {
+  gap: 12px;
+}
+.everyday-overview .overview-disclosure > summary {
+  min-height: 44px;
+}

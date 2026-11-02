@@ -1,0 +1,7 @@
+.everyday-page .everyday-guidance { display:grid; gap:6px; margin-bottom:16px; }
+.everyday-page .everyday-guidance p { margin:0; line-height:1.5; }
+.everyday-page .everyday-section-title { margin:4px 0 12px; font-size:16px; }
+.everyday-page .everyday-help { margin:8px 0 0; font-size:13px; line-height:1.5; overflow-wrap:anywhere; }
+.everyday-page .everyday-destination { display:grid; gap:4px; min-width:0; overflow-wrap:anywhere; }
+.everyday-page .everyday-actions { flex-wrap:wrap; }
+.everyday-page .tabs { flex-wrap:wrap; }

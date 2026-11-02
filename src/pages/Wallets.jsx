@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import '../everyday-money.css'
 import { BookOpen, Landmark, Pencil, Plus, Trash2, Star } from 'lucide-react'
 import { api, jsonBody, money } from '../lib/api'
 import { DynamicIcon } from '../lib/icons'
@@ -39,11 +40,12 @@ export default function Wallets(){
       } else notify(err.message,'error')
     }
   }
-  return <div className="stack gap-22">
+  return <div className="stack gap-22 everyday-page everyday-wallets">
     {error && <div className="form-error" role="alert">{error}<button className="button ghost small" onClick={()=>refresh()}>Retry</button></div>}
     <section className="wallet-hero glass"><div><p className="eyebrow">Available money</p><h1>{fmt(total)}</h1><p className="muted">Across {rows.filter(w=>!w.archived).length} active wallets</p></div><span className="wallet-orbit"><Landmark/></span></section>
     <div className="section-row"><div><p className="eyebrow">Accounts & cash</p><h3>Your wallets</h3></div>{canManage && <button className="button primary" onClick={()=>show()}><Plus/>Add wallet</button>}</div>
-    <section className="wallet-grid">{rows.length ? orderedRows.map(w => {
+    <p className="muted">Open a wallet’s ledger to review its records, or use the labeled actions below its card.</p>
+    <section className="wallet-grid" aria-label="Your wallets">{rows.length ? orderedRows.map(w => {
       const card = ['bank','card'].includes(w.type)
       return <article className={'wallet-tile ' + (w.archived ? 'archived' : '')} key={w.id}>
         <div className={'wallet-card ' + (card ? 'payment-card' : '')} style={walletCardStyle(w.color)} onDoubleClick={() => canManage && show(w)}>
@@ -51,10 +53,11 @@ export default function Wallets(){
           <div className="wallet-card-balance"><p className="muted">{w.archived ? 'Archived' : 'Available balance'}</p><h2>{fmt(w.balance)}</h2><strong>{w.name}</strong></div>
           {card && <CardNetworkMark network={w.card_network || 'visa'}/>}
         </div>
-        <div className="wallet-tile-actions"><button className="icon-button wallet-favorite" aria-label={`Favorite ${w.name}`} title="Favorite wallet" aria-pressed={preferences.favoriteWallets.includes(w.id)} onClick={() => { const ids=preferences.favoriteWallets.includes(w.id) ? preferences.favoriteWallets.filter(id=>id!==w.id) : [...preferences.favoriteWallets,w.id]; if(!savePreferences({favoriteWallets:ids})) notify('Favorites could not be saved on this device.','error') }}><Star size={18}/></button>
+        <div className="wallet-tile-actions everyday-wallet-actions" role="group" aria-label={`${w.name} actions`}>
+<button className="button ghost small wallet-favorite" aria-label={`Favorite ${w.name}`} title="Favorite wallet" aria-pressed={preferences.favoriteWallets.includes(w.id)} onClick={() => { const ids=preferences.favoriteWallets.includes(w.id) ? preferences.favoriteWallets.filter(id=>id!==w.id) : [...preferences.favoriteWallets,w.id]; if(!savePreferences({favoriteWallets:ids})) notify('Favorites could not be saved on this device.','error') }}><Star size={18}/><span>{preferences.favoriteWallets.includes(w.id) ? 'Favorited' : 'Favorite'}</span></button>
           <button className="button ghost small" onClick={() => isGuest ? requestSignIn('financial ledger tools') : setLedgerWallet(w)}><BookOpen size={16}/>Ledger</button>
-          {canManage && <button className="icon-button" aria-label={`Edit ${w.name}`} title="Edit wallet" onClick={() => show(w)}><Pencil size={18}/></button>}
-          {canManage && <button className="icon-button danger" aria-label={`Delete ${w.name}`} title="Delete wallet" onClick={() => remove(w)}><Trash2 size={18}/></button>}
+          {canManage && <button className="button ghost small" aria-label={`Edit ${w.name}`} title="Edit wallet" onClick={() => show(w)}><Pencil size={18}/>Edit</button>}
+          {canManage && <button className="button ghost small danger" aria-label={`Delete ${w.name}`} title="Delete wallet" onClick={() => remove(w)}><Trash2 size={18}/>Delete</button>}
         </div>
       </article>
     }) : <div className="panel glass full-span"><EmptyState/></div>}</section>

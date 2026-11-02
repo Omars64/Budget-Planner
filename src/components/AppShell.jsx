@@ -1,13 +1,13 @@
-import { NavLink, useLocation } from 'react-router-dom'
+import { workspaceNavigation, everydayRoutes } from '../lib/workspaceNavigation'
+import { Link, NavLink, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { BarChart3, BellDot, CalendarClock, CalendarDays, ChevronLeft, ChevronRight, Gauge, LayoutDashboard, LogOut, Menu, Mountain, PanelLeftOpen, Plus, ReceiptText, Search, Settings, ShieldCheck, Target, WalletCards, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, LogOut, Menu, Mountain, PanelLeftOpen, Plus, Search, ShieldCheck, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useApp } from '../App'
 import TransactionModal from './TransactionModal'
 import SpaceSwitcher from './SpaceSwitcher'
 import BrandLogo from './BrandLogo'
 import { Capacitor } from '@capacitor/core'
-import { CircleHelp, MessageSquare, NotebookPen } from 'lucide-react'
 import { Compass } from 'lucide-react'
 import AppTutorial from './AppTutorial'
 import ScrollMemory from './ScrollMemory'
@@ -26,25 +26,9 @@ import { Coffee, ExternalLink } from 'lucide-react'
 import SupportPrompt from './SupportPrompt'
 import { SUPPORT_URL } from '../lib/support'
 
-const nav = [
-  ['/', 'Overview', LayoutDashboard, 'Money'],
-  ['/transactions', 'Transactions', ReceiptText, 'Money'],
-  ['/wallets', 'Wallets', WalletCards, 'Money'],
-  ['/upcoming', 'Upcoming', CalendarClock, 'Planning'],
-  ['/planner', 'Planner', BarChart3, 'Planning'],
-  ['/attention', 'Attention', BellDot, 'Planning'],
-  ['/calendar', 'Calendar', CalendarDays, 'Planning'],
-  ['/budgets', 'Budgets', Gauge, 'Planning'],
-  ['/goals', 'Goals & debts', Target, 'Planning'],
-  ['/analytics', 'Analytics', BarChart3, 'Planning'],
-  ['/ask-ai', 'Ask Budgetly', CircleHelp, 'Workspace'],
-  ['/notes', 'Notes', NotebookPen, 'Workspace'],
-  ['/bank-messages', 'Bank Inbox', ReceiptText, 'Workspace'],
-  ['/feedback', 'Feedback', MessageSquare, 'Workspace'],
-  ['/settings', 'Settings', Settings, 'Account'],
-]
-const primaryRoutes = new Set(['/', '/transactions', '/wallets', '/budgets'])
-const groups = ['Money', 'Planning', 'Workspace', 'Account']
+const nav = workspaceNavigation
+const primaryRoutes = new Set(['/', '/transactions', '/wallets', '/upcoming'])
+const groups = ['Every day', 'Your workspace', 'Planning & insights', 'Tools & support', 'Account']
 
 export default function AppShell({ children }) {
   const [menu, setMenu] = useState(false)
@@ -58,6 +42,11 @@ export default function AppShell({ children }) {
   const [navSearch, setNavSearch] = useState('')
   const [txModal, setTxModal] = useState(false)
   const [tutorialRequest, setTutorialRequest] = useState(0)
+  useEffect(() => {
+    const open = () => { setMenu(false); setTutorialRequest(value => value + 1) }
+    window.addEventListener('budgetly:open-tutorial', open)
+    return () => window.removeEventListener('budgetly:open-tutorial', open)
+  }, [])
   const sidebar = useRef(null)
   const navSearchInput = useRef(null)
   useEffect(() => {
@@ -102,15 +91,16 @@ export default function AppShell({ children }) {
   const pages = activeSpace ? nav.filter(([path]) => path !== '/ask-ai') : nav
   const visibleNav = user?.role === 'admin' ? [...pages, ['/admin', 'Admin', ShieldCheck, 'Account']] : pages
   const orderedNav = [...visibleNav].sort((a,b) => { const ia=preferences.navOrder.indexOf(a[0]), ib=preferences.navOrder.indexOf(b[0]); return ia < 0 || ib < 0 ? 0 : ia-ib })
-  const matchingNav = orderedNav.filter(([, label]) => label.toLowerCase().includes(navSearch.trim().toLowerCase()))
+  const matchingNav = orderedNav.filter(([path, label]) => navSearch.trim() ? label.toLowerCase().includes(navSearch.trim().toLowerCase()) : everydayRoutes.has(path) || path === location.pathname)
   const title = visibleNav.find(([path]) => path === location.pathname)?.[1] || 'Budgetly'
+  const isOverview = location.pathname === '/'
   const isLedger = ['/transactions', '/shared-transactions'].includes(location.pathname)
   const nativeAndroid = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android'
   const addTransaction = () => location.pathname === '/shared-transactions'
     ? window.dispatchEvent(new window.Event('budgetly:add-shared-transaction'))
     : setTxModal(true)
 
-  return <div className={`app-shell budgetly-v2 ${collapsed ? 'sidebar-collapsed' : ''} ${nativeAndroid ? 'native-android' : 'browser-app'} ${isLedger ? 'has-ledger' : ''} ${keyboardOpen ? 'keyboard-open' : ''} ${location.pathname === '/ask-ai' ? 'has-ai' : ''}`}>
+  return <div className={`app-shell budgetly-v2 everyday-shell ${collapsed ? 'sidebar-collapsed' : ''} ${nativeAndroid ? 'native-android' : 'browser-app'} ${isLedger ? 'has-ledger' : ''} ${keyboardOpen ? 'keyboard-open' : ''} ${location.pathname === '/ask-ai' ? 'has-ai' : ''}`}>
     <ScrollMemory userId={`${user?.id}:${spaceKey}`}/>
     <aside ref={sidebar} className={`sidebar glass ${menu ? 'open' : ''}`}>
       <div className="sidebar-head">
@@ -146,7 +136,7 @@ export default function AppShell({ children }) {
           {location.pathname === '/ask-ai' && <button className="icon-button mobile-only" title="Open conversations" aria-label="Open conversations" onClick={() => window.dispatchEvent(new window.Event('budgetly:toggle-ai-history'))}><PanelLeftOpen size={20}/></button>}
           <div><p className="eyebrow">{activeSpace?.name || settings.display_name}</p><h2>{title}</h2></div>
         </div>
-        <div className="button-row top-actions">{location.pathname === '/' && !isGuest && <button className="button ghost tutorial-button" data-tour="tutorial" title="Tutorial" aria-label="Tutorial" onClick={() => { setMenu(false); setTutorialRequest(value => value + 1) }}><Compass size={18}/><span>Tutorial</span></button>}<button className="button ghost signout-button" title={isGuest ? 'Sign in' : 'Sign out'} aria-label={isGuest ? 'Sign in' : 'Sign out'} onClick={lock}><LogOut size={17}/><span>{isGuest ? 'Sign in' : 'Sign out'}</span></button>{isLedger && canAdd !== false && !nativeAndroid && <button data-tour="add-transaction" className="button primary add-button" onClick={addTransaction}><Plus size={18}/><span>Add transaction</span></button>}</div>
+        <div className="button-row top-actions">{location.pathname === '/' && !isGuest && <button className="button ghost tutorial-button" data-tour="tutorial" title="Tutorial" aria-label="Tutorial" onClick={() => { setMenu(false); setTutorialRequest(value => value + 1) }}><Compass size={18}/><span>Tutorial</span></button>}<button className="button ghost signout-button" title={isGuest ? 'Sign in' : 'Sign out'} aria-label={isGuest ? 'Sign in' : 'Sign out'} onClick={lock}><LogOut size={17}/><span>{isGuest ? 'Sign in' : 'Sign out'}</span></button>{(isLedger || isOverview) && canAdd !== false && (!nativeAndroid || isOverview) && <button data-tour="add-transaction" className="button primary add-button" onClick={addTransaction}><Plus size={18}/><span>Add transaction</span></button>}</div>
       </header>
       <div className="mobile-space"><SpaceSwitcher/></div>
       <AndroidUpdate userId={user?.id} role={user?.role} guest={isGuest}/>
@@ -158,7 +148,7 @@ export default function AppShell({ children }) {
 
     <nav className="mobile-nav glass">
       {visibleNav.filter(([to]) => primaryRoutes.has(to)).map(([to, label, Icon]) => <NavLink key={to} to={to} end={to === '/'} onClick={event => {if(isGuest && !guestRoutes.has(to)){event.preventDefault();requestSignIn(label)}}} className={({isActive}) => isActive ? 'active' : ''}><Icon size={19}/><span>{label === 'Shared Transactions' ? 'Shared' : label}</span></NavLink>)}
-      <button className={!primaryRoutes.has(location.pathname) ? 'active' : ''} aria-current={!primaryRoutes.has(location.pathname) ? 'page' : undefined} onClick={() => setMenu(true)}><Menu size={19}/><span>More</span></button>
+      <Link to="/more" aria-label="More tools" className={!primaryRoutes.has(location.pathname) ? 'active' : ''} aria-current={!primaryRoutes.has(location.pathname) ? 'page' : undefined}><Menu size={19}/><span>More</span></Link>
     </nav>
 
     <TransactionModal open={txModal} onClose={() => setTxModal(false)} onSaved={(saved, scheduled) => { setTxModal(false); refresh(); notify(saved.queued ? 'Saved on this device. Will sync when connected.' : scheduled ? 'Transaction scheduled' : 'Transaction saved') }} />

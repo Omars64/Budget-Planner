@@ -21,6 +21,14 @@ beforeEach(() => {
 })
 afterEach(cleanup)
 
+it('shows the Spaces library directly while reusing owner-only management', () => {
+  render(<SpaceSwitcher library/>)
+  expect(screen.queryByRole('button', {name:/Switch space/})).not.toBeInTheDocument()
+  expect(screen.getByRole('button', {name:'Create space'})).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', {name:'Manage workspace Trip'}))
+  expect(screen.getByRole('button', {name:'Delete Space',exact:true})).toBeInTheDocument()
+})
+
 function openWorkspace(name = 'Home', readOnly = false) {
   fireEvent.click(screen.getByRole('button', { name: /Switch space/ }))
   fireEvent.click(screen.getByRole('button', { name: `${readOnly ? 'View settings & members' : 'Manage workspace'} ${name}` }))
