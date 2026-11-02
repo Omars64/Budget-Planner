@@ -10,6 +10,19 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 
 @CapacitorPlugin(name = "OAuthBrowser")
 public class OAuthBrowserPlugin extends Plugin {
+    @Override
+    protected void handleOnNewIntent(Intent intent) {
+        Uri uri = intent == null ? null : intent.getData();
+        if (uri != null && "https".equals(uri.getScheme())
+                && "budget-planner-ecru-seven.vercel.app".equals(uri.getHost())
+                && "/api/auth/google/return".equals(uri.getPath())
+                && uri.getUserInfo() == null && uri.getPort() == -1
+                && uri.getQuery() == null && uri.getFragment() == null) {
+            // Wake the existing protected poll. This link conveys no identity or token.
+            notifyListeners("returnToApp", new JSObject());
+        }
+    }
+
     @PluginMethod
     public void open(PluginCall call) {
         String value = call.getString("url", "");

@@ -51,6 +51,10 @@ class PasskeyChallenge(Base):
 class Password(BaseModel):
     password: str = Field(min_length=8, max_length=128)
 
+
+class RegistrationConfirmation(BaseModel):
+    password: str | None = Field(default=None, min_length=8, max_length=128)
+
 class Response(BaseModel):
     challenge_id: str = Field(max_length=64)
     credential: dict
@@ -98,10 +102,17 @@ def status(user: User = Depends(current_user), db: Session = Depends(get_db)):
     return {'enabled': db.query(Passkey).filter_by(user_id=user.id).first() is not None}
 
 @router.post('/api/passkeys/register/options')
-def register_options(payload: Password, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def register_options(payload: RegistrationConfirmation, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
     from .account_security import limit
     limit(db, f'passkey-register:{user.id}', 10)
-    if not verify_password(payload.password, user.password_hash): raise HTTPException(401, 'Incorrect password')
+    if payload.password is not None:
+        if not verify_password(payload.password, user.password_hash): raise HTTPException(401, 'Incorrect password')
+    else:
+        from .google_auth import GoogleIdentity
+        from .account_security import confirmed
+        if not db.query(GoogleIdentity).filter_by(user_id=user.id).first():
+            raise HTTPException(401, 'Confirm your Budgetly password to register a passkey.')
+        confirmed(request, db, user)
     options = generate_registration_options(rp_id=rp_id(), rp_name='Budgetly', user_id=str(user.id).encode(), user_name=user.email,
         exclude_credentials=[PublicKeyCredentialDescriptor(id=base64url_to_bytes(row.id)) for row in db.query(Passkey).filter_by(user_id=user.id).all()],
         authenticator_selection=AuthenticatorSelectionCriteria(resident_key=ResidentKeyRequirement.REQUIRED, user_verification=UserVerificationRequirement.REQUIRED))

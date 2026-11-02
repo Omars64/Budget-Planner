@@ -23,20 +23,25 @@ export async function openGoogleFlow(flow, {popup, signal, pollPath, pollBody}) 
   if (url.protocol !== 'https:' || url.hostname !== 'accounts.google.com' || url.username || url.password || url.port) {
     popup?.close(); throw new Error('Google sign-in is unavailable. Please try again later.')
   }
+  let returned = false
+  let returnListener
   try {
+    if (Capacitor.isNativePlatform() && browser.addListener) returnListener = await browser.addListener('returnToApp', () => { returned = true })
     if (Capacitor.isNativePlatform()) await browser.open({url:url.href})
     else {
       if (!popup || popup.closed) throw new Error('Google sign-in window was closed.')
       popup.location.replace(url.href)
     }
     const deadline=Date.now()+10*60*1000
+    let closedAt = null
     while (Date.now()<deadline) {
       if (signal?.aborted) throw new DOMException('Google sign-in cancelled','AbortError')
-      if (Capacitor.isNativePlatform() && document.visibilityState === 'hidden') {
+      if (Capacitor.isNativePlatform() && document.visibilityState === 'hidden' && !returned) {
         await pause(signal)
         continue
       }
       let result
+      returned = false
       try {
         result=await api(pollPath,{method:'POST',...jsonBody(pollBody),signal})
       } catch (error) {
@@ -44,9 +49,14 @@ export async function openGoogleFlow(flow, {popup, signal, pollPath, pollBody}) 
         if (!error.network && ![502,503,504].includes(error.status)) throw error
       }
       if (result && !['pending','processing','exchanging'].includes(result.status)) return result
-      if (popup?.closed) throw new Error('Google sign-in was cancelled. You can try again.')
+      // Completion closes the popup after committing the result. A poll already
+      // in flight may still say pending; allow a final bounded poll to collect it.
+      if (popup?.closed) {
+        closedAt ??= Date.now()
+        if (Date.now() - closedAt >= 5000) throw new Error('Google sign-in was cancelled. You can try again.')
+      }
       await pause(signal)
     }
     throw new Error('Google sign-in expired. Please try again.')
-  } finally { popup?.close() }
+  } finally { popup?.close(); try { await returnListener?.remove() } catch { /* A closed native activity may already have removed it. */ } }
 }

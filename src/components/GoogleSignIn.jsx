@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, jsonBody } from '../lib/api'
 import { openGoogleFlow, reserveGoogleWindow } from '../lib/googleFlow'
+import { Capacitor } from '@capacitor/core'
 import GoogleMark from './GoogleMark'
 
 export default function GoogleSignIn({onLogin,disabled=false,onBusyChange,onActiveChange,mode='signin',onComplete}) {
@@ -29,7 +30,7 @@ export default function GoogleSignIn({onLogin,disabled=false,onBusyChange,onActi
     try {
       popup=reserveGoogleWindow();setError('');setWorking(true)
       abort=new AbortController();controller.current=abort
-      const flow=await api('/api/auth/google/start',{method:'POST',...jsonBody({mode}),signal:abort.signal})
+      const flow=await api('/api/auth/google/start',{method:'POST',...jsonBody({mode,return_to:Capacitor.isNativePlatform()?'android':'browser'}),signal:abort.signal})
       flowSecret.current=flow.poll_secret
       const result=await openGoogleFlow(flow,{popup,signal:abort.signal,pollPath:'/api/auth/google/poll',pollBody:{poll_secret:flow.poll_secret}})
       if(!mounted.current||abort.signal.aborted)return
@@ -57,7 +58,7 @@ export default function GoogleSignIn({onLogin,disabled=false,onBusyChange,onActi
       <button className="button primary full" disabled={busy||!name.trim()}>{busy?'Creating account...':'Create Google account'}</button>
       <button type="button" className="auth-switch" disabled={busy} onClick={cancel}>Cancel</button>
     </form>:<button type="button" className="google-signin" aria-label={busy?'Waiting for Google...':mode==='link'?'Link Google':mode==='reauth'?'Confirm with Google':'Continue with Google'} disabled={disabled||busy} onClick={start}><GoogleMark/>{busy?'Waiting for Google...':mode==='link'?'Link Google':mode==='reauth'?'Confirm with Google':'Continue with Google'}</button>}
-    {busy&&!pending&&<><p className="muted" role="status">Finish in your browser, then return to Budgetly.</p><button type="button" className="auth-switch" onClick={cancel}>Cancel Google sign-in</button></>}
+    {busy&&!pending&&<><p className="muted" role="status">Finish Google confirmation in your browser. Budgetly will reopen automatically when allowed; otherwise tap Open Budgetly.</p><button type="button" className="auth-switch" onClick={cancel}>Cancel Google sign-in</button></>}
     {error&&<p role="alert" className="form-error">{error}</p>}
     {active&&!busy&&!pending&&<button type="button" className="auth-switch" onClick={cancel}>Cancel Google sign-in</button>}
   </div>

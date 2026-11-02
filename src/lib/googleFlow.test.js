@@ -57,3 +57,22 @@ it('preserves web popup handling',async()=>{
   expect(await openGoogleFlow(flow,{...options,popup})).toEqual({status:'name_required'})
   expect(popup.close).toHaveBeenCalled()
 })
+
+it('collects a committed result when the callback closes the popup during an earlier pending poll', async () => {
+  vi.useFakeTimers()
+  Capacitor.isNativePlatform.mockReturnValue(false)
+  const popup={closed:false,location:{replace:vi.fn()},close:vi.fn()}
+  api.mockImplementationOnce(async()=>{popup.closed=true;return {status:'pending'}})
+    .mockResolvedValueOnce({status:'complete',token:'synthetic-result'})
+  const result=openGoogleFlow(flow,{...options,popup})
+  await vi.advanceTimersByTimeAsync(1800)
+  expect(await result).toEqual({status:'complete',token:'synthetic-result'})
+})
+
+it('still cancels a closed popup after a bounded final polling window', async () => {
+  vi.useFakeTimers()
+  Capacitor.isNativePlatform.mockReturnValue(false)
+  const popup={closed:true,location:{replace:vi.fn()},close:vi.fn()}
+  // A window closed before navigation is cancelled immediately.
+  await expect(openGoogleFlow(flow,{...options,popup})).rejects.toThrow('window was closed')
+})

@@ -17,6 +17,7 @@ from .models import Note, NoteFolder, NoteShare, Feedback, User, utc_now
 from .models import RecoveryPoint, NoteRevision
 from .data_safety import save_recovery, clear_budget, clear_notes
 import json
+import hashlib
 
 router = APIRouter()
 
@@ -91,7 +92,12 @@ class FeedbackIn(BaseModel):
 
 class FeedbackUpdate(BaseModel):
     status: Literal["new", "reviewing", "resolved"]
-    reply: str = Field(default="", max_length=10000)
+    reply: str | None = Field(default=None, max_length=10000)
+    revision: str | None = Field(default=None, max_length=64)
+
+
+class FeedbackRead(BaseModel):
+    reply_revision: str = Field(min_length=64, max_length=64)
 
 
 class RatingIn(BaseModel):
@@ -362,10 +368,20 @@ def unshare_note(note_id: int, share_id: int, user=Depends(workspace_user), db: 
     db.delete(row); db.commit()
 
 
-def feedback_payload(db, row):
+def feedback_revision(row):
+    return hashlib.sha256(json.dumps([row.id, row.status, row.reply]).encode()).hexdigest()
+
+
+def reply_revision(row):
+    return hashlib.sha256((row.reply or '').encode()).hexdigest()
+
+
+def feedback_payload(db, row, seen=None):
     sender = db.get(User, row.user_id)
     return {"id": row.id, "subject": row.subject, "content": row.content,
             "category": row.category, "status": row.status, "reply": row.reply,
+            "revision": feedback_revision(row), "reply_revision": reply_revision(row),
+            "reply_unread": bool(row.reply and seen is not None and seen.get(f'feedback_read:{row.id}') != reply_revision(row)),
             "created_at": row.created_at.isoformat() + "Z", "sender_name": sender.username, "sender_email": sender.email}
 
 
@@ -373,7 +389,22 @@ def feedback_payload(db, row):
 def feedback(user=Depends(current_user), db: Session = Depends(get_db)):
     query = db.query(Feedback)
     if user.role != "admin": query = query.filter_by(user_id=user.id)
-    return [feedback_payload(db, r) for r in query.order_by(Feedback.created_at.desc()).all()]
+    from .models import AppSetting
+    seen = None if user.role == 'admin' else {row.key: row.value for row in db.query(AppSetting).filter(
+        AppSetting.user_id == user.id, AppSetting.key.like('feedback_read:%')).all()}
+    return [feedback_payload(db, r, seen) for r in query.order_by(Feedback.created_at.desc()).all()]
+
+
+@router.post('/api/feedback/{feedback_id}/read')
+def read_feedback(feedback_id: int, payload: FeedbackRead, user=Depends(current_user), db: Session = Depends(get_db)):
+    row = db.query(Feedback).filter_by(id=feedback_id, user_id=user.id).with_for_update().first()
+    if not row:
+        raise HTTPException(404, 'Feedback not found')
+    if reply_revision(row) != payload.reply_revision:
+        raise HTTPException(409, 'A newer reply is available. Refresh to read it.')
+    set_setting(db, user.id, f'feedback_read:{row.id}', payload.reply_revision)
+    db.commit()
+    return feedback_payload(db, row, {f'feedback_read:{row.id}': payload.reply_revision})
 
 
 @router.post("/api/feedback", status_code=201)
@@ -392,5 +423,15 @@ def send_feedback(payload: FeedbackIn, user=Depends(current_user), db: Session =
 def update_feedback(feedback_id: int, payload: FeedbackUpdate, user=Depends(admin_user), db: Session = Depends(get_db)):
     row = db.get(Feedback, feedback_id)
     if not row: raise HTTPException(404, "Feedback not found")
-    row.status = payload.status; row.reply = payload.reply; db.commit(); db.refresh(row)
+    if payload.revision and payload.revision != feedback_revision(row):
+        raise HTTPException(409, 'This feedback changed. Refresh before saving; your draft has been kept.')
+    # Status-only changes, including older clients sending an empty textarea,
+    # must never silently erase a reply already sent to the user.
+    reply = payload.reply.strip() if payload.reply and payload.reply.strip() else row.reply
+    changed = db.query(Feedback).filter_by(id=row.id, status=row.status, reply=row.reply).update(
+        {'status': payload.status, 'reply': reply}, synchronize_session=False)
+    if changed != 1:
+        db.rollback()
+        raise HTTPException(409, 'This feedback changed. Refresh before saving; your draft has been kept.')
+    db.commit(); db.refresh(row)
     return feedback_payload(db, row)

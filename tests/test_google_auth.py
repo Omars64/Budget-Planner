@@ -372,3 +372,30 @@ def test_detached_serializer_requires_explicit_session(env):
             google.google_account_payload(user)
         assert google.google_account_payload(user, db) == {
             'google_linked': False, 'signup_provider': 'password', 'has_password': False}
+
+
+def test_android_return_is_bound_to_state_and_contains_no_credentials(env, monkeypatch):
+    client, _, _ = env
+    monkeypatch.setenv('GOOGLE_REDIRECT_URI', 'https://budget-planner-ecru-seven.vercel.app/api/auth/google/callback')
+    flow, query = begin(client, json={'return_to': 'android'})
+    assert query['state'][0].startswith('android.')
+    page = callback(client, query)
+    assert page.status_code == 200
+    assert 'intent://budget-planner-ecru-seven.vercel.app/api/auth/google/return' in page.text
+    assert 'window.location.replace' in page.text
+    for secret in [flow['poll_secret'], query['state'][0], 'provider-refresh-secret']:
+        assert secret not in page.text
+    assert 'nonce-' in page.headers['content-security-policy']
+    assert page.headers['cache-control'] == 'no-store'
+    assert poll(client, flow).json()['status'] == 'name_required'
+    fallback = client.get('/api/auth/google/return')
+    assert 'Open Budgetly' in fallback.text and 'window.location.replace' not in fallback.text
+
+
+def test_web_return_closes_popup_and_android_rejects_unverified_hosts(env):
+    client, _, _ = env
+    assert client.post('/api/auth/google/start', json={'return_to': 'android'}).status_code == 503
+    flow, query = begin(client)
+    page = callback(client, query)
+    assert 'window.close()' in page.text
+    assert 'intent://' not in page.text and flow['poll_secret'] not in page.text

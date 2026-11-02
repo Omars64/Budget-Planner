@@ -7,7 +7,7 @@ ANDROID_CERT_SHA256 = '8C:C5:1F:67:27:AC:1B:15:DF:DF:13:A9:93:E9:0B:95:86:97:EA:
 ANDROID_ORIGIN = 'android:apk-key-hash:' + base64.urlsafe_b64encode(bytes.fromhex(ANDROID_CERT_SHA256.replace(':', ''))).decode().rstrip('=')
 
 def asset_links():
-    return [{'relation': ['delegate_permission/common.get_login_creds'], 'target': {
+    return [{'relation': ['delegate_permission/common.get_login_creds', 'delegate_permission/common.handle_all_urls'], 'target': {
         'namespace': 'android_app', 'package_name': ANDROID_PACKAGE,
         'sha256_cert_fingerprints': [ANDROID_CERT_SHA256],
     }}]

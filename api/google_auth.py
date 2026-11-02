@@ -123,6 +123,7 @@ class PollIn(BaseModel):
 
 class StartIn(BaseModel):
     mode: Literal['signin', 'link', 'reauth'] = 'signin'
+    return_to: Literal['browser', 'android'] = 'browser'
 
 
 class CompleteIn(PollIn):
@@ -159,7 +160,7 @@ def google_account_payload(user, db=None):
             'has_password': bool(user.password_hash)}
 
 
-def start_flow(request, db, user=None, mode='signin'):
+def start_flow(request, db, user=None, mode='signin', return_to='browser'):
     client, _, redirect = configuration()
     from .client_address import client_address
     limit(db, 'google-start:' + client_address(request), 20)
@@ -168,6 +169,12 @@ def start_flow(request, db, user=None, mode='signin'):
     if mode == 'reauth' and not db.query(GoogleIdentity).filter_by(user_id=user.id).first():
         raise HTTPException(409, 'Link Google before using Google confirmation')
     state, poll, nonce, verifier = [secrets.token_urlsafe(32) for _ in range(4)]
+    if return_to == 'android':
+        from .android_identity import ANDROID_RP_ID
+        if urlsplit(redirect).hostname != ANDROID_RP_ID:
+            raise HTTPException(503, 'Android Google return is unavailable on this host')
+        # Platform choice is bound to the stored digest of this exact opaque state.
+        state = 'android.' + state
     db.query(GoogleRevocationCredential).filter(
         GoogleRevocationCredential.user_id.is_(None), GoogleRevocationCredential.expires_at <= utc_now()
     ).delete(synchronize_session=False)
@@ -192,7 +199,7 @@ def start_flow(request, db, user=None, mode='signin'):
 def start(request: Request, response: Response, payload: StartIn = StartIn(), db=Depends(get_db)):
     response.headers['Cache-Control'] = 'no-store'
     user = current_user(request, db) if payload.mode != 'signin' else None
-    return start_flow(request, db, user, payload.mode)
+    return start_flow(request, db, user, payload.mode, payload.return_to)
 
 
 @router.get('/config')
@@ -320,7 +327,8 @@ def callback(state: str, code: str = '', error: str = '', db=Depends(get_db)):
             {'status': 'processing'}, synchronize_session='fetch')
         if changed != 1:
             db.rollback()
-            return HTMLResponse('<p>Return to Budgetly.</p>', headers={'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer'})
+            from .google_return import completion_page
+            return completion_page(native=state.startswith('android.'), successful=False)
         db.refresh(row)
         row.subject, row.email = claims['sub'], claims['email'].strip().lower()
         identity = db.get(GoogleIdentity, row.subject)
@@ -373,9 +381,14 @@ def callback(state: str, code: str = '', error: str = '', db=Depends(get_db)):
         db.rollback()
         db.query(GoogleAuthState).filter_by(digest=digest(state), status='exchanging').update({'status': 'failed', 'verifier': ''})
         db.commit()
-    return HTMLResponse('<!doctype html><title>Budgetly</title><h1>Return to Budgetly</h1><p>Return to the app to see your sign-in result. If you are creating a new account, enter your preferred name and tap Create Google account in Budgetly to finish.</p>',
-                        headers={'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer',
-                                 'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'"})
+    from .google_return import completion_page
+    return completion_page(native=state.startswith('android.'), successful=row.status in ('ready', 'linked', 'reauthenticated', 'name_required'))
+
+
+@router.get('/return', response_class=HTMLResponse)
+def android_return():
+    from .google_return import completion_page
+    return completion_page(native=True, automatic=False)
 
 
 def poll_row(db, secret):

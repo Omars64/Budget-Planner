@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { passwordOnlyEnabled, setPasswordOnly } from '../lib/biometric'
 
-export default function DeviceSignInPreference({ disabled, onChange }) {
+export default function DeviceSignInPreference({ disabled, onChange, googleOnly = false }) {
   const [enabled, setEnabled] = useState(passwordOnlyEnabled)
   const [error, setError] = useState('')
   return <div className="device-signin-preference stack gap-10">
@@ -14,7 +14,7 @@ export default function DeviceSignInPreference({ disabled, onChange }) {
           onChange?.(e.target.checked)
         } catch { setError('Allow site storage to save your sign-in preference.') }
       }}/>
-      <span>Use password only on this device</span>
+      <span>{googleOnly ? 'Use Google sign-in only on this device' : 'Use password only on this device'}</span>
     </label>
     {enabled && <small className="muted">Passkey prompts are off in this browser. Your account and other devices are unchanged.</small>}
     {error && <p className="form-error" role="alert">{error}</p>}
