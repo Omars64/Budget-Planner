@@ -29,7 +29,7 @@ try {
     await delay(500)
   }
   if (!ready) throw new Error('Synthetic backend readiness timed out')
-  browser = await chromium.launch()
+  browser = await chromium.launch({ channel: process.env.FLOWBUDGET_BROWSER_CHANNEL || undefined })
   const context = await browser.newContext({ serviceWorkers: 'allow', viewport: { width: 1440, height: 1000 } })
   // Observe service-worker requests too; routing does not cover every worker fetch.
   const cdp = await browser.newBrowserCDPSession()
@@ -51,13 +51,15 @@ try {
   })
   page.setDefaultTimeout(15000)
   page.setDefaultNavigationTimeout(30000)
+  // The compact layout keeps sign-out in the sidebar, not the page header.
+  const signOut = () => page.locator('.sidebar').getByRole('button', { name: 'Sign out', exact: true })
   const login = async suffix => {
     await page.getByLabel('Email', { exact: true }).fill(`browser-${suffix}@example.test`)
     await page.getByLabel('Password', { exact: true }).fill('Synthetic-CI-only-928!')
     const response = page.waitForResponse(r => r.url() === `${origin}/api/auth/login` && r.request().method() === 'POST')
     await page.getByRole('button', { name: 'Sign in', exact: true }).click()
     expect((await response).status()).toBe(200)
-    await expect(page.locator('.signout-button')).toBeVisible()
+    await expect(signOut()).toBeVisible()
     // A fresh account legitimately receives release notes after the 800 ms
     // entrance delay. Dismiss them through the real UI before navigating; a
     // fast page change can otherwise leave this modal pending until a later
@@ -150,7 +152,7 @@ try {
   const before = (await queued(marker))[0]
   stage = 'offline reopening'
   await page.reload({ waitUntil: 'domcontentloaded' })
-  await expect(page.locator('.signout-button')).toBeVisible()
+  await expect(signOut()).toBeVisible()
   await expect.poll(async () => (await queued(marker)).length).toBe(1)
   expect((await queued(marker))[0]).toEqual(before)
   await expect(page.getByText(marker, { exact: true }).first()).toBeVisible()
@@ -236,7 +238,7 @@ try {
   await context.setOffline(true)
   await context.setOffline(false)
   await page.reload()
-  await expect(page.locator('.signout-button')).toBeVisible()
+  await expect(signOut()).toBeVisible()
   expect(await matching()).toHaveLength(1)
   // Leave another A entry pending during the account switch. B must never
   // display or submit it, even though A's durable record remains on the device.
@@ -250,12 +252,12 @@ try {
   await dialog.getByRole('button', { name: 'Add transaction', exact: true }).click()
   await expect(dialog).toBeHidden()
   await expect.poll(async () => (await queued(pendingMarker)).length).toBe(1)
-  await page.locator('.signout-button').click()
+  await signOut().click()
   await expect(page.getByLabel('Email', { exact: true })).toBeVisible()
   await context.setOffline(false)
   await login('b')
   await page.goto(`${origin}/#/transactions`)
-  await expect(page.locator('.signout-button')).toBeVisible()
+  await expect(signOut()).toBeVisible()
   await expect.poll(async () => (await records()).some(row => row.user?.email === 'browser-b@example.test' && row.fingerprint)).toBeTruthy()
   expect(await transactions()).toEqual([])
   await expect(page.getByText(marker, { exact: true })).toHaveCount(0)
@@ -263,7 +265,7 @@ try {
   await context.setOffline(true)
   stage = 'account B offline reopening'
   await page.reload({ waitUntil: 'domcontentloaded' })
-  await expect(page.locator('.signout-button')).toBeVisible()
+  await expect(signOut()).toBeVisible()
   await expect(page.getByText(marker, { exact: true })).toHaveCount(0)
   await expect(page.getByText(pendingMarker, { exact: true })).toHaveCount(0)
   expect(external).toEqual([])
