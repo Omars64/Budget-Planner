@@ -62,6 +62,7 @@ try {
         }
         Invoke-Step 'Check app and Android version consistency' { & npm.cmd run version:check }
         if (!$SkipTests) {
+            Invoke-Step 'Frontend lint (same gate as GitHub)' { & npm.cmd run lint }
             Invoke-Step 'Frontend regression tests' { & npm.cmd test -- --maxWorkers=2 }
             $numberTests = Join-Path $projectRoot '.verification/update-numbers'
             Invoke-Step 'Compile native update metadata regression test' {

@@ -54,6 +54,16 @@ function Invoke-BudgetlyRelease {
     )
     function Run([string]$Program, [string[]]$Arguments) {
         $result = & $Runner $Program $Arguments
+        # Retry only read-only GitHub requests with transient transport/server errors.
+        # Never retry commits, pushes, or publication blindly.
+        $readOnly = $Program -eq 'gh.exe' -and ($Arguments[0] -eq 'api' -or
+            ($Arguments[0] -in @('run', 'release') -and $Arguments[1] -in @('list', 'view')))
+        for ($attempt = 1; $readOnly -and $result.ExitCode -ne 0 -and $attempt -lt 3; $attempt++) {
+            if (($result.Output -join "`n") -notmatch '(?i)(HTTP 50[234]|TLS handshake timeout|connection reset|temporarily unavailable|i/o timeout)') { break }
+            Write-Warning "Temporary GitHub connection failure; retry $attempt of 2."
+            Start-Sleep -Seconds (2 * $attempt)
+            $result = & $Runner $Program $Arguments
+        }
         if ($result.ExitCode -ne 0) {
             if ($Program -eq 'gh.exe' -or ($Program -eq 'git.exe' -and $Arguments[0] -in @('push', 'fetch', 'commit'))) {
                 foreach ($line in @($result.Output | Select-Object -Last 12)) { Write-Host $line }
@@ -128,7 +138,19 @@ function Invoke-BudgetlyRelease {
             $deploymentStatus = Run gh.exe @('api', "repos/$repo/commits/$commit/status") | ConvertFrom-Json
             $qualityRuns = Run gh.exe @('run', 'list', '--repo', $repo, '--workflow', 'quality.yml', '--commit', $commit,
                 '--event', 'push', '--limit', '10', '--json', 'databaseId,status,conclusion,url') | ConvertFrom-Json
-            if (Get-BudgetlyReleaseGate $deploymentStatus @($qualityRuns)) { break }
+            try {
+                if (Get-BudgetlyReleaseGate $deploymentStatus @($qualityRuns)) { break }
+            } catch {
+                $failure = $_
+                $failedRun = @($qualityRuns | Sort-Object databaseId -Descending | Select-Object -First 1)
+                if ($failedRun.Count -and $failedRun[0].conclusion -eq 'failure') {
+                    Write-Host 'GitHub failed-check diagnostics:' -ForegroundColor Yellow
+                    $diagnostic = & $Runner gh.exe @('run', 'view', [string]$failedRun[0].databaseId, '--repo', $repo, '--log-failed')
+                    $diagnostic.Output | Select-Object -Last 100 | ForEach-Object { Write-Host $_ }
+                }
+                Write-Host "The APK is retained at $apk. Fix the reported checks and rerun build-Budgetly.bat; no force push or version change is required for this unpublished release."
+                throw $failure
+            }
             if ([DateTime]::UtcNow -ge $deadline) { throw 'Timed out waiting for deployment/quality checks. APK remains local; fix checks and rerun this version.' }
             Start-Sleep -Seconds 10
         } while ($true)

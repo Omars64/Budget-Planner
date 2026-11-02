@@ -31,7 +31,7 @@ $recorded = Get-Content -LiteralPath $logFixture -Raw
 if ($recorded -notmatch 'Synthetic warning' -or $recorded -notmatch 'Synthetic stdout') { throw 'Diagnostic log lost native output' }
 $passed++
 $testSource = ((Get-Content -LiteralPath $PSCommandPath | ForEach-Object { '+' + $_ }) -join "`n")
-foreach ($case in @('success','unchanged','check','secret-file','secret-content','release-test-source','push-failure','build-failure','upload-failure','existing-published','draft-retry','bad-hash','deployment-failure','quality-failure')) {
+foreach ($case in @('success','transient-read','auth-failure','unchanged','check','secret-file','secret-content','release-test-source','push-failure','build-failure','upload-failure','existing-published','draft-retry','bad-hash','deployment-failure','quality-failure')) {
     $state = @{Case=$case;Calls=[System.Collections.Generic.List[string]]::new()}
     $runner = {
         param($program,$arguments)
@@ -39,6 +39,13 @@ foreach ($case in @('success','unchanged','check','secret-file','secret-content'
         $state.Calls.Add($call)
         $output = ''
         $exitCode = 0
+        if ($call -eq 'gh.exe api repos/Omars64/Budget-Planner') {
+            if ($state.Case -eq 'auth-failure') { return [pscustomobject]@{ExitCode=1;Output=@('HTTP 401: Unauthorized')} }
+            if ($state.Case -eq 'transient-read' -and !$state.Retried) {
+                $state.Retried=$true
+                return [pscustomobject]@{ExitCode=1;Output=@('HTTP 503: temporarily unavailable')}
+            }
+        }
         switch -Wildcard ($call) {
             'git.exe branch*' { $output='main' }
             'git.exe remote*' { $output='https://github.com/Omars64/Budget-Planner.git' }
@@ -64,7 +71,7 @@ foreach ($case in @('success','unchanged','check','secret-file','secret-content'
     $failed=$false
     try { Invoke-BudgetlyRelease -Root $root -BuildArguments @('build') -Runner $runner -CheckOnly:($case -eq 'check') }
     catch { $failed=$true }
-    $shouldFail=$case -in @('secret-file','secret-content','push-failure','build-failure','upload-failure','existing-published','bad-hash','deployment-failure','quality-failure')
+    $shouldFail=$case -in @('auth-failure','secret-file','secret-content','push-failure','build-failure','upload-failure','existing-published','bad-hash','deployment-failure','quality-failure')
     if($failed -ne $shouldFail){throw "Unexpected outcome: $case. Calls: $($state.Calls -join '; ')"}
     $calls=$state.Calls -join "`n"
     if($shouldFail -and $calls -match 'release edit'){throw "Published failed case: $case"}
@@ -81,6 +88,10 @@ foreach ($case in @('success','unchanged','check','secret-file','secret-content'
         if($calls -notmatch '--draft' -or $calls -notmatch '--draft=false --latest'){throw 'Draft publication guard missing'}
     }
     if($case -eq 'draft-retry' -and ($calls -notmatch 'release upload' -or $calls -match 'release create')){throw 'Draft retry failed'}
+    if($case -eq 'quality-failure' -and $calls -notmatch 'run view 1 .*--log-failed'){throw 'Quality failure did not print diagnostics'}
+    $readCalls = @($state.Calls | Where-Object { $_ -eq 'gh.exe api repos/Omars64/Budget-Planner' }).Count
+    if($case -eq 'transient-read' -and $readCalls -ne 2){throw 'Transient read was not retried exactly once'}
+    if($case -eq 'auth-failure' -and $readCalls -ne 1){throw 'Authentication failure was retried'}
     $passed++
 }
 if (Get-BudgetlyReleaseGate ([pscustomobject]@{statuses=@()}) @()) { throw 'Missing deployment/checks must not pass' }
