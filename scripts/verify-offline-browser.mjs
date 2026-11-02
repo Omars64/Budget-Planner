@@ -54,10 +54,13 @@ try {
   // The compact layout keeps sign-out in the sidebar, not the page header.
   const signOut = () => page.locator('.sidebar').getByRole('button', { name: 'Sign out', exact: true })
   const login = async suffix => {
+    if (!(await page.getByLabel('Email', { exact: true }).isVisible())) {
+      await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+    }
     await page.getByLabel('Email', { exact: true }).fill(`browser-${suffix}@example.test`)
     await page.getByLabel('Password', { exact: true }).fill('Synthetic-CI-only-928!')
     const response = page.waitForResponse(r => r.url() === `${origin}/api/auth/login` && r.request().method() === 'POST')
-    await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Sign in', exact: true }).click()
     expect((await response).status()).toBe(200)
     await expect(signOut()).toBeVisible()
     // A fresh account legitimately receives release notes after the 800 ms
@@ -253,7 +256,7 @@ try {
   await expect(dialog).toBeHidden()
   await expect.poll(async () => (await queued(pendingMarker)).length).toBe(1)
   await signOut().click()
-  await expect(page.getByLabel('Email', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Try without an account' })).toBeVisible()
   await context.setOffline(false)
   await login('b')
   await page.goto(`${origin}/#/transactions`)

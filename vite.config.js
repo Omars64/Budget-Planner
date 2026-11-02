@@ -8,7 +8,7 @@ async function shellFiles(folder, prefix = '') {
   const nested = await Promise.all(entries.map(entry => entry.isDirectory()
     ? shellFiles(`${folder}/${entry.name}`, `${prefix}${entry.name}/`)
     : Promise.resolve([`${prefix}${entry.name}`])))
-  return nested.flat().filter(path => /\.(?:html|js|css|png|svg|webp|ico|woff2?)$/.test(path))
+  return nested.flat().filter(path => /\.(?:html|js|css|png|svg|webp|ico|ttf|woff2?)$/.test(path))
 }
 
 const offlineShell = () => ({

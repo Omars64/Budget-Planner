@@ -1,4 +1,5 @@
 import SeasonalSettings from '../components/SeasonalSettings'
+import WelcomeAnimationSettings from '../components/WelcomeAnimationSettings'
 import SettingsSection from '../components/SettingsSection'
 import SettingsWorkspace from '../components/SettingsWorkspace'
 import SupportBudgetly from '../components/SupportBudgetly'
@@ -143,6 +144,7 @@ export default function Settings(){
     {restorePreview && <RestorePreview preview={restorePreview} onClose={()=>setRestorePreview(null)} onRestore={confirmRestore}/>}
     <GuestRecords settingsId="backup" settingsOrder={30}/>
     <SupportBudgetly settingsId="support"/>
+    <WelcomeAnimationSettings settingsId="appearance"/>
     <AccountSecurity settingsId="account" settingsOrder={20}/>
     <TrashPanel settingsId="backup" settingsOrder={20}/>
     <SettingsSection title="Smart Bank Inbox"><BankNotificationSetup/></SettingsSection>

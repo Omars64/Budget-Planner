@@ -50,12 +50,13 @@ import { notificationSettingsChangedEvent } from './lib/notificationSettings'
 import { guestActive, guestRemembered, guestUser, guestHasRecords, guestRoutes, readGuest, setGuestActive, requestGuestSignIn } from './lib/guest'
 import GuestAccess, { GuestGate } from './components/GuestAccess'
 import GuestImport from './components/GuestImport'
+import WelcomeScreen from './components/WelcomeScreen'
 const GuestSettings = lazy(() => import('./pages/GuestSettings'))
 
 const AppContext = createContext(null)
 export const useApp = () => useContext(AppContext)
 
-export function LoginScreen({ onLogin, onGuest, returningGuest = false }) {
+export function LoginScreen({ onLogin, onGuest, returningGuest = false, initialMode = 'login', embedded = false, onBusyChange }) {
   const [enteringGuest, setEnteringGuest] = useState(false)
   useEffect(() => {
     if (!enteringGuest) return
@@ -65,7 +66,7 @@ export function LoginScreen({ onLogin, onGuest, returningGuest = false }) {
   useEffect(() => () => cancelBiometric(), [])
   const [, refreshSignInPreference] = useState(0)
   const [rememberMe, setRememberMe] = useState(() => auth.remembered)
-  const [mode, setMode] = useState(()=>new URLSearchParams(location.search).has('reset')?'reset':'login')
+  const [mode, setMode] = useState(()=>new URLSearchParams(location.search).has('reset')?'reset':initialMode)
   const [signInMethod, setSignInMethod] = useState('password')
   const finishLogin = async result => {
     auth.setRemembered(rememberMe)
@@ -91,6 +92,7 @@ export function LoginScreen({ onLogin, onGuest, returningGuest = false }) {
   const [googleBusy,setGoogleBusy] = useState(false)
   const [googleActive,setGoogleActive] = useState(false)
   const [retryAfter, setRetryAfter] = useState(0)
+  useEffect(() => { onBusyChange?.(busy || googleBusy || enteringGuest) }, [busy, googleBusy, enteringGuest, onBusyChange])
 
   useEffect(() => {
     if (!retryAfter) return undefined
@@ -137,14 +139,14 @@ export function LoginScreen({ onLogin, onGuest, returningGuest = false }) {
 
   const authOptions = <div className="auth-options"><label className="check-row remember-session"><input type="checkbox" checked={rememberMe} disabled={busy||googleBusy} onChange={e => { try { auth.setRemembered(e.target.checked); setRememberMe(e.target.checked); setError('') } catch (err) { setError(err.message) } }}/><span>Keep me signed in on this device</span></label><button type="button" className="auth-switch" onClick={()=>setMode('reset')}>Forgot password?</button></div>
 
-  return <div className={`auth-screen expanded-auth${enteringGuest ? ' guest-entering' : ''}`} onInvalid={e => setError(e.target.validationMessage)}>
-    <header className="auth-brand"><BrandLogo /><span><strong>Budgetly</strong><small>Personal finance</small></span></header>
+  return <div className={`auth-screen expanded-auth${embedded ? ' auth-embedded' : ''}${enteringGuest ? ' guest-entering' : ''}`} onInvalid={e => setError(e.target.validationMessage)}>
+    {!embedded && <header className="auth-brand"><BrandLogo /><span><strong>Budgetly</strong><small>Personal finance</small></span></header>}
     <div className="auth-layout">
-      <section className="auth-copy" aria-label="Budgetly">
+      {!embedded && <section className="auth-copy" aria-label="Budgetly">
         <p className="eyebrow">Your money, in view</p>
         <h1>{mode === 'login' ? 'Sign in to Budgetly' : mode === 'signup' ? 'Create your Budgetly account' : mode === 'verify' ? 'Almost there' : 'Return to Budgetly'}</h1>
         <p>A clearer view of everyday spending, shared plans, and what comes next.</p>
-      </section>
+      </section>}
       <motion.main key={mode} className="auth-main" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{duration:.38,ease:[.22,1,.36,1]}}>
       {mode === 'reset' && <PasswordRecovery onBack={()=>setMode('login')}/>}
 
@@ -208,7 +210,7 @@ export function LoginScreen({ onLogin, onGuest, returningGuest = false }) {
         {!googleActive && signInMethod !== 'guest' && mode === 'signup' && <div className="auth-footer-action">Already have an account? <button className="auth-switch" type="button" onClick={() => { setError(''); setMode('login'); setSignInMethod('password') }}>Sign in</button></div>}
       </motion.main>
     </div>
-    <footer className="auth-footer"><BrandFooter/></footer>
+    {!embedded && <footer className="auth-footer"><BrandFooter/></footer>}
   </div>
 }
 
@@ -418,7 +420,7 @@ export default function App() {
   }), [session.user, settings, viewSettings, spaceState, activeSpace, appearance, refreshKey, refresh, notify, confirm, loadSettings, loadAppearance, reloadUser, signOut, isGuest, requestSignIn])
 
   if (session.loading) return <div className="app-loading"><BrandLogo className="pulse" /></div>
-  if (!session.user || guestSigningIn) return <LoginScreen onLogin={completeLogin} onGuest={enterGuest} returningGuest={isGuest}/>
+  if (!session.user || guestSigningIn) return <WelcomeScreen onGuest={enterGuest} returningGuest={isGuest} renderAuth={(mode, setWorking) => <LoginScreen initialMode={mode} embedded onBusyChange={setWorking} onLogin={completeLogin} onGuest={enterGuest} returningGuest={isGuest}/>}/>
   if (!spaceState.spacesReady) return <div className="app-loading" role="status"><BrandLogo className="pulse" /><span>Opening workspace...</span></div>
 
   return <AppContext.Provider value={value}>

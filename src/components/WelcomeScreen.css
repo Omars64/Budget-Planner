@@ -1,0 +1,36 @@
+@font-face{font-family:BudgetlyWelcome;src:url('../assets/fonts/Allura-Regular.ttf') format('truetype');font-style:normal;font-weight:400;font-display:swap}
+.welcome-screen{--welcome-bg:#f8fafc;--welcome-card:#fff;--welcome-ink:#172b3a;--welcome-muted:#526b80;--welcome-line:#dce5ee;--welcome-blue:#213e7a;--welcome-button:#203b73;--welcome-button-ink:#fff;--welcome-glow-one:#dfeaff;--welcome-glow-two:#e9e1ff;--welcome-glow-three:#e1f3f0;--welcome-script-one:#147cbd;--welcome-script-two:#233d77;--welcome-script-three:#8857a9;position:relative;isolation:isolate;min-height:100dvh;display:flex;flex-direction:column;background:var(--welcome-bg);color:var(--welcome-ink);font-family:system-ui,sans-serif}
+:root[data-theme=dark] .welcome-screen{--welcome-bg:#10171e;--welcome-card:#1a2530;--welcome-ink:#edf3fb;--welcome-muted:#a5b7c9;--welcome-line:#344452;--welcome-blue:#b8ceff;--welcome-button:#c0d4ff;--welcome-button-ink:#142746;--welcome-glow-one:#1b2e45;--welcome-glow-two:#2a2440;--welcome-glow-three:#143332;--welcome-script-one:#80d6ff;--welcome-script-two:#b8c7ff;--welcome-script-three:#e6b5ee}
+.welcome-screen:before{content:'';position:absolute;z-index:-1;inset:0;pointer-events:none;background:radial-gradient(ellipse at 18% 24%,var(--welcome-glow-one),transparent 53%),radial-gradient(ellipse at 84% 54%,var(--welcome-glow-two),transparent 48%),radial-gradient(ellipse at 50% 100%,var(--welcome-glow-three),transparent 60%);opacity:.75}
+.welcome-header{display:flex;justify-content:flex-end;padding:24px max(24px,env(safe-area-inset-right));padding-top:max(24px,env(safe-area-inset-top));gap:12px}
+.welcome-text-button{border:0;background:transparent;color:var(--welcome-blue);padding:10px 12px;font:inherit;font-weight:600;border-radius:12px;min-height:44px;cursor:pointer}
+.welcome-text-button:hover{background:color-mix(in srgb,var(--welcome-blue) 7%,transparent)}
+.welcome-content{width:min(100%,740px);text-align:center;margin:auto; padding:15px 24px 45px}
+.welcome-greeting{font-family:BudgetlyWelcome,'Segoe Script',cursive;font-size:clamp(100px,15vw,160px);font-weight:400;line-height:1.25;letter-spacing:-4px;width:max-content;max-width:100%;margin:0 auto;padding:0 24px 0 12px;color:var(--accent,#213e7a);background:linear-gradient(105deg,var(--welcome-script-one,#147cbd),var(--welcome-script-two,#233d77) 52%,var(--welcome-script-three,#8857a9));background-clip:text;-webkit-background-clip:text;-webkit-text-fill-color:transparent;mask-image:linear-gradient(to right,#000 40%,transparent 55%);mask-size:250% 100%;mask-position:100% 0;animation:welcome-write var(--welcome-duration,3.5s) cubic-bezier(.18,.48,.24,1) .15s both}
+:root[data-theme=dark] .welcome-animation-preview{--welcome-script-one:#80d6ff;--welcome-script-two:#b8c7ff;--welcome-script-three:#e6b5ee}
+@keyframes welcome-write{0%{mask-position:100% 0;opacity:0;transform:translateX(-9px)}12%{opacity:1}100%{mask-position:0 0;opacity:1;transform:translateX(0)}}
+.welcome-arrival{animation:welcome-arrive .95s cubic-bezier(.2,.75,.2,1) calc(var(--welcome-duration,3.5s)*.53) both}
+@keyframes welcome-arrive{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+/* Only decorative copy waits for the reveal. Primary controls remain available. */
+.welcome-arrival:focus-within{animation:none}
+.welcome-eyebrow{font-size:12px;letter-spacing:2px;text-transform:uppercase;font-weight:600;color:var(--welcome-muted);margin:0 0 16px}
+.welcome-content h1{font-size:clamp(28px,4.6vw,45px);line-height:1.13;letter-spacing:-1.6px;font-weight:650;margin:0 0 17px}
+.welcome-description{max-width:440px;margin:0 auto;color:var(--welcome-muted);font-size:15px;line-height:1.7}
+.welcome-actions{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin:26px auto 13px}
+.welcome-primary,.welcome-secondary{min-height:48px;padding:13px 22px;border-radius:16px;font:inherit;font-weight:600;border:1px solid var(--welcome-line);display:inline-flex;align-items:center;justify-content:center;gap:12px;cursor:pointer;transition:transform .25s,background .25s}
+.welcome-primary{background:var(--welcome-button);color:var(--welcome-button-ink);border-color:var(--welcome-button)}.welcome-secondary{background:var(--welcome-card);color:var(--welcome-ink)}
+.welcome-primary:hover,.welcome-secondary:hover{transform:translateY(-2px)}.welcome-screen button:disabled{opacity:.65;cursor:wait}
+.welcome-caption{font-size:12px;line-height:1.6;color:var(--welcome-muted);margin:0}
+.welcome-benefits{display:flex;flex-wrap:wrap;justify-content:center;gap:24px;margin:30px auto 25px;color:var(--welcome-muted);font-size:13px}.welcome-benefits span{display:flex;align-items:center;gap:8px}
+.welcome-signin{margin:19px 0 0;font-size:13px;color:var(--welcome-muted)}
+.welcome-footer{display:flex;justify-content:center;text-align:center;padding:20px 24px max(20px,env(safe-area-inset-bottom));font-size:12px;color:var(--welcome-muted);border-top:1px solid var(--welcome-line)}
+.budgetly-v2.welcome-auth-layer .modal-backdrop{backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(15,30,48,.35)}
+.budgetly-v2.welcome-auth-layer .modal{width:min(100%,460px);background:var(--surface);border-radius:26px;max-height:calc(var(--dialog-height,100dvh) - 32px);margin:0;padding:16px}
+.welcome-auth-layer .auth-screen.auth-embedded{min-height:0;padding:0;background:none;display:block;position:static}
+.welcome-auth-layer .auth-screen.auth-embedded:before{display:none}
+.welcome-auth-layer .auth-layout{display:block;max-width:none;width:100%;margin:0;padding:0}.welcome-auth-layer .auth-main{width:100%;max-width:none;border:0;box-shadow:none;background:none;padding:0;min-height:0}.welcome-auth-layer .auth-main h2{font-size:27px;margin:0 0 12px}.welcome-auth-layer .signin-method{margin-top:0}.welcome-auth-layer .auth-main .auth-entry{width:100%}
+.welcome-animation-preview{border-radius:20px;background:var(--panel);border:1px solid var(--line);padding:12px;overflow:hidden}.welcome-animation-preview .welcome-greeting{font-size:clamp(70px,11vw,104px);letter-spacing:-2px}
+.welcome-greeting[data-motion=reduced],.welcome-greeting[data-motion=off]{animation:none;mask-image:none;opacity:1}
+.welcome-screen[data-motion=reduced] .welcome-arrival,.welcome-screen[data-motion=off] .welcome-arrival{animation:none}.welcome-screen[data-motion=off] button,.welcome-screen[data-motion=reduced] button{transition:none}
+@media(max-width:600px){.welcome-header{padding:16px 16px;padding-top:max(16px,env(safe-area-inset-top))}.welcome-content{padding:20px 22px 35px}.welcome-greeting{font-size:clamp(90px,28vw,120px);letter-spacing:-3px;padding-right:15px;margin-bottom:12px}.welcome-content h1{font-size:33px}.welcome-actions{flex-direction:column;margin-top:25px}.welcome-description{font-size:14px}.welcome-benefits{gap:13px;font-size:12px;margin-top:24px}.welcome-content .welcome-caption{max-width:320px;margin:auto}}
+@media(prefers-reduced-motion:reduce){.welcome-greeting,.welcome-arrival{animation:none!important;mask-image:none}.welcome-screen button{transition:none}}
