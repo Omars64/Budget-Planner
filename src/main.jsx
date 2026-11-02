@@ -41,6 +41,7 @@ import './notes-library.css'
 import './support.css'
 import './everyday.css'
 import './conversations-security.css'
+import './header-layout.css'
 import AppErrorBoundary from './components/AppErrorBoundary'
 import { installClientDiagnostics } from './lib/diagnostics'
 
