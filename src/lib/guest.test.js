@@ -112,3 +112,12 @@ test('guest can sign in with an existing passkey but cannot enroll one', async (
   await expect(api('/api/passkeys/register/options', { method: 'POST' })).rejects.toMatchObject({ status: 403 })
   expect(fetch).toHaveBeenCalledTimes(1)
 })
+
+
+test('guest seasonal preferences persist locally and validate tint and speed', async () => {
+  const saved=await write('/api/settings',{seasonal_mode:'manual',seasonal_theme:'winter',seasonal_tint:12,seasonal_speed:'slow'},'PUT')
+  expect(saved).toMatchObject({seasonal_mode:'manual',seasonal_theme:'winter',seasonal_tint:12,seasonal_speed:'slow'})
+  expect(readGuest().settings.seasonal_tint).toBe(12)
+  await expect(write('/api/settings',{seasonal_tint:30},'PUT')).rejects.toMatchObject({status:422})
+  await expect(write('/api/settings',{seasonal_speed:'broken'},'PUT')).rejects.toMatchObject({status:422})
+})

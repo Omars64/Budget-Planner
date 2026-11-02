@@ -1,30 +1,141 @@
-.seasonal-scene{position:absolute;inset:0;overflow:hidden;pointer-events:none;color:var(--season-colour);container-type:size}
-.seasonal-global{position:fixed;z-index:0;contain:strict}
-.seasonal-glow{position:absolute;inset:0;background:radial-gradient(ellipse at 95% 12%,color-mix(in srgb,var(--season-colour) 20%,transparent),transparent 60%),linear-gradient(160deg,transparent 45%,color-mix(in srgb,var(--season-colour) 9%,transparent))}
-.seasonal-emblem{position:absolute;right:24px;top:20px;font-size:48px;opacity:.18}
-.seasonal-particle{position:absolute;left:var(--x);top:-50px;font-style:normal;font-size:18px;opacity:.35;animation:seasonal-drift var(--duration) linear var(--delay) infinite;animation-play-state:paused}
-.seasonal-scene[data-moving=true] .seasonal-particle{animation-play-state:running}
-.seasonal-scene[data-season=rain] .seasonal-particle{width:1px;height:28px;background:currentColor;transform:rotate(12deg)}
-.seasonal-scene[data-season=summer] .seasonal-particle{width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 20px currentColor}
-@keyframes seasonal-drift{from{translate:0 -50px}to{translate:30px calc(100cqh + 100px)}}
-.seasonal-controls{border:0;padding:0;margin:0;display:grid;gap:20px;min-width:0}.seasonal-controls legend{font-weight:700;margin-bottom:14px}
-.seasonal-mode{display:flex;gap:20px;flex-wrap:wrap}.seasonal-theme-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
-.seasonal-theme-choice{text-align:left;display:grid;gap:8px;padding:18px;border:2px solid var(--line);border-radius:20px;background:var(--surface);color:var(--text);cursor:pointer}.seasonal-theme-choice>span{font-size:28px}.seasonal-theme-choice small{color:var(--muted);line-height:1.5}.seasonal-theme-choice[aria-pressed=true]{border-color:var(--accent);background:var(--accent-soft)}
-.seasonal-preview-frame{position:relative;isolation:isolate;min-height:230px;border:1px solid var(--line);border-radius:24px;background:var(--page);overflow:hidden}.seasonal-preview-content{position:relative;padding:28px}.seasonal-preview-content h4{font-size:24px;margin:10px 0}.seasonal-preview-content p{max-width:380px}.seasonal-sample{margin-top:20px;padding:16px;border-radius:16px;background:rgba(var(--surface-rgb),.76);border:1px solid var(--line)}
-@media(prefers-reduced-motion:reduce){.seasonal-particle{animation:none!important}}
+/* Seasonal worlds: scene palettes are local so previews never recolour the app. */
+:is(body[data-seasonal], .seasonal-scene, .seasonal-preview-frame) {
+  --season-from:#ebe1ef; --season-to:#f2d9ba; --season-glow:#cfb2da; --season-orb:#e4bd8b;
+  --season-text:#263343; --season-muted:#465363; --season-line:#35455f35;
+  --season-glass-rgb:255,255,255; --season-panel:#f4edf0;
+}
+:is(body[data-seasonal=halloween], .seasonal-scene[data-season=halloween], .seasonal-preview-frame[data-season=halloween]) { --season-from:#ebe1ef; --season-to:#f2d9ba; --season-glow:#cfb2da; --season-orb:#e4bd8b; }
+:root[data-theme=dark] :is(body[data-seasonal=halloween], .seasonal-scene[data-season=halloween], .seasonal-preview-frame[data-season=halloween]) { --season-from:#241a35; --season-to:#573534; --season-glow:#ad743b; --season-orb:#e9b96d; --season-muted:#d0c9e1; }
+:is(body[data-seasonal=autumn], .seasonal-scene[data-season=autumn], .seasonal-preview-frame[data-season=autumn]) { --season-from:#f1e6d4; --season-to:#ecccad; --season-glow:#c6a26a; --season-orb:#e5b568; }
+:root[data-theme=dark] :is(body[data-seasonal=autumn], .seasonal-scene[data-season=autumn], .seasonal-preview-frame[data-season=autumn]) { --season-from:#382923; --season-to:#654735; --season-glow:#bd7134; --season-orb:#efc079; --season-muted:#e2d0be; }
+:is(body[data-seasonal=winter], .seasonal-scene[data-season=winter], .seasonal-preview-frame[data-season=winter]) { --season-from:#e7f2f5; --season-to:#c1d7e7; --season-glow:#86b2cf; --season-orb:#f1faff; }
+:root[data-theme=dark] :is(body[data-seasonal=winter], .seasonal-scene[data-season=winter], .seasonal-preview-frame[data-season=winter]) { --season-from:#152a40; --season-to:#345b72; --season-glow:#83bbcf; --season-orb:#d1e9ef; --season-muted:#c9deea; }
+:is(body[data-seasonal=rain], .seasonal-scene[data-season=rain], .seasonal-preview-frame[data-season=rain]) { --season-from:#d9e5e9; --season-to:#b3c9d5; --season-glow:#7696a8; --season-orb:#eff8fb; }
+:root[data-theme=dark] :is(body[data-seasonal=rain], .seasonal-scene[data-season=rain], .seasonal-preview-frame[data-season=rain]) { --season-from:#1d2d3b; --season-to:#445c6b; --season-glow:#8eacbf; --season-orb:#cedce4; --season-muted:#c8d8e3; }
+:is(body[data-seasonal=summer], .seasonal-scene[data-season=summer], .seasonal-preview-frame[data-season=summer]) { --season-from:#e3eff2; --season-to:#f4ddae; --season-glow:#e7bf65; --season-orb:#ffebae; }
+:root[data-theme=dark] :is(body[data-seasonal=summer], .seasonal-scene[data-season=summer], .seasonal-preview-frame[data-season=summer]) { --season-from:#333b3d; --season-to:#67614a; --season-glow:#e6c174; --season-orb:#ffdc84; --season-muted:#e4e0c9; }
+:is(body[data-seasonal=spring], .seasonal-scene[data-season=spring], .seasonal-preview-frame[data-season=spring]) { --season-from:#e4f0df; --season-to:#eddae9; --season-glow:#a7c4a4; --season-orb:#f8d9e7; }
+:root[data-theme=dark] :is(body[data-seasonal=spring], .seasonal-scene[data-season=spring], .seasonal-preview-frame[data-season=spring]) { --season-from:#283a38; --season-to:#575064; --season-glow:#c99cab; --season-orb:#f0cbdd; --season-muted:#d8e3da; }
 
-/* Keep the atmosphere below content, but visible through the same surfaces as the preview. */
-body:has(.seasonal-global) .budgetly-v2 :is(.glass,.workspace,.ledger-page,.settings-grid,.settings-workspace,.settings-detail,.settings-menu) {
- background:rgba(var(--surface-rgb),.76) !important;
- backdrop-filter:none;
+:root[data-theme=dark] :is(body[data-seasonal], .seasonal-scene, .seasonal-preview-frame) {
+  --season-text:#f4f1ff; --season-line:#efe7ff35; --season-panel:var(--season-from);
 }
-body:has(.seasonal-global) .budgetly-v2 :is(.settings-subsection,.settings-profile,.overview-section,.workspace-list,.workspace-folders,.workspace-reader) {
- background:rgba(var(--surface-rgb),.76);
+body[data-seasonal] {
+  --text:var(--season-text); --muted:var(--season-muted); --line:var(--season-line);
+  --page:var(--season-from);
+  --surface-soft:rgba(var(--season-glass-rgb),var(--season-tint,.07));
+  --surface-hover:rgba(var(--season-glass-rgb),.14);
+  color:var(--text); background:linear-gradient(145deg,var(--season-from),var(--season-to));
 }
-/* Nested surfaces should not stack opaque fills and hide the theme again. */
-body:has(.seasonal-global) .budgetly-v2 :is(.settings-workspace,.workspace,.settings-detail,.settings-subsection-body,.settings-grid) { background:transparent !important; }
-body:has(.seasonal-global) .budgetly-v2 .modal { background:var(--surface) !important; }
-.seasonal-global { z-index:0; }
-body:has(.seasonal-global) .app-shell { z-index:1; }
-.seasonal-scene[data-season=rain] .seasonal-particle:nth-of-type(3n) { height:18px; opacity:.22; }
-.seasonal-scene[data-season=rain] .seasonal-particle:nth-of-type(4n) { width:2px; height:34px; opacity:.32; }
+body[data-seasonal]::before { background:linear-gradient(145deg,var(--season-from),var(--season-to)) !important; }
+body[data-seasonal] .app-shell { position:relative; z-index:1; }
+.seasonal-scene { position:absolute; inset:0; overflow:hidden; pointer-events:none; container-type:size; color:var(--season-text); }
+.seasonal-global { position:fixed; z-index:0; contain:strict; }
+.seasonal-preview { z-index:0; }
+.seasonal-backdrop,.seasonal-particles { position:absolute; inset:0; overflow:hidden; pointer-events:none; }
+.seasonal-backdrop { background:linear-gradient(145deg,var(--season-from),var(--season-to)); }
+.seasonal-glow { position:absolute; inset:0; background:radial-gradient(ellipse at 94% 5%,color-mix(in srgb,var(--season-glow) 65%,transparent),transparent 55%),radial-gradient(ellipse at 10% 88%,color-mix(in srgb,var(--season-glow) 25%,transparent),transparent 55%); }
+.seasonal-backdrop::after { content:''; position:absolute; inset:60% -10% -20%; border-radius:50%; background:radial-gradient(ellipse,var(--season-glow),transparent 65%); opacity:.13; filter:blur(35px); }
+.seasonal-orb { position:absolute; width:200px; height:200px; right:8%; top:55px; border-radius:50%; background:radial-gradient(circle at 35% 30%,var(--season-orb),color-mix(in srgb,var(--season-orb) 8%,transparent) 65%); opacity:.28; filter:blur(1px); }
+.seasonal-particle { position:absolute; left:var(--x,50%); top:-100px; width:var(--size,32px); height:var(--size,32px); opacity:var(--opacity,.45); animation:seasonal-fall calc(var(--duration,24s) / var(--season-speed,1)) linear var(--delay,0s) infinite; animation-play-state:paused; }
+.seasonal-sticker { display:block; width:100%; height:100%; background-repeat:no-repeat; animation:seasonal-rock calc(var(--rock,3s) / var(--season-speed,1)) ease-in-out var(--delay,0s) infinite alternate; animation-play-state:paused; }
+.seasonal-scene[data-moving=true] :is(.seasonal-particle,.seasonal-sticker) { animation-play-state:running; }
+.seasonal-scene[data-season=halloween] .seasonal-particle,
+.seasonal-particle:is([data-kind=ghost],[data-kind=spider],[data-kind=bat],[data-kind=butterfly]) { animation-name:seasonal-character; }
+.seasonal-particle[data-kind=ghost] { animation-timing-function:ease-in-out; }
+.seasonal-particle[data-kind=spider]::before { content:''; position:absolute; bottom:80%; left:50%; height:110px; width:1px; background:linear-gradient(transparent,#d8c6ee88); }
+.seasonal-particle:is([data-kind=bat],[data-kind=butterfly]) .seasonal-sticker { animation-name:seasonal-flutter; animation-duration:calc(1.6s / var(--season-speed,1)); }
+.seasonal-particle[data-kind=glimmer] { border-radius:50%; background:#ffdf8b; box-shadow:0 0 15px #ffd77daa; animation-name:seasonal-rise; }
+.seasonal-particle:is(.seasonal-raindrop,.seasonal-bead,[data-kind=droplet],[data-kind=bead]) {
+  top:-70px; height:calc(var(--size,10px) * 1.65); border-radius:54% 46% 52% 48% / 70% 70% 30% 30%;
+  background:radial-gradient(ellipse at 27% 23%,#ffffffd9 0,#ffffff4d 16%,transparent 42%),radial-gradient(ellipse at 68% 77%,#e4f8ff77,transparent 45%),linear-gradient(135deg,#ffffff09,#8ac0dc22);
+  box-shadow:inset 1px 1px 2px #fff8,inset -1px -2px 2px #183f5e88,1px 3px 5px #0c273c44;
+  border:1px solid #d7efff4d; animation-name:seasonal-rain; animation-timing-function:cubic-bezier(.3,.1,.65,1);
+}
+.seasonal-particle:is(.seasonal-raindrop,.seasonal-bead,[data-kind=droplet],[data-kind=bead])::before { content:''; position:absolute; bottom:80%; left:40%; width:35%; height:var(--trail,40px); border-radius:50%; background:linear-gradient(transparent,#e0f6ff22 65%,#e3f5ff4d); filter:blur(.4px); }
+.seasonal-particle:is(.seasonal-raindrop,.seasonal-bead,[data-kind=droplet],[data-kind=bead])::after { content:''; position:absolute; left:22%; top:20%; width:17%; height:25%; border-radius:50%; background:#ffffffc9; filter:blur(.2px); }
+.seasonal-particle:is(.seasonal-bead,[data-kind=bead]),
+.seasonal-scene[data-static=true] .seasonal-particle { top:var(--rest-y,45%); animation:none; transform:rotate(var(--tilt,0deg)); }
+.seasonal-scene[data-static=true] .seasonal-sticker { animation:none; }
+/* Hosts can pause a hidden scene without moving its particles to their resting positions. */
+:is(.seasonal-scene[data-hidden=true],body[data-hidden=true] .seasonal-scene,.seasonal-scene[hidden]) :is(.seasonal-particle,.seasonal-sticker) { animation-play-state:paused !important; }
+@keyframes seasonal-fall { 0%{transform:translate3d(0,-10px,0) rotate(var(--tilt,0deg))} 50%{transform:translate3d(var(--sway,35px),calc(50cqh + 65px),0) rotate(calc(var(--tilt,0deg) + 80deg))} 100%{transform:translate3d(0,calc(100cqh + 190px),0) rotate(calc(var(--tilt,0deg) + 160deg))} }
+@keyframes seasonal-character { 0%{transform:translate3d(0,-10px,0) rotate(-8deg)} 50%{transform:translate3d(var(--sway,35px),calc(50cqh + 65px),0) rotate(9deg)} 100%{transform:translate3d(0,calc(100cqh + 190px),0) rotate(-8deg)} }
+@keyframes seasonal-rock { from{rotate:-12deg} to{rotate:18deg} }
+@keyframes seasonal-flutter { from{transform:rotate(-18deg) scaleX(.65)} to{transform:rotate(12deg) scaleX(1)} }
+@keyframes seasonal-rain { 0%{transform:translateY(-60px) scaleY(.8)} 20%{transform:translateY(15cqh) scaleY(1.2)} 65%{transform:translateY(65cqh) scaleY(1)} 100%{transform:translateY(calc(100cqh + 150px)) scaleY(1.3)} }
+@keyframes seasonal-rise { from{transform:translate(0,calc(100cqh + 120px));opacity:0} 20%{opacity:var(--opacity,.5)} to{transform:translate(var(--sway,35px),-50px);opacity:0} }
+
+/* Explicit surface lists avoid stripping artwork, progress fills or semantic buttons. */
+body[data-seasonal] .budgetly-v2 :is(
+  .app-shell,.main-area,.page-wrap,.overview-page,.overview-section,.overview-pair,
+  .ledger-page,.ledger-list,.ledger-month,.ledger-toolbar,.ledger-filter-bar,
+  .settings-grid,.settings-workspace,.settings-detail,.settings-menu,.settings-subsection,
+  .settings-subsection-body,.settings-section,.settings-section-body,.settings-profile,
+  .workspace,.workspace-list,.workspace-folders,.workspace-reader,.workspace-preferences,
+  .note-editor,.notes-workspace,.notes-library,.workspace-content,
+  .ai-workspace,.ai-chat-main,.ai-messages,.ai-composer-zone,.ai-history,.ai-groups
+) { background:transparent !important; }
+body[data-seasonal] .budgetly-v2 :is(
+  .glass,.glass-subtle,.panel,.topbar,.sidebar,.app-footer,.mobile-nav,
+  .metric-card,.budget-card,.goal-card,.debt-card,.calendar-panel,.day-panel,
+  .overview-recent,.overview-shortcuts,.hero-strip,.weekly-summary,
+  .bank-inbox,.bank-inbox-item,.bank-setup,.upcoming-record,
+  .ai-sidebar,.ai-entry-input,.ai-overview-entry,.ai-chat-header,.ai-chat-toolbar,.ai-context-bar,.ai-composer,
+  .ai-user-message,.ai-proposal,.ai-sources,.ai-welcome-prompts button,
+  .settings-search,.settings-subsection details,.security-card,.security-item,
+  .category-settings>div,.user-row,.admin-category-row,.note-history article,
+  .note-content:read-only,.feedback-reply,.request-progress,.recovery-row,
+  .transaction-wallets,.shared-ledger-wallets,.date-label,.shared-wallet-card,
+  .amount-input,.segment-control,.search-box,.pin-field,.password-input,
+  .space-selector,.nav-finder,.notes-library-header,.notes-folder-sheet
+):not(.payment-card):not(.wallet-card) {
+  background:rgba(var(--season-glass-rgb),var(--season-tint,.07)) !important;
+  border-color:var(--season-line); backdrop-filter:blur(1.2px);
+}
+body[data-seasonal] :is(.modal,.confirmation-dialog,[role=dialog]) {
+  background:rgba(var(--season-glass-rgb),calc(var(--season-tint,.07) + .14)) !important;
+  color:var(--text); border-color:var(--line); backdrop-filter:blur(18px);
+}
+body[data-seasonal] :is(.modal-head,.modal-body,.modal-footer,.modal-actions) { background:transparent !important; }
+body[data-seasonal] :is(.modal-backdrop,.modal-layer,.sidebar-scrim,.ai-history-scrim) { background:rgba(10,17,28,.52); }
+body[data-seasonal] :is(.field input,.field textarea,.field select,.toolbar-select,.feedback-filter,.month-picker input,.note-folder-picker select,.password-input input,.search-box input,.pin-field input,.ai-composer textarea) {
+  background:rgba(var(--season-glass-rgb),var(--season-tint,.07)) !important;
+  color:var(--text); border-color:var(--line);
+}
+body[data-seasonal] :is(input,textarea)::placeholder { color:var(--muted); opacity:1; }
+body[data-seasonal] :is(select option,select optgroup) { background:var(--season-panel); color:var(--text); }
+
+.seasonal-controls { border:0; padding:0; margin:0; display:grid; gap:20px; min-width:0; }
+.seasonal-controls legend { font-weight:700; margin-bottom:14px; }
+.seasonal-mode { display:flex; gap:20px; flex-wrap:wrap; }
+.seasonal-theme-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
+.seasonal-theme-choice { text-align:start; display:grid; gap:8px; padding:18px; border:2px solid var(--line); border-radius:20px; background:var(--surface); color:var(--text); cursor:pointer; }
+.seasonal-theme-choice small { color:var(--muted); line-height:1.5; }
+.seasonal-theme-choice[aria-pressed=true] { border-color:var(--accent); background:var(--accent-soft); }
+.seasonal-theme-choice:focus-visible,.seasonal-slider:focus-visible { outline:3px solid var(--accent); outline-offset:4px; }
+.seasonal-choice-art { display:flex; align-items:center; gap:5px; height:56px; }
+.seasonal-choice-art .seasonal-sticker { width:46px; height:46px; flex:0 0 46px; animation:none; }
+.seasonal-preview-frame { position:relative; isolation:isolate; min-height:260px; border:1px solid var(--season-line); border-radius:24px; background:linear-gradient(145deg,var(--season-from),var(--season-to)); overflow:hidden; color:var(--season-text); }
+.seasonal-preview-content { position:relative; z-index:1; padding:28px; }
+.seasonal-preview-content h4 { font-size:24px; margin:10px 0; color:inherit; }
+.seasonal-preview-content p { max-width:380px; color:var(--season-muted); }
+.seasonal-sample { margin-top:20px; padding:16px; border-radius:16px; background:rgba(var(--season-glass-rgb),var(--season-tint,.07)); border:1px solid var(--season-line); backdrop-filter:blur(1.2px); }
+.seasonal-preview-toolbar { position:relative; z-index:1; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:12px 20px; border-top:1px solid var(--season-line); color:var(--season-text); }
+.seasonal-slider { width:min(100%,280px); min-height:32px; accent-color:var(--accent); cursor:pointer; }
+.seasonal-slider input[type=range] { width:100%; min-height:32px; padding:0; border:0; accent-color:var(--accent); }
+body[data-seasonal] .budgetly-v2 .topbar { border-radius:18px; }
+body[data-seasonal] .budgetly-v2 :is(.app-footer,.mobile-nav) { backdrop-filter:blur(10px); }
+.seasonal-preview-toolbar { color:var(--text); border-color:var(--line); }
+.seasonal-preview-frame:not([data-season]) { background:light-dark(#f6f8f9,#171a1b); color:light-dark(#172c38,#e4e8e7); border-color:var(--line); --season-muted:light-dark(#657883,#afbdbb); }
+.seasonal-preview-frame:not([data-season]) .seasonal-sample { background:var(--surface); border-color:var(--line); }
+.seasonal-choice-drop { display:block; width:22px; height:36px; border-radius:54% 46% 52% 48% / 70% 70% 30% 30%; background:radial-gradient(ellipse at 27% 23%,#fff 0,#ffffff4d 16%,transparent 42%),linear-gradient(135deg,#ffffff09,#8ac0dc66); box-shadow:inset 1px 1px 2px #fff8,inset -1px -2px 2px #183f5e88,1px 3px 5px #0c273c44; border:1px solid #a2d0ea80; }
+body[data-seasonal] .seasonal-theme-choice { background:rgba(var(--season-glass-rgb),var(--season-tint,.07)); }
+body[data-seasonal] .seasonal-theme-choice[aria-pressed=true] { background:var(--accent-soft); }
+@media(max-width:600px) { .seasonal-preview-content{padding:20px} .seasonal-theme-grid{grid-template-columns:repeat(2,minmax(0,1fr))} .seasonal-theme-choice{padding:12px} }
+@media(prefers-reduced-motion:reduce) {
+  .seasonal-scene .seasonal-particle { animation:none !important; top:var(--rest-y,45%); transform:rotate(var(--tilt,0deg)); }
+  .seasonal-sticker { animation:none !important; }
+}
+:root:is([data-motion=reduced],[data-motion=off]) .seasonal-scene .seasonal-particle { animation:none !important; top:var(--rest-y,45%); transform:rotate(var(--tilt,0deg)); }
+:root:is([data-motion=reduced],[data-motion=off]) .seasonal-sticker { animation:none !important; }

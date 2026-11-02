@@ -204,6 +204,8 @@ class SettingsPayload(BaseModel):
     seasonal_theme: Literal['halloween', 'rain', 'winter', 'summer', 'autumn', 'spring'] = 'winter'
     seasonal_hemisphere: Literal['north', 'south'] = 'north'
     seasonal_effects: Literal['off', 'subtle', 'full'] = 'subtle'
+    seasonal_tint: int = Field(default=7,ge=0,le=18,strict=True)
+    seasonal_speed: Literal['slow', 'normal', 'lively'] = 'normal'
     wallpaper_enabled: bool = True
     wallpaper_style: Literal['none', 'budgetly', 'custom'] = 'none'
     reminder_interval_hours: Literal[1, 2, 3, 4, 6, 8, 12, 24] = 4

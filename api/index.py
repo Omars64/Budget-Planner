@@ -804,6 +804,14 @@ def security_disable(user: User = Depends(authorize), db: Session = Depends(get_
     return {"enabled": False}
 
 
+def _seasonal_tint_value(raw):
+    try:
+        value = int(raw)
+        return value if 0 <= value <= 18 else 7
+    except (ValueError, TypeError):
+        return 7
+
+
 @app.get("/api/settings")
 def get_settings(user: User = Depends(current_user), db: Session = Depends(get_db)):
     display_name = setting(db, user.id, "display_name", "Budgetly")
@@ -824,6 +832,8 @@ def get_settings(user: User = Depends(current_user), db: Session = Depends(get_d
         'seasonal_theme': setting(db, user.id, 'seasonal_theme', 'winter'),
         'seasonal_hemisphere': setting(db, user.id, 'seasonal_hemisphere', 'north'),
         'seasonal_effects': setting(db, user.id, 'seasonal_effects', 'subtle'),
+        'seasonal_tint': _seasonal_tint_value(setting(db, user.id, 'seasonal_tint', '7')),
+        'seasonal_speed': setting(db, user.id, 'seasonal_speed', 'normal'),
         'wallpaper_enabled': setting(db, user.id, 'wallpaper_enabled', 'true') == 'true',
         'wallpaper_style': setting(db, user.id, 'wallpaper_style', 'custom' if setting(db, user.id, 'wallpaper_image', '') else 'none'),
         'reminder_interval_hours': int(setting(db, user.id, 'reminder_interval_hours', '4')),

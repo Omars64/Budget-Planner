@@ -28,7 +28,7 @@ def test_seasonal_preferences_partial_save_and_validation():
     with TestClient(app) as client:
         headers = auth_headers(client)
         original = client.get('/api/settings', headers=headers).json()
-        values = dict(seasonal_mode='automatic', seasonal_theme='rain', seasonal_hemisphere='south', seasonal_effects='full')
+        values = dict(seasonal_mode='automatic', seasonal_theme='rain', seasonal_hemisphere='south', seasonal_effects='full', seasonal_tint=12, seasonal_speed='slow')
         try:
             assert client.put('/api/settings', headers=headers, json=values).status_code == 200
             loaded = client.get('/api/settings', headers=headers).json()
@@ -39,3 +39,13 @@ def test_seasonal_preferences_partial_save_and_validation():
             assert client.put('/api/settings', headers=headers, json={'seasonal_effects':'invalid'}).status_code == 422
         finally:
             client.put('/api/settings', headers=headers, json=original)
+
+
+def test_seasonal_tint_bounds_and_speed_validation():
+    from api.index import _seasonal_tint_value
+    assert [_seasonal_tint_value(value) for value in ['bad', '-1', '19', None, '12']] == [7, 7, 7, 7, 12]
+    with TestClient(app) as client:
+        headers = auth_headers(client)
+        for value in [-1, 19, True, 2.5, '7']:
+            assert client.put('/api/settings', headers=headers, json={'seasonal_tint': value}).status_code == 422
+        assert client.put('/api/settings', headers=headers, json={'seasonal_speed': 'invalid'}).status_code == 422
