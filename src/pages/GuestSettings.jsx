@@ -1,5 +1,6 @@
 import SeasonalSettings from '../components/SeasonalSettings'
 import WelcomeAnimationSettings from '../components/WelcomeAnimationSettings'
+import AndroidAppSettings from '../components/AndroidAppSettings'
 import { useEffect, useRef, useState } from 'react'
 import { Download, LogIn, Save, Trash2 } from 'lucide-react'
 import { useApp } from '../App'
@@ -43,6 +44,7 @@ export default function GuestSettings() {
       <button className="button primary"><Save size={17}/>Save preferences</button>
     </form></SettingsSection>
     <CurrencyConfiguration settingsId="money"/>
+    <AndroidAppSettings settingsId="android"/>
     <SettingsSection title="Transaction entry"><WorkspacePreferences/></SettingsSection>
     <SettingsSection title="Export and local data"><div className="button-row"><button className="button ghost" onClick={() => exportData('csv')}><Download size={17}/>CSV transactions</button><button className="button ghost" onClick={() => exportData('json')}><Download size={17}/>Full local copy</button></div><button className="button danger" onClick={async () => { if (localStorage.getItem(GUEST_IMPORT_KEY)) { notify('Finish the pending import before clearing guest records.','error'); return } if (await confirm('Permanently clear guest records on this device? Export them first. There is no deleted-item recovery in Guest Mode.')) { clearGuest(); refresh(); notify('Guest records cleared') } }}><Trash2 size={17}/>Clear guest records</button></SettingsSection>
     <SettingsSection title="Notifications"><UpdateNotificationPreference notify={notify}/></SettingsSection>

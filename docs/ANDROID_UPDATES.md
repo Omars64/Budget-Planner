@@ -28,3 +28,17 @@ Budgetly requests `REQUEST_INSTALL_PACKAGES` solely for its verified update inst
 - Test Samsung/other supported phones with installed banking apps. Native compilation and mocked JS tests do not establish real installer behavior.
 
 Keep the release repository account protected with MFA and maintain an offline signing-key backup. SHA-256 catches corruption; the original installed signing certificate is the independent trust boundary. Key rotation is intentionally not accepted by this initial updater.
+
+## Download from the web application
+
+Settings → Android app is available to signed-in users, administrators and guests.
+It shows the latest published Android version, actual APK size, direct download,
+and version-specific release notes. Opening the category or choosing Check latest
+version refreshes the existing public, validated release manifest; merely opening
+another Settings category does not fetch it. The public /download page uses the
+same component. No database read or account token is required for release metadata.
+
+The version shown is the published APK version, not the web application version.
+Publishing the APK and update.json through the release batch updates this section
+without editing its links. Existing server metadata caching can take up to five
+minutes to pick up a newly published release. Users approve installation themselves.

@@ -2,7 +2,7 @@ import { Children, isValidElement, useCallback, useEffect, useId, useLayoutEffec
 import { motion } from 'framer-motion'
 import { ArrowLeft, Banknote, Bell, ChevronRight, CloudUpload, Coffee, Landmark, Palette, Search, ShieldCheck, Smartphone, UserRound } from 'lucide-react'
 import { useAppMotion } from '../lib/appMotion'
-import { SettingsInlineContext } from '../lib/settingsContext'
+import { SettingsInlineContext, SettingsVisibleContext } from '../lib/settingsContext'
 import './SettingsWorkspace.css'
 
 const groups = [
@@ -10,6 +10,7 @@ const groups = [
   { id: 'appearance', title: 'Look & feel', description: 'Theme, text size and motion', icon: Palette, label: 'Your preferences', terms: 'font colour color accent wallpaper seasonal halloween winter summer rain autumn spring motion vibration comfort appearance welcome greeting animation speed' },
   { id: 'money', title: 'Money & categories', description: 'Currency and transaction defaults', icon: Banknote, terms: 'currency kwd categories default wallet entry templates display locale week numbers budget name' },
   { id: 'notifications', title: 'Notifications', description: 'Updates, reminders and scheduled entries', icon: Bell, terms: 'upcoming expense update quiet hours reminder scheduled notification' },
+  { id: 'android', title: 'Android app', description: 'Download the latest Budgetly APK', icon: Smartphone, terms: 'download apk install android phone latest version release mobile app' },
   { id: 'bank', title: 'Bank messages', description: 'Connected apps and wallet matching', icon: Landmark, terms: 'smart bank inbox notification access card matching capture android' },
   { id: 'backup', title: 'Backups & data', description: 'Google Drive, exports and recovery', icon: CloudUpload, label: 'Your data', terms: 'trash deleted recovery restore google drive export statement privacy reset guest records' },
   { id: 'support', title: 'Support & about', description: 'Coffee preferences and app information', icon: Coffee, terms: 'coffee tip support popup sidebar about' },
@@ -111,12 +112,12 @@ export default function SettingsWorkspace({ children, guest = false }) {
       <p className="settings-breadcrumb">Settings / {current.title}</p>
       <div className="settings-page-heading"><span className="settings-page-icon"><Icon size={25} aria-hidden="true"/></span><h2 ref={heading} tabIndex={-1}>{current.title}</h2></div>
       <p className="settings-description">{current.description}</p>
-      <p className="settings-scope">{guest || ['bank', 'notifications'].includes(displayed) ? <Smartphone size={17} aria-hidden="true"/> : <UserRound size={17} aria-hidden="true"/>}{guest ? 'Guest workspace · this device' : ['bank', 'notifications'].includes(displayed) ? 'This device only' : 'Your account and selected workspace'}</p>
+      <p className="settings-scope">{guest || ['bank', 'notifications', 'android'].includes(displayed) ? <Smartphone size={17} aria-hidden="true"/> : <UserRound size={17} aria-hidden="true"/>}{displayed === 'android' ? 'Official Android download' : guest ? 'Guest workspace · this device' : ['bank', 'notifications'].includes(displayed) ? 'This device only' : 'Your account and selected workspace'}</p>
       <SettingsInlineContext.Provider value={true}>
         {available.map(group => <div key={group.id} data-settings-group={group.id} hidden={displayed !== group.id} aria-label={group.title}>
-          {parts.filter(part => part.group === group.id).sort((a, b) =>
+          <SettingsVisibleContext.Provider value={displayed === group.id}>{parts.filter(part => part.group === group.id).sort((a, b) =>
             (a.child.props.settingsOrder ?? a.child.props['data-settings-order'] ?? sectionOrder[a.child.props.title] ?? 10) -
-            (b.child.props.settingsOrder ?? b.child.props['data-settings-order'] ?? sectionOrder[b.child.props.title] ?? 10)).map(part => part.child)}
+            (b.child.props.settingsOrder ?? b.child.props['data-settings-order'] ?? sectionOrder[b.child.props.title] ?? 10)).map(part => part.child)}</SettingsVisibleContext.Provider>
         </div>)}
       </SettingsInlineContext.Provider>
     </div>
