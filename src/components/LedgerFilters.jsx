@@ -4,7 +4,7 @@ import Modal from './Modal'
 import { dateInput } from '../lib/time'
 import { phraseSearch, savedSearches, saveSearch, removeSearch } from '../lib/phraseSearch'
 
-export const defaultLedgerFilters = { search: '', type: 'all', wallet: '', month: '', sort: 'newest', category: '', date_from:'', date_to:'', reporting_from:'', reporting_to:'', exclude_opening:false }
+import { defaultLedgerFilters } from '../lib/ledgerDefaults'
 
 export default function LedgerFilters({ value, onChange, wallets, categories = [], shared = false, userId, children }) {
   const scope=shared?'shared':'personal'

@@ -779,6 +779,7 @@ def test_actual_readiness_discloses_probe_even_when_storage_fails(integration, m
     s.control.read_health.return_value = {
         'cached': False, 'ok': False, 'generation': 'opaque-private-generation'}
     monkeypatch.setattr(diagnostics, 'job_status', Mock(return_value={}))
+    monkeypatch.setattr(diagnostics, 'operational_signals', Mock(return_value={'healthy': True}))
     monkeypatch.setattr(diagnostics, 'IS_EPHEMERAL_VERCEL_SQLITE', False)
     s.app.state.storage_ready = outcome != 'initialization-failure'
     s.initialize.return_value = outcome != 'initialization-failure'

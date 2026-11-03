@@ -1,0 +1,1 @@
+export const editableConfig = config => ({revision:config.revision,goal_reserve:config.goal_reserve,buffer:config.buffer,bills:config.bills.map(({price_history:_history,payments:_payments,...bill}) => bill)})

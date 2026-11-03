@@ -11,7 +11,7 @@ import DateTimeField, { DateField } from '../components/DateTimeField'
 import EmptyState from '../components/EmptyState'
 import '../planner.css'
 
-export const editableConfig = config => ({revision:config.revision,goal_reserve:config.goal_reserve,buffer:config.buffer,bills:config.bills.map(({price_history:_history,payments:_payments,...bill}) => bill)})
+import { editableConfig } from '../lib/plannerConfig'
 const shortDate = value => new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'short',timeZone:'UTC'}).format(new Date(`${value.slice(0,10)}T12:00:00Z`))
 const newBill = wallets => ({id:crypto.randomUUID(),name:'',amount:'',wallet_id:wallets[0]?.id || '',due_at:dateInput(),frequency:'monthly',kind:'bill',active:true,reminder_enabled:true,planned_id:null})
 

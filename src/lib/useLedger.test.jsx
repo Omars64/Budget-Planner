@@ -2,7 +2,7 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { api } from './api'
 import useLedger from './useLedger'
-import { defaultLedgerFilters } from '../components/LedgerFilters'
+import { defaultLedgerFilters } from './ledgerDefaults'
 import { updateResourcePolicy } from './resourcePolicy'
 
 vi.mock('./api', () => ({ api: vi.fn(), readCached: () => undefined }))

@@ -2,7 +2,7 @@ import { act, cleanup, render, renderHook, screen } from '@testing-library/react
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { MotionConfigContext } from 'framer-motion'
 import { useContext } from 'react'
-import { balanceAfter } from '../components/BalancePreview'
+import { balanceAfter } from './balancePreview'
 import { useViewState } from './viewState'
 import { effectiveMotion, saveComfort } from './comfort'
 import MotionPreferences from '../components/MotionPreferences'

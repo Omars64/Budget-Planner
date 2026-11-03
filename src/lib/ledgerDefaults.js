@@ -1,0 +1,1 @@
+export const defaultLedgerFilters = { search: '', type: 'all', wallet: '', month: '', sort: 'newest', category: '', date_from:'', date_to:'', reporting_from:'', reporting_to:'', exclude_opening:false }

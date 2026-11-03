@@ -1,13 +1,7 @@
 import { useState } from 'react'
-import { LocalNotifications } from '@capacitor/local-notifications'
-import { androidUpdatesAvailable } from '../lib/appUpdates'
 import { saveUpdateNotifications, updateNotificationsEnabled } from '../lib/notificationSettings'
 
-export async function requestUpdatePermission() {
-  if (androidUpdatesAvailable()) return (await LocalNotifications.requestPermissions()).display === 'granted'
-  if ('Notification' in window) return (await window.Notification.requestPermission()) === 'granted'
-  return false
-}
+import { requestUpdatePermission } from '../lib/updatePermission'
 
 export default function UpdateNotificationPreference({ notify }) {
   const [enabled, setEnabled] = useState(updateNotificationsEnabled)

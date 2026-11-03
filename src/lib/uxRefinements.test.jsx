@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { weeklySummary } from './weeklySummary'
 import { frequentPages, recordPageVisit, readPageUsage } from './pageUsage'
 import { saveWorkspacePreferences } from './workspacePreferences'
-import { celebrateMilestone } from '../components/Milestone'
+import { celebrateMilestone } from './milestone'
 import WeeklySummary from '../components/WeeklySummary'
 
 beforeEach(() => localStorage.clear())

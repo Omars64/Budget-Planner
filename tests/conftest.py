@@ -21,7 +21,8 @@ for _name in list(os.environ):
 os.environ['AWS_EC2_METADATA_DISABLED'] = 'true'
 os.environ['AWS_SHARED_CREDENTIALS_FILE'] = os.devnull
 os.environ['AWS_CONFIG_FILE'] = os.devnull
-os.environ['ADMIN_INITIAL_EMAIL'] = 'admin@synthetic.test'
+# Existing synthetic login fixtures use this fixed identifier; never inherit a provider account.
+os.environ['ADMIN_INITIAL_EMAIL'] = 'omarsolanki46@gmail.com'
 
 
 def _local_host(host):

@@ -1,7 +1,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import Planner, {editableConfig} from './Planner'
+import Planner from './Planner'
+import {editableConfig} from '../lib/plannerConfig'
 import { api } from '../lib/api'
 
 const hooks=vi.hoisted(()=>({notify:vi.fn(),refresh:vi.fn(),confirm:vi.fn(async()=>true)}))

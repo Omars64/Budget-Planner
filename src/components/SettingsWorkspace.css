@@ -45,7 +45,7 @@
 .settings-control-description { display:block;color:var(--muted);font-size:13px;font-weight:400;line-height:1.5;margin-top:5px; }
 .settings-workspace .settings-subsection fieldset:not(.wallpaper-choice) { min-width:0;border:0;margin:12px 0;padding:0; }
 .settings-workspace .settings-subsection .check-row:has(input[type=checkbox]) { flex-direction:row-reverse;justify-content:space-between; }
-.settings-workspace .settings-subsection input[type=checkbox] { appearance:auto;width:20px;height:20px;accent-color:var(--accent); }
+.settings-workspace .settings-subsection input[type=checkbox]:not([role=switch]) { appearance:auto;width:20px;height:20px;accent-color:var(--accent); }
 .settings-workspace .settings-subsection details { border:1px solid var(--line);border-radius:8px;margin:14px 0;background:var(--surface-soft); }
 .settings-workspace .settings-subsection details>summary { display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:54px;padding:14px 16px;font-size:15px;font-weight:650;list-style:none;cursor:pointer; }
 .settings-workspace .settings-subsection details>summary::-webkit-details-marker { display:none; }

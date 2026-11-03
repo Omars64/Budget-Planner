@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { celebrateMilestone } from '../components/Milestone'
+import { celebrateMilestone } from '../lib/milestone'
 import { CalendarClock, Coins, HandCoins, Pencil, Plus, Target, Trash2 } from 'lucide-react'
 import { api, jsonBody, money } from '../lib/api'
 import { useApp } from '../App'

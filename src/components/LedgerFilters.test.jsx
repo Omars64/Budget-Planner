@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
-import LedgerFilters, { defaultLedgerFilters } from './LedgerFilters'
+import LedgerFilters from './LedgerFilters'
+import { defaultLedgerFilters } from '../lib/ledgerDefaults'
 import SettingsSection from './SettingsSection'
 
 afterEach(cleanup)
