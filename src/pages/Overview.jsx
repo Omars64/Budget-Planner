@@ -36,20 +36,28 @@ export default function Overview() {
   }, [month, refreshKey, retry])
   const fmt = value => money(value, settings.currency, settings.compact_numbers)
   const displayedMonth = data?.month || month
+  const [reportYear, reportMonth] = displayedMonth.split('-').map(Number)
+  const displayedMonthLabel = new Date(reportYear, reportMonth - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+  const otherBalanceActivity = data ? Math.round((Number(data.total_balance) - Number(data.net)) * 1000) / 1000 : 0
   const filteredLink = { aiFilters: { month: displayedMonth } }
   if (!data && !error) return <div className="skeleton-page"><div/><div/><div/></div>
 
   return <div className="overview-page everyday-page everyday-overview">
     <section className="overview-balance">
-      <div><p className="muted">{activeSpace ? 'Space balance now' : 'Personal balance now'}</p><h1>{data ? <AnimatedMoney value={data.total_balance} currency={settings.currency} compact={settings.compact_numbers}/> : '-'}</h1></div>
-      <div className="overview-controls"><label className="field"><span>Month</span><input type="month" min="1000-01" max="9999-12" value={month} onChange={e => e.target.value && setMonth(e.target.value)}/></label></div>
+      <div><p className="muted">Available now · {activeSpace ? 'Space wallets' : 'Personal wallets'}</p><h1>{data ? <AnimatedMoney value={data.total_balance} currency={settings.currency} compact={settings.compact_numbers}/> : '-'}</h1></div>
     </section>
     {error && <div className="form-error" role="alert">{error}<button className="button ghost small" onClick={()=>setRetry(v=>v+1)}>Retry</button>{data && <small>Showing the last loaded summary for {data.month}.</small>}</div>}
     {data && <div aria-busy={data.month !== month} className={data.month !== month ? 'overview-loading' : ''}>
+      <section className="overview-month-heading" aria-label="Reporting month">
+        <div><p className="muted">Reporting activity</p><h2>Assigned to {displayedMonthLabel}</h2></div>
+        <div className="overview-controls"><label className="field"><span>Month</span><input type="month" min="1000-01" max="9999-12" value={month} onChange={e => e.target.value && setMonth(e.target.value)}/></label></div>
+      </section>
       <section key={data.month} className="overview-metrics month-reveal" aria-label="Selected month summary">
         <Link to="/transactions" state={{aiFilters:{month:data.month,type:'income'}}}><span>Money in</span><strong className="tx-amount income">{fmt(data.income)}</strong>{data.opening_funds > 0 && <small>{fmt(data.earned_income)} income + {fmt(data.opening_funds)} starting funds</small>}</Link>
         <Link to="/transactions" state={{aiFilters:{month:displayedMonth,type:'expense',exclude_opening:true}}}><span>Spent</span><strong className="tx-amount expense">{fmt(data.expense)}</strong></Link>
+        <div className="overview-month-net"><span>Month's net change</span><strong className={data.net < 0 ? 'tx-amount expense' : 'tx-amount income'}>{data.net > 0 ? '+' : ''}{fmt(data.net)}</strong>{data.opening_debt > 0 && <small>Includes {fmt(data.opening_debt)} starting debt</small>}</div>
       </section>
+      <details className="overview-balance-details"><summary>Balance and reporting details</summary><div className="overview-balance-details-content"><p><strong>Wallet balances</strong></p><ul>{(data.wallets || []).map(wallet => <li key={wallet.id}><span>{wallet.name}</span><strong>{fmt(wallet.balance)}</strong></li>)}</ul><p>Monthly totals use the month each transaction belongs to. An entry recorded earlier can count toward {displayedMonthLabel}. Changing the month does not change your available balance.</p><p><strong>Why are the figures different?</strong></p><dl><div><dt>Other balance activity</dt><dd>{fmt(otherBalanceActivity)}</dd></div><div><dt>Assigned to {displayedMonthLabel}</dt><dd>{data.net > 0 ? '+' : ''}{fmt(data.net)}</dd></div><div><dt>Available now</dt><dd>{fmt(data.total_balance)}</dd></div></dl><small>This compares reporting allocations with today's wallet balances; it is not your balance on the first day of the month. Transfers between these wallets cancel out.</small></div></details>
       {!isGuest && <nav className="everyday-overview-actions" aria-label="Next actions">
         <Link to="/upcoming"><CalendarClock size={22}/><span><strong>Upcoming payments</strong><small>Due dates, reminders and automatic entries</small></span><ArrowRight size={17}/></Link>
         <Link to="/bank-messages"><Inbox size={22}/><span><strong>Review bank alerts</strong><small>Check alerts before adding them to your records</small></span><ArrowRight size={17}/></Link>
@@ -70,7 +78,7 @@ export default function Overview() {
       {preferences.weeklySummary !== false && data.weekly && <WeeklySummary value={data.weekly} fmt={fmt}/>}
       {!isGuest && <PlannerSummary refreshKey={refreshKey} fmt={fmt}/>}
       </details>}
-      <details className="overview-disclosure"><summary>Monthly spending & budget details</summary><div className="everyday-net-summary"><Link to="/transactions" state={filteredLink}><span>Money in minus out</span><strong>{fmt(data.net)}</strong><small>After spending{data.opening_debt > 0 ? ' and starting debt' : ''}. Transfers are separate.</small></Link></div><div className="overview-columns">
+      <details className="overview-disclosure"><summary>Monthly spending & budget details</summary><div className="overview-columns">
         <section className="overview-section">
           <div className="panel-head"><h3>Budget progress</h3><Link to="/budgets" className="overview-link">View all <ArrowRight size={15}/></Link></div>
           {data.budgets.length ? <div className="overview-budgets">{[...data.budgets].sort((a, b) => b.progress - a.progress).slice(0, 3).map(b => <Link className="record-link" key={b.id} to="/transactions" state={{aiFilters:{type:'expense',category:b.category_id ? String(b.category_id) : '',month:b.records_month || '',date_from:b.records_month ? '' : b.records_from,date_to:b.records_month ? '' : b.records_to,exclude_opening:true}}}>
