@@ -87,3 +87,23 @@ Validation results and release identifiers are recorded after the combined check
 
 The exact release commit must pass Vercel and all GitHub quality jobs (including
 PostgreSQL concurrency/load/recovery and Android JVM checks) before APK publication.
+
+## Release-environment corrections
+
+The first remote release attempt correctly blocked publication. All existing web,
+Android, PostgreSQL load and concurrency gates passed, but the new recovery gate
+assumed an ignored local folder existed and Vercel rejected a 240 MB Python bundle
+against its 225 MB limit.
+
+- Recovery uses an automatically cleaned OS temporary directory and reports only
+  an allowlisted error type on failure. A new full mock orchestration regression
+  and an actual PostgreSQL restore from an empty working directory both passed.
+- Uvicorn and its optional local server extras moved to requirements-dev.txt;
+  the Vercel ASGI handler does not need a local development server. The synthetic
+  browser workflow installs development requirements for its local server.
+- Preview/output artifacts are excluded from the function bundle, and local virtual
+  environments/database files are excluded from uploads. Runtime data dependencies,
+  exports and backup support remain present.
+- Fresh-process ASGI import without Uvicorn plus focused recovery: 41 passed.
+- These corrections do not change the already-built Android application assets.
+  The APK is held until quality and Vercel pass for the corrected source commit.

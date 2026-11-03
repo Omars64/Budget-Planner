@@ -3,7 +3,7 @@
   "functions": {
     "api/app.py": {
       "maxDuration": 300,
-      "excludeFiles": "{node_modules/**,src/**,dist/**,public/**,docs/**,scripts/**,tests/**,android/**,ios/**,.verification/**,.android-signing/**,.github/**}"
+      "excludeFiles": "{node_modules/**,poc/**,output/**,src/**,dist/**,public/**,docs/**,scripts/**,tests/**,android/**,ios/**,.verification/**,.android-signing/**,.github/**}"
     }
   },
   "crons": [

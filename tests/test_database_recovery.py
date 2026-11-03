@@ -3,6 +3,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 from types import SimpleNamespace
 import sys
+from pathlib import Path
 from scripts import rehearse_database_recovery as recovery
 from scripts.rehearse_database_recovery import rehearse
 
@@ -262,3 +263,67 @@ def test_source_refusal_prevents_dump_or_restore(monkeypatch, tmp_path):
     with pytest.raises(ValueError, match='unrelated source'):
         rehearse(URL, URL.replace('_source', '_target'), tmp_path)
     assert len(disposed) == 2
+
+
+def test_full_rehearsal_succeeds_without_workspace_verification_directory(monkeypatch, tmp_path):
+    """A fresh checkout must reach dump/encrypt/restore without ignored folders."""
+    tools = tmp_path / 'tools'
+    tools.mkdir()
+    for name in ('pg_dump', 'pg_restore'):
+        (tools / name).touch()
+    clean_cwd = tmp_path / 'fresh-checkout'
+    clean_cwd.mkdir()
+    monkeypatch.chdir(clean_cwd)
+    disposed, commands, fingerprints = [], [], []
+    fake_engine = SimpleNamespace(dispose=lambda: disposed.append(True))
+    monkeypatch.setattr(recovery, 'create_engine', lambda *args: fake_engine)
+    monkeypatch.setattr(recovery, 'empty_target', lambda *args: True)
+    monkeypatch.setattr(recovery, 'extend_fixture', lambda *args: None)
+    monkeypatch.setitem(sys.modules, 'api.database', SimpleNamespace(
+        Base=SimpleNamespace(metadata=SimpleNamespace(tables={'users': SimpleNamespace(name='users')}))))
+    sequences = {'synthetic-sequence': {'last_value': 7}}
+    monkeypatch.setattr(recovery, 'require_exclusive_source', lambda *args: sequences)
+    def fingerprint(engine, schema):
+        assert engine is fake_engine and schema == SCHEMA
+        fingerprints.append(True)
+        return {'users': {'rows': 2, 'sha256': 'synthetic-fingerprint'}}
+    monkeypatch.setattr(recovery, 'fingerprint', fingerprint)
+    def verify_sequences(engine, schema, expected):
+        assert expected is sequences and schema == SCHEMA
+        assert [name for name, _ in commands] == ['pg_dump', 'pg_restore']
+        return dict(sequences=1, sequence_state_equal=True,
+                    sequence_next_values_safe=True, post_restore_insertion_safe=True)
+    monkeypatch.setattr(recovery, 'verify_restored_sequences', verify_sequences)
+    def command(argv, **kwargs):
+        name = Path(argv[0]).name
+        archive = Path(argv[argv.index('--file') + 1] if name == 'pg_dump' else argv[-1])
+        assert archive.is_absolute() and archive.parent.is_dir()
+        assert kwargs == {'capture_output': True, 'timeout': 120}
+        assert not (clean_cwd / '.verification').exists()
+        if name == 'pg_dump':
+            archive.write_bytes(b'synthetic PostgreSQL custom dump')
+        else:
+            # This is after the real Fernet encryption/decryption roundtrip.
+            assert archive.read_bytes() == b'synthetic PostgreSQL custom dump'
+            assert '--exit-on-error' in argv
+        commands.append((name, archive))
+        return SimpleNamespace(returncode=0)
+    monkeypatch.setattr(recovery.subprocess, 'run', command)
+    def fixture(source, workers, before_cleanup):
+        assert source == URL and workers == 2
+        before_cleanup(URL, SCHEMA)
+        return {'passed': True}
+    monkeypatch.setattr(recovery, 'run', fixture)
+
+    result = rehearse(URL, URL.replace('_source', '_target'), tools, workers=2)
+
+    assert result['passed'] and result['concurrency']['passed']
+    checked = result['database_recovery']
+    assert checked['encrypted_roundtrip'] and checked['table_contents_equal']
+    assert checked['post_restore_insertion_safe'] and checked['source_exclusive']
+    assert checked['tables'] == 1 and checked['rows'] == 2
+    assert len(fingerprints) == 3 and len(disposed) == 2
+    assert [name for name, _ in commands] == ['pg_dump', 'pg_restore']
+    assert commands[0][1] == commands[1][1]
+    assert not commands[0][1].parent.exists()  # temporary archive cleaned up
+    assert list(clean_cwd.iterdir()) == []

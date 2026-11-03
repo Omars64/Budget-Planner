@@ -2,3 +2,4 @@
 pytest>=8.4,<9.0
 httpx>=0.28,<1.0
 fakeredis[lua]>=2.40,<3
+uvicorn[standard]>=0.35,<1.0

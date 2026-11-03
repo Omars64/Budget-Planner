@@ -209,7 +209,9 @@ def rehearse(source, target, pg_bin, workers=4):
                                                         {table.name for table in Base.metadata.tables.values()})
             before = fingerprint(source_engine, schema)
             started = time.perf_counter()
-            with tempfile.TemporaryDirectory(prefix='database-recovery-', dir='.verification') as directory:
+            # A fresh CI checkout has no ignored .verification directory. Use
+            # the OS temporary directory, with automatic cleanup on every exit.
+            with tempfile.TemporaryDirectory(prefix='database-recovery-') as directory:
                 archive = Path(directory) / 'synthetic.dump'
                 def command(name, arguments):
                     result = subprocess.run([str(executables[name]), *arguments], capture_output=True, timeout=120)
@@ -255,8 +257,12 @@ def main():
     args = parser.parse_args()
     try:
         result = rehearse(args.source, args.target, args.pg_bin, args.workers)
-    except Exception:
-        print('Synthetic database recovery failed; no connection details printed')
+    except Exception as error:
+        category = type(error).__name__
+        if category not in {'FileNotFoundError', 'ValueError', 'RuntimeError',
+                            'OperationalError', 'VerificationFailure', 'TimeoutExpired'}:
+            category = 'verification_error'
+        print(f'Synthetic database recovery failed: {category}; no connection details printed')
         return 1
     if args.output:
         with args.output.open('x', encoding='utf-8') as output:

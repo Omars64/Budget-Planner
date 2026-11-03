@@ -4,3 +4,12 @@ android/
 ios/
 Git_Commands.txt
 tests/
+
+# Local development environments, previews and generated artifacts are not deployment inputs.
+.venv/
+__pycache__/
+.pytest_cache/
+pytest-cache-files-*/
+poc/
+output/
+*.db
