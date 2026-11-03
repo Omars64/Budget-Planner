@@ -63,7 +63,9 @@ try {
         Invoke-Step 'Check app and Android version consistency' { & npm.cmd run version:check }
         if (!$SkipTests) {
             Invoke-Step 'Frontend lint (same gate as GitHub)' { & npm.cmd run lint }
-            Invoke-Step 'Frontend regression tests' { & npm.cmd test -- --maxWorkers=2 }
+            # One worker avoids intermittent Windows fork-start timeouts that can
+            # leave an otherwise successful suite waiting for hours.
+            Invoke-Step 'Frontend regression tests' { & npm.cmd test -- --maxWorkers=1 }
             $numberTests = Join-Path $projectRoot '.verification/update-numbers'
             Invoke-Step 'Compile native update metadata regression test' {
                 & (Join-Path $JdkHome 'bin/javac.exe') -d $numberTests (Join-Path $projectRoot 'android/app/src/main/java/com/flowbudget/app/UpdateNumbers.java') (Join-Path $projectRoot 'tests/android/UpdateNumbersTest.java')
