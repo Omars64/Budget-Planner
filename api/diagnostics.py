@@ -8,6 +8,7 @@ from .database import get_db, IS_EPHEMERAL_VERCEL_SQLITE
 from .auth_dependency import current_user
 from .account_security import limit
 from .monitoring import job_status
+from .operational_signals import operational_signals
 from .reliability_models import ServiceEvent
 
 router = APIRouter()
@@ -33,6 +34,8 @@ def client_error(payload: ClientSignal, user=Depends(current_user), db=Depends(g
 def readiness(db=Depends(get_db)):
     db.execute(text('SELECT 1'))
     jobs = job_status(db)
-    ready = not IS_EPHEMERAL_VERCEL_SQLITE and all(row['healthy'] is not False for row in jobs.values())
+    ready = (not IS_EPHEMERAL_VERCEL_SQLITE
+             and all(row['healthy'] is not False for row in jobs.values())
+             and operational_signals(db)['healthy'])
     return JSONResponse({'ok': ready}, status_code=200 if ready else 503,
                         headers={'Cache-Control': 'no-store'})

@@ -1,7 +1,7 @@
 import { deleteOffline, listOffline, readOffline, writeOffline, updateOffline } from './offlineStore'
 
 let activeUserId = null
-let currentSync = null
+const currentSyncs = new Map()
 const queuePath = path => path.split('?')[0] === '/api/transactions' || path.split('?')[0] === '/api/shared/transactions'
 const cachedPath = path => /^\/api\/(wallets(?:\?|$)|categories(?:\?|$)|transactions(?:\?|$)|shared\/(?:wallets(?:\/\d+\/categories)?|transactions)(?:\?|$)|dashboard(?:\?|$)|attention(?:\?|$)|budgets(?:\?|$)|goals(?:\?|$)|debts(?:\?|$)|planned-transactions(?:\?|$))/.test(path)
 const notify = () => window.dispatchEvent(new Event('budgetly:offline-queue-changed'))
@@ -62,7 +62,7 @@ export async function queueOfflineTransaction(path, options) {
   const rows = await listOffline(`queue:${userId}:`)
   if (rows.length >= 100) throw new Error('This device has 100 entries waiting to sync. Connect and sync them before adding more.')
   const id = crypto.randomUUID()
-  const key = options.headers?.get?.('Idempotency-Key') || crypto.randomUUID()
+  const key = new Headers(options.headers).get('Idempotency-Key') || crypto.randomUUID()
   const payload = JSON.parse(options.body)
   const record = { id, userId, path, body: options.body, key, description: payload.description,
     amount: payload.amount, type: payload.type, wallet_id: payload.wallet_id,
@@ -97,9 +97,10 @@ export async function retryOfflineTransaction(id, userId = activeUserId) {
 
 export function syncOfflineQueue(send, token, userId = activeUserId) {
   if (!userId || !token || navigator.onLine === false) return Promise.resolve()
-  if (currentSync) return currentSync
+  const syncKey = JSON.stringify([String(userId), token])
+  if (currentSyncs.has(syncKey)) return currentSyncs.get(syncKey)
   window.dispatchEvent(new CustomEvent('budgetly:sync-state', { detail: { userId: String(userId), syncing: true } }))
-  currentSync = (async () => {
+  const run = async () => {
     const rows = await listOfflineQueue(userId)
     for (const candidate of rows) {
       if (activeUserId !== String(userId) || navigator.onLine === false) break
@@ -115,17 +116,26 @@ export function syncOfflineQueue(send, token, userId = activeUserId) {
       try {
         const headers = new Headers({ 'Idempotency-Key': row.key })
         await send(row.path, { method: 'POST', body: row.body, headers })
-        await deleteOffline(`queue:${userId}:${row.id}`)
-        if (activeUserId === String(userId)) {
-          notify()
-          window.dispatchEvent(new Event('budgetly:offline-synced'))
-        }
       } catch (error) {
         if (error.staleAuth || error.network || error.status === 401 || error.status >= 500) break
         await updateOffline(storageKey, record => record ? { ...record, status: 'failed', error: error.message } : undefined)
         notify()
+        continue
+      }
+      // A local cleanup failure is not a server rejection. Keep the original
+      // pending row/key so the next replay can confirm the committed save.
+      await deleteOffline(storageKey)
+      if (activeUserId === String(userId)) {
+        notify()
+        window.dispatchEvent(new Event('budgetly:offline-synced'))
       }
     }
-  })().finally(() => { currentSync = null; window.dispatchEvent(new CustomEvent('budgetly:sync-state', { detail: { userId: String(userId), syncing: false } })) })
+  }
+  // Web Locks serialize replay across tabs and release automatically on tab close.
+  // Read the queue inside the lock so a waiting tab sees committed removals.
+  const currentSync = (navigator.locks?.request
+    ? navigator.locks.request(`budgetly:offline-sync:${userId}`, run)
+    : run()).finally(() => { currentSyncs.delete(syncKey); window.dispatchEvent(new CustomEvent('budgetly:sync-state', { detail: { userId: String(userId), syncing: false } })) })
+  currentSyncs.set(syncKey, currentSync)
   return currentSync
 }

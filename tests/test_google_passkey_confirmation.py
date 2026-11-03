@@ -1,4 +1,6 @@
 from datetime import timedelta
+import os
+from functools import partial
 from fastapi.testclient import TestClient
 from api.app import app
 from api.database import SessionLocal
@@ -6,6 +8,8 @@ from api.models import User, utc_now
 from api.google_auth import GoogleIdentity
 from api.reliability_models import AccountSession
 from tests.test_api import auth_headers
+
+auth_headers = partial(auth_headers, email=os.environ['ADMIN_INITIAL_EMAIL'])
 
 
 def test_google_only_registration_requires_fresh_same_account_session_confirmation():

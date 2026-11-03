@@ -42,6 +42,49 @@ def ready_flow(db):
     return user, row
 
 
+@pytest.mark.parametrize('change', ['counter', 'revocation'])
+def test_passkey_login_rejects_credential_changed_during_verification(db, monkeypatch, change):
+    from types import SimpleNamespace
+    from api import passkeys
+    user = db.query(User).one()
+    db.add(passkeys.Passkey(id='Y3JlZGVudGlhbA', user_id=user.id, public_key='a2V5', sign_count=1))
+    db.add(passkeys.PasskeyChallenge(id='login-race', value='Y2hhbGxlbmdl', purpose='login',
+        expires=utc_now() + timedelta(minutes=5)))
+    db.commit()
+
+    def verify(**kwargs):
+        assert kwargs['credential_current_sign_count'] == 1
+        table = passkeys.Passkey.__table__
+        statement = (table.delete() if change == 'revocation' else table.update().values(sign_count=2))
+        db.execute(statement.where(table.c.id == 'Y3JlZGVudGlhbA'))
+        return SimpleNamespace(new_sign_count=2)
+
+    monkeypatch.setattr(passkeys, 'verify_authentication_response', verify)
+    issued = []
+    monkeypatch.setattr(passkeys, 'issue_token', lambda user: issued.append(user.id))
+    with pytest.raises(HTTPException) as error:
+        passkeys.login_verify(passkeys.Response(challenge_id='login-race',
+            credential={'rawId': 'Y3JlZGVudGlhbA'}), db)
+    assert error.value.status_code == 401
+    assert issued == []
+
+
+def test_passkey_enrollment_proof_is_bound_to_session_and_credentials(db):
+    from api import passkeys
+    user = db.query(User).one()
+    request = Request({'type': 'http'})
+    request.state.session_id = 'review-session'
+    purpose = passkeys.registration_purpose(request, user)
+    assert len(purpose) <= 40
+    db.add(passkeys.PasskeyChallenge(id='registration-proof', value='Y2hhbGxlbmdl', purpose=purpose,
+        expires=utc_now() + timedelta(minutes=5)))
+    db.commit()
+    user.password_hash = 'recovered-password'
+    with pytest.raises(HTTPException):
+        passkeys.consume(db, 'registration-proof', passkeys.registration_purpose(request, user))
+    assert db.get(passkeys.PasskeyChallenge, 'registration-proof') is not None
+
+
 def test_reset_invalidates_pending_google_signin_and_sessions(db, monkeypatch):
     user, row = ready_flow(db)
     secret = 'synthetic-reset-token-123'

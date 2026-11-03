@@ -171,10 +171,20 @@ def create_balance_check(
     user: User = Depends(workspace_actor),
     db: Session = Depends(get_db),
 ):
+    from .coordination import lock_wallet_owners
+
+    # Serialize the snapshot with financial writes and membership changes, then
+    # authorize again against the current wallet and membership under that claim.
+    lock_wallet_owners(db, wallet_id)
     wallet, can_check = accessible_wallet(db, user, wallet_id)
     if not can_check:
         raise HTTPException(403, 'Only an owner or editor can check this balance')
-    materialize_recurring_for_user(db, wallet.user_id)
+    if materialize_recurring_for_user(db, wallet.user_id):
+        # Recurrence posting commits its transaction, releasing the owner claim.
+        lock_wallet_owners(db, wallet_id)
+        wallet, can_check = accessible_wallet(db, user, wallet_id)
+        if not can_check:
+            raise HTTPException(403, 'Only an owner or editor can check this balance')
     receipt, previous = reserve(db, user.id, f'balance-check:{wallet_id}', request.headers.get('Idempotency-Key'), payload)
     if previous is not None:
         return previous
@@ -182,7 +192,7 @@ def create_balance_check(
         wallet_id=wallet.id,
         checked_by_id=user.id,
         checked_by_name=user.username,
-        expected_balance=Decimal(str(wallet_balance(db, wallet))),
+        expected_balance=exact_wallet_balance(db, wallet),
         observed_balance=payload.observed_balance,
         currency=setting(db, wallet.user_id, 'currency', 'KWD'),
         note=payload.note.strip(),
@@ -197,3 +207,14 @@ def create_balance_check(
     audit(db, wallet.user_id, user.id, 'Checked wallet balance', f'wallet:{wallet.id}')
     db.commit()
     return result
+
+
+def exact_wallet_balance(db, wallet):
+    """Keep persisted reconciliation amounts in Decimal through aggregation."""
+    totals = {}
+    for kind, column in (('income', Transaction.wallet_id), ('expense', Transaction.wallet_id),
+                         ('out', Transaction.wallet_id), ('in', Transaction.transfer_wallet_id)):
+        tx_type = kind if kind in {'income', 'expense'} else 'transfer'
+        totals[kind] = db.query(func.sum(Transaction.amount)).filter(
+            column == wallet.id, Transaction.type == tx_type).scalar() or Decimal('0')
+    return wallet.initial_balance + totals['income'] - totals['expense'] - totals['out'] + totals['in']

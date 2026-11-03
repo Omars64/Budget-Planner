@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,6 +12,61 @@ from api.app import app
 from api.database import Base, get_db
 from api.index import current_user, export_backup
 from api.models import Transaction, User, Wallet, WalletBalanceCheck, WalletShare
+
+
+def test_reconciliation_keeps_full_decimal_precision():
+    from unittest.mock import MagicMock
+    from api.financial_ledger import exact_wallet_balance
+
+    db = MagicMock()
+    db.query.return_value.filter.return_value.scalar.side_effect = [
+        Decimal('9999999999999.999'), Decimal('0.001'), Decimal('0.002'), Decimal('0.003')]
+    result = exact_wallet_balance(db, Wallet(id=1, initial_balance=Decimal('0.001')))
+    assert result == Decimal('10000000000000.000')
+    assert isinstance(result, Decimal)
+
+
+def test_balance_check_claims_owner_before_reading_and_avoids_float(ledger_workspace, monkeypatch):
+    from api import coordination, financial_ledger
+
+    client, db, _, _, _, _ = ledger_workspace
+    ident = wallet(client, db, 'Exact cash', '100.001')
+    events = []
+    original_lock = coordination.lock_wallet_owners
+    original_access = financial_ledger.accessible_wallet
+    def claim(*args, **kwargs):
+        result = original_lock(*args, **kwargs)
+        events.append('claim')
+        return result
+    def access(*args, **kwargs):
+        events.append('access')
+        assert events == ['claim', 'access']
+        return original_access(*args, **kwargs)
+    monkeypatch.setattr(coordination, 'lock_wallet_owners', claim)
+    monkeypatch.setattr(financial_ledger, 'accessible_wallet', access)
+    monkeypatch.setattr(financial_ledger, 'wallet_balance', lambda *args: pytest.fail('float snapshot'))
+    response = client.post(f'/api/ledger/wallets/{ident}/checks', json={'observed_balance': '100.001'})
+    assert response.status_code == 201, response.text
+    assert response.json()['matches'] is True
+    assert db.query(WalletBalanceCheck).one().expected_balance == Decimal('100.001')
+
+
+def test_balance_check_reauthorizes_after_recurrence_commit(ledger_workspace, monkeypatch):
+    client, db, actor, owner, member, _ = ledger_workspace
+    ident = wallet(client, db, 'Shared cash', 100)
+    db.add(WalletShare(wallet_id=ident, owner_id=owner.id, invitee_email=member.email,
+                       member_user_id=member.id, permission='edit'))
+    db.commit()
+    actor['user'] = member
+    def posting_committed(session, owner_id):
+        # A commit releases the claim; simulate a downgrade before reacquisition.
+        session.query(WalletShare).filter_by(wallet_id=ident).one().permission = 'view'
+        session.commit()
+        return 1
+    monkeypatch.setattr('api.financial_ledger.materialize_recurring_for_user', posting_committed)
+    response = client.post(f'/api/ledger/wallets/{ident}/checks', json={'observed_balance': 100})
+    assert response.status_code == 403, response.text
+    assert db.query(WalletBalanceCheck).count() == 0
 
 
 @pytest.fixture

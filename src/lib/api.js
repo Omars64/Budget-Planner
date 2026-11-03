@@ -14,7 +14,7 @@ const responseCache = new Map()
 export const readCached = path => {
   path = scopedPath(path)
   const value = responseCache.get(path)
-  return value?.token === auth.token && Date.now() - value.time < 60000 ? value.data : undefined
+  return value?.token === auth.token && value.userId === offlineUser() && Date.now() - value.time < 60000 ? value.data : undefined
 }
 
 export const auth = {
@@ -74,13 +74,14 @@ export function api(path, options = {}) {
   if (options.method === 'PUT' && options.body) {
     try { const data = JSON.parse(options.body); if (data.revision) { const headers = new Headers(options.headers); headers.set('If-Match', data.revision); options = {...options, headers} } } catch { /* Non-JSON requests do not carry revisions. */ }
   }
-  const key = JSON.stringify([auth.token, path, options.method || 'GET', options.body || ''])
+  const suppliedKey = new Headers(options.headers).get('Idempotency-Key')
+  const key = JSON.stringify([auth.token, offlineUser(), path, options.method || 'GET', options.body || '', suppliedKey])
   if (!options.signal && pending.has(key)) return pending.get(key)
   const transaction = options.method === 'POST' && !path.startsWith('/api/auth/') && !path.startsWith('/api/passkeys/') && path !== '/api/account/confirm'
   if (transaction) {
     if (!transactionKeys.has(key)) transactionKeys.set(key, crypto.randomUUID())
     const headers = new Headers(options.headers)
-    headers.set('Idempotency-Key', transactionKeys.get(key))
+    headers.set('Idempotency-Key', suppliedKey || transactionKeys.get(key))
     options = { ...options, headers }
   }
   const mutation = options.method && options.method !== 'GET'
@@ -99,6 +100,7 @@ export function api(path, options = {}) {
     assertRequestIdentity(requestToken, requestUser)
     return send(path,options)
   }).then(data => {
+    assertRequestIdentity(requestToken, requestUser)
     if (transaction) transactionKeys.delete(key)
     return data
   }).catch(error => {
@@ -171,7 +173,7 @@ async function send(path, options = {}) {
     throw error
   }
   if (!options.method || options.method === 'GET') {
-    if (path.startsWith('/api/shared/') || path.split('?')[0] === '/api/wallets') responseCache.set(path, { token: requestToken, time: Date.now(), data })
+    if (path.startsWith('/api/shared/') || path.split('?')[0] === '/api/wallets') responseCache.set(path, { token: requestToken, userId: requestUser, time: Date.now(), data })
     await cacheOfflineResponse(path, data)
   } else responseCache.clear()
   checkIdentity()
@@ -179,7 +181,14 @@ async function send(path, options = {}) {
   return data
 }
 
-export const flushOfflineTransactions = () => syncOfflineQueue(send, auth.token)
+export const flushOfflineTransactions = () => {
+  const token = auth.token
+  const userId = offlineUser()
+  return syncOfflineQueue((path, options) => {
+    assertRequestIdentity(token, userId)
+    return send(path, options)
+  }, token, userId)
+}
 
 export const money = (value, currency = 'KWD', compact = false) => {
   const n = Number(value || 0)

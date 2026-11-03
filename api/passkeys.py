@@ -1,5 +1,6 @@
 """Server-verified passkeys with expiring, single-use challenges."""
 import json
+import hashlib
 import os
 import secrets
 from datetime import datetime, timedelta
@@ -97,6 +98,13 @@ def consume(db, key, purpose):
     if claimed != 1: raise HTTPException(400, 'Passkey request already used.')
     return value
 
+
+def registration_purpose(request, user):
+    # Proof belongs to the session that supplied it, not every bearer for this
+    # account. Include the credential version so password recovery invalidates it.
+    binding = json.dumps([user.id, request.state.session_id, user.password_hash])
+    return 'reg:' + hashlib.sha256(binding.encode()).hexdigest()[:36]
+
 @router.get('/api/passkeys')
 def status(user: User = Depends(current_user), db: Session = Depends(get_db)):
     return {'enabled': db.query(Passkey).filter_by(user_id=user.id).first() is not None}
@@ -116,11 +124,11 @@ def register_options(payload: RegistrationConfirmation, request: Request, user: 
     options = generate_registration_options(rp_id=rp_id(), rp_name='Budgetly', user_id=str(user.id).encode(), user_name=user.email,
         exclude_credentials=[PublicKeyCredentialDescriptor(id=base64url_to_bytes(row.id)) for row in db.query(Passkey).filter_by(user_id=user.id).all()],
         authenticator_selection=AuthenticatorSelectionCriteria(resident_key=ResidentKeyRequirement.REQUIRED, user_verification=UserVerificationRequirement.REQUIRED))
-    return challenge(db, options, f'register:{user.id}')
+    return challenge(db, options, registration_purpose(request, user))
 
 @router.post('/api/passkeys/register/verify')
-def register_verify(payload: Response, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    expected = consume(db, payload.challenge_id, f'register:{user.id}')
+def register_verify(payload: Response, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    expected = consume(db, payload.challenge_id, registration_purpose(request, user))
     try:
         verified = verify_registration_response(credential=payload.credential, expected_challenge=expected, expected_rp_id=rp_id(), expected_origin=trusted_origins(), require_user_verification=True)
     except Exception:
@@ -152,7 +160,15 @@ def login_verify(payload: Response, db: Session = Depends(get_db)):
         result = verify_authentication_response(credential=payload.credential, expected_challenge=expected, expected_rp_id=rp_id(), expected_origin=trusted_origins(), credential_public_key=base64url_to_bytes(row.public_key), credential_current_sign_count=row.sign_count, require_user_verification=True)
     except Exception:
         raise HTTPException(401, 'Passkey verification failed. Please try again.')
-    row.sign_count = result.new_sign_count
+    # SQLite ignores FOR UPDATE. Claim the verified credential version before
+    # issuing a session, so concurrent assertions cannot reuse an old counter or
+    # finish authentication after the credential has been revoked.
+    advanced = db.query(Passkey).filter_by(
+        id=row.id, user_id=user.id, public_key=row.public_key, sign_count=row.sign_count
+    ).update({'sign_count': result.new_sign_count}, synchronize_session=False)
+    if advanced != 1:
+        db.rollback()
+        raise HTTPException(401, 'Passkey changed during verification. Please try again.')
     db.commit()
     return {'token': issue_token(user), 'user': user_payload(user)}
 

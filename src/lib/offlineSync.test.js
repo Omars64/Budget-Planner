@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api, auth, flushOfflineTransactions, readCached } from './api'
 import { discardOfflineTransaction, listOfflineQueue, setOfflineUser, syncOfflineQueue } from './offlineSync'
-import {deleteOffline} from './offlineStore'
+import {deleteOffline, updateOffline, writeOffline} from './offlineStore'
 
 const records = vi.hoisted(() => new Map())
 vi.mock('./offlineStore', () => ({
@@ -286,4 +286,58 @@ describe('in-flight account isolation', () => {
     expect(auth.token).toBe('new-session')
     expect(fetch.mock.calls[0][1].headers.has('Authorization')).toBe(false)
   })
+})
+
+describe('offline identity boundaries', () => {
+  it('does not report a durable local save as success to a different account', async () => {
+    setOfflineUser(4)
+    auth.token = 'account-a'
+    vi.stubGlobal('navigator', {onLine:false})
+    writeOffline.mockImplementationOnce(async (key, value) => {
+      records.set(key, value)
+      setOfflineUser(5)
+      auth.token = 'account-b'
+    })
+    await expect(api('/api/transactions', {method:'POST',body:'{"amount":73}'})).rejects.toMatchObject({staleAuth:true})
+    expect(await listOfflineQueue(4)).toHaveLength(1)
+    expect(await listOfflineQueue(5)).toEqual([])
+  })
+
+  it('does not replay with a replacement token after an asynchronous storage claim', async () => {
+    setOfflineUser(4)
+    auth.token = 'original-token'
+    records.set('queue:4:entry', {id:'entry',key:'original',path:'/api/transactions',body:'{}',status:'pending',attempted:false})
+    updateOffline.mockImplementationOnce(async (key, update) => {
+      const row = update(records.get(key))
+      records.set(key, row)
+      auth.token = 'replacement-token'
+      return row
+    })
+    vi.stubGlobal('fetch', vi.fn())
+    await flushOfflineTransactions()
+    expect(fetch).not.toHaveBeenCalled()
+    expect(await listOfflineQueue(4)).toHaveLength(1)
+  })
+})
+
+it('keeps a confirmed server save retryable if local deletion aborts', async () => {
+  setOfflineUser(4)
+  records.set('queue:4:entry', {id:'entry',key:'original',path:'/api/transactions',body:'{}',status:'pending',attempted:false})
+  deleteOffline.mockRejectedValueOnce(new Error('Device storage failed'))
+  const send = vi.fn(async () => ({id:1}))
+  await expect(syncOfflineQueue(send, 'synthetic', 4)).rejects.toThrow('Device storage failed')
+  expect((await listOfflineQueue(4))[0]).toMatchObject({status:'pending',key:'original',attempted:true})
+  await syncOfflineQueue(send, 'synthetic', 4)
+  expect(send.mock.calls.map(([,options])=>options.headers.get('Idempotency-Key'))).toEqual(['original','original'])
+  expect(await listOfflineQueue(4)).toEqual([])
+})
+
+it('isolates the in-memory wallet cache when the offline identity changes first', async () => {
+  auth.token = 'same-token-during-transition'
+  setOfflineUser(4)
+  vi.stubGlobal('fetch', vi.fn(async () => ({ok:true,status:200,json:async()=>[{id:4}]})))
+  await api('/api/wallets')
+  expect(readCached('/api/wallets')).toEqual([{id:4}])
+  setOfflineUser(5)
+  expect(readCached('/api/wallets')).toBeUndefined()
 })

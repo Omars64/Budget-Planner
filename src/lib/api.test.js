@@ -66,3 +66,18 @@ it('rejects an unconfirmed save and reuses its key on retry', async () => {
     expect(fetchMock.mock.calls[1][1].headers.get('Idempotency-Key')).toBe(fetchMock.mock.calls[0][1].headers.get('Idempotency-Key'))
   } finally { vi.unstubAllGlobals() }
 })
+
+it('preserves explicit retry keys and does not coalesce distinct logical saves', async () => {
+  const releases = []
+  const fetchMock = vi.fn(() => new Promise(resolve => releases.push(resolve)))
+  vi.stubGlobal('fetch', fetchMock)
+  try {
+    const first = api('/api/wallets', {method:'POST',body:'{"name":"Same name"}',headers:{'Idempotency-Key':'logical-first'}})
+    const second = api('/api/wallets', {method:'POST',body:'{"name":"Same name"}',headers:{'Idempotency-Key':'logical-second'}})
+    const count = fetchMock.mock.calls.length
+    releases.forEach(resolve => resolve({ok:true,status:201,json:async()=>({id:1})}))
+    await Promise.all([first, second])
+    expect(count).toBe(2)
+    expect(fetchMock.mock.calls.map(([,options])=>options.headers.get('Idempotency-Key'))).toEqual(['logical-first','logical-second'])
+  } finally { vi.unstubAllGlobals() }
+})

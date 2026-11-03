@@ -60,3 +60,12 @@ test('unpaused unhealthy scheduler still needs attention', async () => {
   expect(await screen.findByText('Needs attention')).toHaveClass('form-error')
   expect(screen.queryByText('Paused')).not.toBeInTheDocument()
 })
+
+test('recent signals separate repeated failures from backup and scheduler health',async()=>{
+  api.mockResolvedValue({...health,signals:{window_minutes:15,failed_financial_requests:3,client_errors:2,slow_requests:4,healthy:false}})
+  render(<OperationsPanel/> )
+  expect(await screen.findByRole('region',{name:'Recent service signals'})).toHaveTextContent('Last 15 minutes')
+  expect(screen.getByText('Failed financial requests')).toBeInTheDocument()
+  expect(screen.getByRole('alert')).toHaveTextContent('Repeated financial request failures need attention')
+  expect(screen.getByText(/not balances or proof/)).toBeInTheDocument()
+})

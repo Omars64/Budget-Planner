@@ -183,6 +183,55 @@ def test_admin_without_membership_has_no_space_access(spaces):
     assert client.get(f"/api/transactions?space_id={ids['space']}").status_code == 403
 
 
+def test_claimed_membership_cannot_be_used_by_email_match(spaces):
+    client, engine, actor, ids = spaces
+    with Session(engine) as db:
+        # Simulate an old invitation address now belonging to another account.
+        db.query(SpaceMember).one().email = db.get(User, ids['outsider']).email
+        db.commit()
+    actor['id'] = ids['outsider']
+    assert client.get('/api/spaces').json() == []
+    assert client.get('/api/shared/wallets').json() == []
+    scope = f"?space_id={ids['space']}"
+    assert client.get('/api/transactions' + scope).status_code == 403
+    assert client.post('/api/transactions' + scope, json=transaction(ids['wallet'])).status_code == 403
+    assert client.get(f"/api/ledger/wallets/{ids['wallet']}").status_code == 403
+    assert client.post(f"/api/ledger/wallets/{ids['wallet']}/checks",
+                       json={'observed_balance': '23.750'}).status_code == 403
+    # The bound account retains access even after its invitation address changes.
+    actor['id'] = ids['member']
+    assert len(client.get('/api/spaces').json()) == 1
+    assert client.get('/api/transactions' + scope).status_code == 200
+
+
+def test_pending_space_invitation_can_still_be_claimed(spaces):
+    client, engine, actor, ids = spaces
+    with Session(engine) as db:
+        db.query(SpaceMember).one().member_user_id = None
+        db.commit()
+    actor['id'] = ids['member']
+    assert client.get(f"/api/transactions?space_id={ids['space']}").status_code == 200
+    assert len(client.get('/api/spaces').json()) == 1
+    with Session(engine) as db:
+        assert db.query(SpaceMember).one().member_user_id == ids['member']
+
+
+def test_financial_flush_rechecks_bound_space_identity(spaces):
+    from fastapi import HTTPException
+    from api.coordination import _refresh_access
+
+    _, engine, _, ids = spaces
+    with Session(engine) as db:
+        outsider = db.get(User, ids['outsider'])
+        db.query(SpaceMember).one().email = outsider.email
+        db.commit()
+        db.info['wallet_access'] = {(outsider.id, ids['wallet']):
+                                   (ids['owner'], outsider.email, 'edit')}
+        with pytest.raises(HTTPException) as denied:
+            _refresh_access(db, {ids['owner']})
+        assert denied.value.status_code == 403
+
+
 def test_forward_migration_upgrades_only_space_contributors(spaces):
     from alembic import command
     from alembic.config import Config

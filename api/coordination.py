@@ -154,9 +154,10 @@ def _refresh_access(db, owners):
             continue
         space_id = connection.execute(select(Wallet.space_id).where(Wallet.id == wallet_id)).scalar_one_or_none()
         if space_id is not None:
+            from .spaces import membership_matches
             current = connection.execute(select(SpaceMember.role).where(
                 SpaceMember.space_id == space_id,
-                or_(SpaceMember.member_user_id == actor_id, SpaceMember.email == email))).scalar_one_or_none()
+                membership_matches(actor_id, email))).scalar_one_or_none()
             current = 'edit' if current == 'add' else current
             if current != permission:
                 raise HTTPException(403, 'Space permissions changed. Refresh and try again.')

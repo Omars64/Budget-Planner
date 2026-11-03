@@ -2,6 +2,8 @@ import base64
 import hashlib
 import json
 import secrets
+import os
+from functools import partial
 import cbor2
 import pytest
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -10,6 +12,8 @@ from fastapi.testclient import TestClient
 from tests.test_api import auth_headers
 from api.app import app
 from api.android_identity import ANDROID_ORIGIN, ANDROID_CERT_SHA256
+
+auth_headers = partial(auth_headers, email=os.environ['ADMIN_INITIAL_EMAIL'])
 
 def enc(value):
     return base64.urlsafe_b64encode(value).decode().rstrip('=')
@@ -74,7 +78,7 @@ def test_passkey_registration_login_replay_and_revocation(credential_origin):
         assert 'Settings > Biometric sign-in' in rejected.json()['detail']
 
 
-def register_second_device(client, headers, credential_origin='https://budget-planner-ecru-seven.vercel.app', expected_status=200):
+def register_second_device(client, headers, credential_origin='https://budget-planner-ecru-seven.vercel.app', expected_status=200, foreign_headers=None):
     options = client.post('/api/passkeys/register/options', headers=headers, json={'password':'FlowBudgetAdmin!ChangeMe2026'}).json()
     key = ec.generate_private_key(ec.SECP256R1())
     public = key.public_key().public_numbers()
@@ -83,9 +87,22 @@ def register_second_device(client, headers, credential_origin='https://budget-pl
     client_data = json.dumps({'type':'webauthn.create', 'challenge':options['options']['challenge'], 'origin':credential_origin}).encode()
     auth_data = hashlib.sha256(b'budget-planner-ecru-seven.vercel.app').digest() + bytes([0x45]) + bytes(4) + bytes(16) + len(credential_id).to_bytes(2,'big') + credential_id + cose
     credential = {'id':enc(credential_id), 'rawId':enc(credential_id), 'type':'public-key', 'response':{'clientDataJSON':enc(client_data), 'attestationObject':enc(cbor2.dumps({'fmt':'none', 'attStmt':{}, 'authData':auth_data}))}}
+    if foreign_headers is not None:
+        rejected = client.post('/api/passkeys/register/verify', headers=foreign_headers,
+            json={'challenge_id':options['challenge_id'], 'credential':credential})
+        assert rejected.status_code == 400, rejected.text
     result = client.post('/api/passkeys/register/verify', headers=headers, json={'challenge_id':options['challenge_id'], 'credential':credential})
     assert result.status_code == expected_status, result.text
     return enc(credential_id)
+
+
+def test_registration_proof_cannot_be_transferred_between_same_account_sessions():
+    with TestClient(app) as client:
+        proving_session = auth_headers(client)
+        other_session = auth_headers(client)
+        assert proving_session != other_session
+        credential_id = register_second_device(client, proving_session, foreign_headers=other_session)
+        assert client.delete('/api/passkeys/item/' + credential_id, headers=proving_session).status_code == 204
 
 
 def test_untrusted_android_signer_and_localhost_cannot_register():

@@ -15,6 +15,19 @@ MAX_JSON_BYTES = 25_000_000
 MAX_RUN_ACCOUNTS = 10_000
 
 
+def unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError('Duplicate JSON object key in backup')
+        result[key] = value
+    return result
+
+
+def invalid_constant(_):
+    raise ValueError('Nonfinite JSON number in backup')
+
+
 def read_archive(stream):
     """Bound storage reads even when a stream returns short chunks."""
     data = bytearray()
@@ -36,7 +49,11 @@ def decode_backup(encrypted, secret):
         raw = archive.read(MAX_JSON_BYTES + 1)
     if len(raw) > MAX_JSON_BYTES:
         raise ValueError('Decompressed backup exceeds the JSON byte limit')
-    data = json.loads(raw)
+    data = json.loads(raw, object_pairs_hook=unique_object, parse_constant=invalid_constant)
+    if not isinstance(data, dict) or type(data.get('version')) is not int or data['version'] != 1:
+        raise ValueError('Unsupported Budgetly backup version')
+    if 'kind' in data and data['kind'] != 'budgetly-account-recovery-manifest':
+        raise ValueError('Unsupported Budgetly backup kind')
     if isinstance(data, dict) and data.get('kind') == 'budgetly-account-recovery-manifest':
         accounts = data.get('accounts')
         if data.get('version') != 1 or not isinstance(accounts, list) or any(

@@ -7,7 +7,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy import event, or_
+from sqlalchemy import and_, event, or_
 from sqlalchemy.orm import Session, with_loader_criteria
 
 from .database import get_db
@@ -59,10 +59,16 @@ def migrate_shared_wallets(connection, owner_id=None):
         wallets.select().with_only_columns(wallets.c.id).where(wallets.c.space_id.in_(space_ids)))).values(permission='edit'))
 
 
+def membership_matches(user_id, email):
+    """A claimed invitation belongs to its account, even if emails later change."""
+    return or_(SpaceMember.member_user_id == user_id, and_(
+        SpaceMember.member_user_id.is_(None), SpaceMember.email == email.lower()))
+
+
 def member_role(db, space, user):
     if space.owner_id == user.id:
         return 'owner'
-    member = db.query(SpaceMember).filter(SpaceMember.space_id == space.id, or_(SpaceMember.member_user_id == user.id, SpaceMember.email == user.email.lower())).populate_existing().first()
+    member = db.query(SpaceMember).filter(SpaceMember.space_id == space.id, membership_matches(user.id, user.email)).populate_existing().first()
     if not member:
         raise HTTPException(403, 'You no longer have access to this space.')
     role = 'edit' if member.role == 'add' else member.role
@@ -79,7 +85,7 @@ def space_wallet_permission(db, wallet, user):
 
 
 def space_wallet_ids(db, user):
-    memberships = db.query(SpaceMember.space_id).filter(or_(SpaceMember.member_user_id == user.id, SpaceMember.email == user.email.lower()))
+    memberships = db.query(SpaceMember.space_id).filter(membership_matches(user.id, user.email))
     return {row[0] for row in db.query(Wallet.id).join(Space, Wallet.space_id == Space.id).filter(
         or_(Space.owner_id == user.id, Space.id.in_(memberships)))}
 
@@ -258,7 +264,7 @@ def list_spaces(actor=Depends(authenticated), db: Session = Depends(get_db)):
         member.member_user_id = actor.id
     if pending:
         db.commit()
-    ids = db.query(SpaceMember.space_id).filter(or_(SpaceMember.member_user_id == actor.id, SpaceMember.email == actor.email.lower()))
+    ids = db.query(SpaceMember.space_id).filter(membership_matches(actor.id, actor.email))
     return [serialize(db, row, actor) for row in db.query(Space).filter(or_(Space.owner_id == actor.id, Space.id.in_(ids))).order_by(Space.created_at, Space.id).all()]
 
 

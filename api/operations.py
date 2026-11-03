@@ -11,13 +11,14 @@ from tempfile import TemporaryFile
 from datetime import datetime, timedelta, timezone
 from fastapi.encoders import jsonable_encoder
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import func, text
+from sqlalchemy import text
 from .database import IS_EPHEMERAL_VERCEL_SQLITE, engine, get_db
-from .index import current_user, admin_user
+from .index import admin_user
 from .models import User, RecoveryPoint, utc_now
 from .reliability_models import ServiceEvent, RateBucket
 from .data_safety import save_recovery
 from .monitoring import job_status
+from .operational_signals import operational_signals
 
 router=APIRouter()
 BACKUP_KEYS = ('BACKUP_S3_BUCKET', 'BACKUP_S3_REGION', 'BACKUP_S3_ACCESS_KEY_ID',
@@ -273,6 +274,6 @@ def operations(user=Depends(admin_user),db=Depends(get_db)):
     events=db.query(ServiceEvent).order_by(ServiceEvent.id.desc()).limit(100).all()
     backup=db.query(ServiceEvent).filter_by(area='daily-recovery',status=200).order_by(ServiceEvent.id.desc()).first()
     external=db.query(ServiceEvent).filter_by(area='external-backup',status=200).order_by(ServiceEvent.id.desc()).first()
-    return {'jobs':job_status(db),'database':'connected','database_engine':engine.dialect.name,'persistent_storage':not IS_EPHEMERAL_VERCEL_SQLITE,'email_configured':smtp_status().get('configured',False),'daily_job_configured':bool(os.getenv('CRON_SECRET')),'external_backup_configured':external_backup_ready(),
+    return {'jobs':job_status(db),'signals':operational_signals(db),'database':'connected','database_engine':engine.dialect.name,'persistent_storage':not IS_EPHEMERAL_VERCEL_SQLITE,'email_configured':smtp_status().get('configured',False),'daily_job_configured':bool(os.getenv('CRON_SECRET')),'external_backup_configured':external_backup_ready(),
             'external_backup_missing':[key for key in BACKUP_KEYS if not os.getenv(key)],
             'last_daily_backup':backup.created_at.isoformat()+'Z' if backup else None,'last_external_backup':external.created_at.isoformat()+'Z' if external else None,'events':[{'id':r.id,'area':r.area,'status':r.status,'duration_ms':r.duration_ms,'created_at':r.created_at.isoformat()+'Z'} for r in events]}

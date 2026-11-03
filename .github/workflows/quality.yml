@@ -9,6 +9,45 @@ concurrency:
   group: quality-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  postgres-recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: synthetic-ci-only
+          POSTGRES_DB: budgetly_verification_source
+        ports: ['55433:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d budgetly_verification_source"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Install matching PostgreSQL client tools
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl --fail --silent --show-error https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc > /dev/null
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+      - name: Prepare empty synthetic target
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: docker exec "$POSTGRES_CONTAINER" createdb -U postgres budgetly_verification_target
+      - name: Rehearse encrypted database recovery
+        run: python -m scripts.rehearse_database_recovery --source 'postgresql+psycopg://postgres:synthetic-ci-only@127.0.0.1:55433/budgetly_verification_source' --target 'postgresql+psycopg://postgres:synthetic-ci-only@127.0.0.1:55433/budgetly_verification_target' --pg-bin /usr/lib/postgresql/17/bin --output recovery-evidence.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: postgres-recovery-evidence
+          path: recovery-evidence.json
+          if-no-files-found: error
   browser-reliability:
     uses: ./.github/workflows/browser-reliability.yml
   postgres-load:

@@ -28,7 +28,7 @@ browserTests('real IndexedDB queue coordination across tabs', () => {
     first = await context.newPage()
     second = await context.newPage()
     for (const page of [first,second]) {
-      await page.goto('http://budgetly.test')
+      await page.goto('http://localhost')
       await page.evaluate(`(async () => {
         window.store = await import('/offlineStore.js');
         window.queue = await import('/offlineSync.js');
@@ -43,6 +43,61 @@ browserTests('real IndexedDB queue coordination across tabs', () => {
       status:'pending',attempted:false,createdAt:id==='a'?1:2,
     })
   }, ids)
+
+  it('serializes simultaneous replays across tabs and rereads after the lock', async () => {
+    await seed(['a'])
+    await first.evaluate(() => {
+      window.sent = []
+      window.running = window.queue.syncOfflineQueue(async (_path, options) => {
+        window.sent.push(options.headers.get('Idempotency-Key'))
+        await new Promise(resolve => {window.release = resolve})
+      }, 'synthetic', 4)
+    })
+    await first.waitForFunction(() => Boolean(window.release))
+    await second.evaluate(() => {
+      window.sent = []
+      window.running = window.queue.syncOfflineQueue(async (_path, options) => {
+        window.sent.push(options.headers.get('Idempotency-Key'))
+      }, 'synthetic', 4)
+    })
+    // A barrier on the lock queue proves the second tab has requested replay.
+    await second.waitForFunction(async () => (await navigator.locks.query()).pending.length === 1)
+    expect(await second.evaluate(() => window.sent)).toEqual([])
+    await first.evaluate(async () => {window.release(); await window.running})
+    await second.evaluate(() => window.running)
+    expect(await first.evaluate(() => window.sent)).toEqual(['original-a'])
+    expect(await second.evaluate(() => window.sent)).toEqual([])
+    expect(await second.evaluate(() => window.queue.listOfflineQueue(4))).toEqual([])
+  })
+
+  it('without Web Locks, tabs can replay using the same persisted idempotency key', async () => {
+    await seed(['a'])
+    for (const page of [first, second]) {
+      await page.evaluate(() => Object.defineProperty(navigator, 'locks', {configurable:true, value:undefined}))
+    }
+    await first.evaluate(() => {
+      window.sent = []
+      window.running = window.queue.syncOfflineQueue(async (_path, options) => {
+        window.sent.push(options.headers.get('Idempotency-Key'))
+        await new Promise(resolve => {window.release = resolve})
+        throw Object.assign(new Error('Response lost'), {network:true})
+      }, 'synthetic', 4)
+    })
+    await first.waitForFunction(() => Boolean(window.release))
+    // The second tab must complete even while the first request is unresolved.
+    const result = await second.evaluate(async () => {
+      const keys = []
+      await window.queue.syncOfflineQueue(async (_path, options) => {
+        keys.push(options.headers.get('Idempotency-Key'))
+      }, 'synthetic', 4)
+      return {keys, remaining:await window.queue.listOfflineQueue(4)}
+    })
+    expect(result).toEqual({keys:['original-a'], remaining:[]})
+    await first.evaluate(async () => {window.release(); await window.running})
+    expect(await first.evaluate(() => window.sent)).toEqual(['original-a'])
+    // Losing the earlier response must not recreate the confirmed queue entry.
+    expect(await first.evaluate(() => window.queue.listOfflineQueue(4))).toEqual([])
+  })
 
   it('another tab can discard a later snapshot entry without it being posted', async () => {
     await seed(['a','b'])
