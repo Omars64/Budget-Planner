@@ -30,6 +30,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
   const [wallets, setWallets] = useState([])
   const [categories, setCategories] = useState([])
   const [error, setError] = useState('')
+  const [conflict, setConflict] = useState(null)
   const [errors, setErrors] = useState({})
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -43,6 +44,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
   useEffect(() => {
     if (!open) return
     setError('')
+    setConflict(null)
     setErrors({})
     setLoading(true)
     setAdvanced(false)
@@ -84,6 +86,15 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
     if (result.changed) notify?.('Voice applied. Review the fields before saving.')
   }
 
+  const comparisonValue = (field, value) => {
+    if (value == null || value === '') return '—'
+    if (field === 'wallet_id') return wallets.find(item => String(item.id) === String(value))?.name || 'Wallet unavailable'
+    if (field === 'category_id') return categories.find(item => String(item.id) === String(value))?.name || 'Uncategorized'
+    if (field === 'date') return dateInput(value).replace('T', ' ')
+    if (field === 'amount') return money(value, settings.currency)
+    return String(value)
+  }
+
   const submit = async e => {
     e.preventDefault()
     if (!canAdd) { setError('This space is read-only for your account.'); return }
@@ -114,12 +125,27 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
       if (!editing) { rememberEntry(user.id,spaceKey,payload); clearDraft(draftKey) }
       if (!schedule && !saved.queued) transactionSaved(saved)
       onSaved?.(saved, schedule)
-    } catch (err) { setError(err.status === 409 ? 'This transaction changed elsewhere. Your edits are still here. Close and reopen the record to review the latest version before applying them.' : err.message) }
+    } catch (err) {
+      setError(err.status === 409 ? 'This entry changed on another device. Your edits are still in this form. Review the current entry before trying again.' : err.message)
+      if (err.status === 409 && editing) {
+        try { setConflict(await api(`/api/transactions/${editing.id}`)) }
+        catch { setConflict({unavailable:true}) }
+      }
+    }
     finally { submitting.current = false; setBusy(false) }
   }
 
   return <Modal preserveDraft={!editing} protectChanges={Boolean(editing)} isDirty={Boolean(editing && baseline.current && JSON.stringify(form) !== baseline.current)} open={open} onClose={() => !busy && !photoBusy && onClose()} title={editing ? 'Edit transaction' : 'Add transaction'} footer={close => <div className="modal-actions"><button type="button" className="button ghost" disabled={busy || photoBusy} onClick={close}>Cancel</button><button type="submit" form={formId} className="button primary" disabled={busy || loading || voiceActive || photoBusy}>{loading ? 'Loading wallets...' : photoBusy ? 'Preparing photo...' : busy ? 'Saving…' : editing ? 'Save changes' : schedule ? 'Schedule entry' : 'Add transaction'}</button></div>}>
     <form id={formId} onSubmit={submit} noValidate className="stack gap-18 transaction-form">
+      {conflict && <section className="transaction-conflict" aria-label="Compare transaction changes">
+        <strong>Review changes from another device</strong>
+        {conflict.unavailable ? <p>Could not load the latest entry. Keep this form open and try again when the connection returns.</p> : <>
+          <div className="transaction-conflict-compare"><span>Field</span><span>Your edit</span><span>Current entry</span>
+            {[['Description','description'],['Amount','amount'],['Date','date'],['Wallet','wallet_id'],['Category','category_id']].map(([label,field]) => <div className="transaction-conflict-row" key={field}><strong>{label}</strong><span>{comparisonValue(field,form[field])}</span><span>{comparisonValue(field,conflict[field])}</span></div>)}
+          </div>
+          <div className="button-row"><button type="button" className="button ghost" onClick={() => {setForm({...conflict,date:dateInput(conflict.date),transfer_wallet_id:conflict.transfer_wallet_id || '',category_id:conflict.category_id || ''});setConflict(null);setError('')}}>Use current entry</button><button type="button" className="button primary" onClick={() => {setForm(current => ({...current,revision:conflict.revision}));setConflict(null);setError('Review your edits, then select Save changes to apply them over the current entry.')}}>Keep my edits</button></div>
+        </>}
+      </section>}
       <fieldset className="transaction-fields stack gap-18" disabled={busy || loading}>
       <div className="segment-control three" role="group" aria-label="Transaction type">
         <button type="button" aria-pressed={form.type === 'expense'} className={form.type === 'expense' ? 'active' : ''} onClick={() => {set('type','expense');set('category_id','')}}><ArrowUpRight size={17}/>Expense</button>

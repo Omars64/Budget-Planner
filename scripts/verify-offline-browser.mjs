@@ -2,6 +2,7 @@
 import { chromium, expect } from '@playwright/test'
 import { spawn } from 'node:child_process'
 import { setTimeout as delay } from 'node:timers/promises'
+import { writeFile } from 'node:fs/promises'
 
 if (process.env.CI !== 'true') throw new Error('Browser automation is restricted to CI')
 const origin = 'http://127.0.0.1:8765'
@@ -265,6 +266,33 @@ try {
   expect(await transactions()).toEqual([])
   await expect(page.getByText(marker, { exact: true })).toHaveCount(0)
   await expect(page.getByText(pendingMarker, { exact: true })).toHaveCount(0)
+  stage = 'responsive transaction and navigation layout'
+  await context.setOffline(false)
+  const layoutEvidence = []
+  for (const width of [1440, 390, 320]) {
+    await page.setViewportSize({ width, height: 800 })
+    for (const [route, title] of [['','Overview'],['transactions','Transactions'],['wallets','Wallets'],['upcoming','Upcoming'],['budgets','Budgets'],['bank-messages','Bank Inbox'],['spaces','Spaces'],['calendar','Calendar'],['attention','Attention'],['feedback','Feedback'],['settings','Settings'],['more','More']]) {
+      const started = performance.now()
+      await page.goto(`${origin}/#/${route}`)
+      await expect(page.locator('.topbar h2')).toHaveText(title)
+      await page.waitForTimeout(350)
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+      if (overflow > 1) {
+        const offenders = await page.evaluate(() => [...document.querySelectorAll('body *')].filter(element => element.getBoundingClientRect().right > document.documentElement.clientWidth + 1).slice(0,8).map(element => ({tag:element.tagName,className:typeof element.className === 'string' ? element.className.slice(0,80) : '',right:Math.round(element.getBoundingClientRect().right)})))
+        throw new Error(`Horizontal overflow at ${width}px on ${route}: ${overflow}px ${JSON.stringify(offenders)}`)
+      }
+      const headerOverlap = await page.evaluate(() => {
+        const title = document.querySelector('.topbar-left h2')?.getBoundingClientRect()
+        const account = document.querySelector('.header-user-tag')?.getBoundingClientRect()
+        return title && account && title.right > account.left && title.top < account.bottom && account.top < title.bottom
+          ? { title: [Math.round(title.left), Math.round(title.top), Math.round(title.right), Math.round(title.bottom)], account: [Math.round(account.left), Math.round(account.top), Math.round(account.right), Math.round(account.bottom)] } : null
+      })
+      if (headerOverlap) throw new Error(`Header overlap at ${width}px on ${route}: ${JSON.stringify(headerOverlap)}`)
+      layoutEvidence.push({ width, route, horizontalOverflowPx: overflow, headerOverlap, routeReadyMs: Math.round(performance.now() - started) })
+    }
+  }
+  await writeFile('browser-layout-evidence.json', JSON.stringify({ synthetic: true, measurements: layoutEvidence }, null, 2))
+  await page.setViewportSize({ width: 1440, height: 1000 })
   await context.setOffline(true)
   stage = 'account B offline reopening'
   await page.reload({ waitUntil: 'domcontentloaded' })

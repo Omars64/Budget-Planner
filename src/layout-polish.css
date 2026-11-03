@@ -1,6 +1,11 @@
 .budgetly-v2 :is(.sidebar-toggle,.ai-history-toggle) { border-radius:8px; border:1px solid var(--line); width:36px; height:36px; }
 .budgetly-v2 .settings-grid { border-radius:8px; overflow:clip; }
 .budgetly-v2 .page-wrap :is(.ledger-page,.workspace,.settings-section,.calendar-panel,.day-panel,.attention-item,.panel) { border-radius:8px; }
+@media (max-width:520px) {
+  .calendar-layout,.calendar-layout > * { box-sizing:border-box; min-width:0; max-width:100%; }
+  .calendar-weekdays,.calendar-grid { grid-template-columns:repeat(7,minmax(0,1fr)); min-width:0; width:100%; }
+  .calendar-day { min-width:0; }
+}
 .budgetly-v2 .page-wrap :is(.ledger-page,.workspace) { overflow:clip; }
 .budgetly-v2.has-ledger .topbar { position:sticky; top:0; z-index:25; background:var(--page); padding-top:12px; padding-bottom:12px; border-radius:8px; }
 @media (max-width:820px) {

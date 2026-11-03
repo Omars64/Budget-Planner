@@ -17,8 +17,10 @@ export function readDraft(key) {
 export function writeDraft(key, data) {
   try { sessionStorage.setItem(key, JSON.stringify(data)) } catch { /* Try durable storage too. */ }
   try { localStorage.setItem(key, JSON.stringify({savedAt:Date.now(),data})) } catch { /* The in-memory form remains usable. */ }
+  window.dispatchEvent(new CustomEvent('budgetly:transaction-draft', {detail:{key}}))
 }
 export function clearDraft(key) {
   try { sessionStorage.removeItem(key) } catch { /* Optional storage. */ }
   try { localStorage.removeItem(key) } catch { /* Optional storage. */ }
+  window.dispatchEvent(new CustomEvent('budgetly:transaction-draft', {detail:{key}}))
 }

@@ -27,3 +27,12 @@
   .budgetly-v2.everyday-shell:is(.browser-app,.native-android) .topbar { padding:14px 12px; gap:10px; }
   .budgetly-v2.everyday-shell .topbar .header-user-tag { max-width:125px; }
 }
+@media(max-width:520px) {
+  .budgetly-v2.everyday-shell:is(.browser-app,.native-android) .topbar { grid-template-columns:minmax(0,1fr) minmax(0,auto); }
+  .budgetly-v2.everyday-shell .topbar-left,
+  .budgetly-v2.everyday-shell .topbar-left > div { min-width:0; max-width:100%; }
+  .budgetly-v2.everyday-shell .topbar-left h2 { max-width:100%; overflow-wrap:anywhere; font-size:clamp(19px,6vw,25px); }
+  .budgetly-v2.everyday-shell .topbar .header-user-tag { max-width:112px; padding:6px; gap:5px; }
+  .budgetly-v2.everyday-shell .header-user-tag small { display:none; }
+  .budgetly-v2.everyday-shell .header-user-avatar { flex:none; width:25px; height:25px; }
+}

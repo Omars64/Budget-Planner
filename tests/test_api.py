@@ -18,6 +18,20 @@ def auth_headers(client, email='omarsolanki46@gmail.com', password='FlowBudgetAd
     return {'Authorization': f"Bearer {r.json()['token']}"}
 
 
+def test_current_transaction_can_be_read_for_conflict_review():
+    with TestClient(app) as client:
+        headers = auth_headers(client)
+        wallet = client.post('/api/wallets', headers=headers, json={'name':'Conflict review wallet','type':'cash','initial_balance':0}).json()
+        created = client.post('/api/transactions', headers=headers, json={'wallet_id':wallet['id'],'type':'expense','amount':2,'description':'Review original','date':'2026-11-03T12:00:00','reporting_month':'2026-11'})
+        assert created.status_code == 201, created.text
+        transaction = created.json()
+        current = client.get(f"/api/transactions/{transaction['id']}", headers=headers)
+        assert current.status_code == 200
+        assert current.json()['revision'] == transaction['revision']
+        assert current.json()['description'] == 'Review original'
+        assert client.get('/api/transactions/999999999', headers=headers).status_code == 404
+
+
 def test_passwords_are_stored_as_one_way_hashes():
     from api.index import hash_password, verify_password
 

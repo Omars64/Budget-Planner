@@ -16,6 +16,7 @@ import useLedger from '../lib/useLedger'
 import { useViewState } from '../lib/viewState'
 import AnimatedMoney from '../components/AnimatedMoney'
 import OfflinePending from '../components/OfflinePending'
+import TransactionSaveState from '../components/TransactionSaveState'
 import LedgerRow, { LedgerDateHeader, TransactionDetails } from '../components/LedgerRow'
 
 export default function Transactions() {
@@ -28,6 +29,8 @@ export default function Transactions() {
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState(null)
   const [selected, setSelected] = useState(null)
+  const [saveResult, setSaveResult] = useState(null)
+  useEffect(() => setSaveResult(null), [user?.id, spaceKey])
   const [wallets, setWallets] = useState([])
   const [categories, setCategories] = useState([])
 
@@ -49,9 +52,11 @@ export default function Transactions() {
   } catch (err) { notify(err.message, 'error') } }
 
   return <div className="ledger-page everyday-page transactions-page stack">
+    <div className="transaction-context"><strong>{activeSpace?.name || 'Personal'} records</strong><span>{activeSpace ? 'Shared with this Space’s members' : 'Only you can see these entries'}</span></div>
+    <TransactionSaveState userId={user?.id} spaceId={activeSpace?.id} result={saveResult} onResume={() => {setEditing(null);setModal(true)}}/>
     {!isGuest && <OfflinePending scope={spaceKey}/>}
     <LedgerFilters userId={`${user?.id}:${spaceKey}`} value={filters} onChange={setFilters} wallets={wallets} categories={categories}>{!isGuest && !activeSpace && <StatementImport wallets={wallets} compact/>}</LedgerFilters>
-    {ledger.error && <div className="form-error" role="alert">{ledger.error}<button className="button ghost small" onClick={ledger.retry}>Retry</button></div>}
+    {ledger.error && <div className="transaction-read-error" role="alert"><strong>Transactions could not be refreshed</strong><span>{ledger.error}</span><span>{ledger.updatedAt ? 'Showing the last loaded records. New saves may not appear until refresh succeeds.' : 'No current records are available. Your entry draft stays on this device.'}</span><button type="button" className="button ghost small" onClick={ledger.retry}>Retry loading</button></div>}
     {ledger.error && ledger.updatedAt && <small className="muted">Showing records last updated at {new Date(ledger.updatedAt).toLocaleTimeString()}.</small>}
 
 
@@ -71,6 +76,6 @@ export default function Transactions() {
       <LedgerPagination ledger={ledger}/>
     </section>
     <TransactionDetails tx={selected} fmt={fmt} shared={Boolean(activeSpace)} permission={activeSpace?.role === 'owner' ? 'edit' : activeSpace?.role || 'edit'} onClose={() => setSelected(null)} onEdit={canManage ? () => {setEditing(selected);setSelected(null);setModal(true)} : null} onDelete={canManage ? () => remove(selected) : null} onDuplicate={canAdd ? () => {writeDraft(`flowbudget_tx_draft_${user.id}${activeSpace ? `_space_${activeSpace.id}` : ''}`,duplicateDraft(selected,dateInput()));setSelected(null);setEditing(null);setModal(true)} : null}/>
-    <TransactionModal open={modal} editing={editing} onClose={() => setModal(false)} onSaved={saved => {setModal(false);refresh();notify(saved.queued ? 'Saved on this device. Will sync when connected.' : editing?'Transaction updated':'Transaction added')}} />
+    <TransactionModal open={modal} editing={editing} onClose={() => setModal(false)} onSaved={saved => {setModal(false);setSaveResult({queued:Boolean(saved.queued)});refresh();notify(saved.queued ? 'Saved on this device. Will sync when connected.' : editing?'Transaction updated':'Transaction added')}} />
   </div>
 }

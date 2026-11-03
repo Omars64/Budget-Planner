@@ -75,6 +75,7 @@ try {
         $buildArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'build-android.ps1'), '-JdkHome', $JdkHome, '-SdkHome', $SdkHome, '-UseWindowsTrustStore')
         if (!$Debug) { $buildArgs += '-Release' }
         Invoke-Step 'Build web assets, sync Android, and compile APK' { & powershell.exe @buildArgs }
+        Invoke-Step 'Check measured web bundle budget' { & npm.cmd run budget:client }
         if (!$Debug) { Invoke-Step 'Prepare verified GitHub update manifest' { & node.exe (Join-Path $PSScriptRoot 'android-release-manifest.mjs') } }
         Write-Host "`nBUILD SUCCESSFUL. APK location is printed above." -ForegroundColor Green
     } finally { Pop-Location }

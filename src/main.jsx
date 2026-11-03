@@ -44,6 +44,7 @@ import './conversations-security.css'
 import './header-layout.css'
 import './switches.css'
 import './overview-reporting.css'
+import './transaction-experience.css'
 import AppErrorBoundary from './components/AppErrorBoundary'
 import { installClientDiagnostics } from './lib/diagnostics'
 

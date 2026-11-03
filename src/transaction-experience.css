@@ -1,0 +1,33 @@
+.transaction-context,.transaction-save-state,.transaction-read-error { box-sizing:border-box; width:100%; min-width:0; }
+.transaction-context { display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:4px 16px; padding:10px 20px; border-bottom:1px solid var(--line); }
+.transaction-context strong { color:var(--text); font-size:1rem; }
+.transaction-context span { color:var(--muted); font-size:.875rem; overflow-wrap:anywhere; }
+.transaction-save-state { display:flex; align-items:center; gap:12px; padding:13px 18px; border:1px solid var(--line); border-radius:16px; background:var(--surface-soft); }
+.transaction-save-state > svg { flex:none; color:var(--accent-text); }
+.transaction-save-state > span { display:grid; gap:2px; min-width:0; flex:1; }
+.transaction-save-state strong,.transaction-save-state small { overflow-wrap:anywhere; }
+.transaction-save-state small { color:var(--muted); }
+.transaction-save-state button { flex:none; }
+.transaction-read-error { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; padding:14px 18px; border:1px solid var(--negative); border-radius:16px; color:var(--text); }
+.transaction-read-error strong { width:100%; }
+.transaction-read-error span { overflow-wrap:anywhere; }
+.transaction-read-error button { margin-left:auto; }
+.transaction-conflict { display:grid; gap:12px; min-width:0; padding:16px; border:1px solid var(--line); border-radius:16px; background:var(--surface-soft); }
+.transaction-conflict p { margin:0; }
+.transaction-conflict-compare { display:grid; grid-template-columns:minmax(70px,.7fr) repeat(2,minmax(0,1fr)); gap:0; min-width:0; }
+.transaction-conflict-compare > span { padding:8px; color:var(--muted); font-size:.8rem; font-weight:700; }
+.transaction-conflict-row { display:contents; }
+.transaction-conflict-row > * { min-width:0; padding:9px 8px; border-top:1px solid var(--line); overflow-wrap:anywhere; }
+.transaction-conflict .button-row { flex-wrap:wrap; }
+.transaction-save-state button:focus-visible,.transaction-read-error button:focus-visible { outline:3px solid var(--accent-text); outline-offset:3px; }
+@media (prefers-reduced-motion:reduce) { .transaction-save-state,.transaction-read-error { animation:none !important; transition:none !important; } }
+@media (max-width:520px) {
+  .transaction-context { padding-inline:14px; }
+  .transaction-context span { width:100%; }
+  .transaction-save-state { flex-wrap:wrap; padding:12px 14px; }
+  .transaction-save-state button { margin-left:31px; }
+  .transaction-read-error button { margin-left:0; }
+  .transaction-conflict { padding:12px; }
+  .transaction-conflict-compare { grid-template-columns:minmax(60px,.7fr) repeat(2,minmax(0,1fr)); font-size:.8rem; }
+  .transaction-conflict-compare > span,.transaction-conflict-row > * { padding-inline:4px; }
+}

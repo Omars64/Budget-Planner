@@ -1011,6 +1011,13 @@ def add_transaction(db, user_id, payload):
     return row
 
 
+@app.get("/api/transactions/{item_id}")
+def get_transaction(item_id: int, user: User = Depends(workspace_user), db: Session = Depends(get_db)):
+    row = db.query(Transaction).filter(Transaction.id == item_id, Transaction.user_id == user.id).first()
+    if not row: raise HTTPException(404, "Transaction not found")
+    return tx_payload(row)
+
+
 @app.put("/api/transactions/{item_id}")
 def update_transaction(item_id: int, payload: TransactionWriteIn, request: Request, user: User = Depends(workspace_user), db: Session = Depends(get_db)):
     row = db.query(Transaction).filter(Transaction.id == item_id, Transaction.user_id == user.id).with_for_update().first()

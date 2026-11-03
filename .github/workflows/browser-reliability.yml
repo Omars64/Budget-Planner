@@ -39,3 +39,9 @@ jobs:
       - run: node scripts/verify-offline-browser.mjs
         env:
           CI: 'true'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-layout-evidence
+          path: browser-layout-evidence.json
+          if-no-files-found: ignore

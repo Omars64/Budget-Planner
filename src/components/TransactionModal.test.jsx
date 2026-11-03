@@ -47,6 +47,27 @@ it('retains a historical category ID when editing a Space transaction', async ()
   expect(JSON.parse(api.mock.calls.find(([path]) => path === '/api/transactions/10')[1].body).category_id).toBe(2)
   expect(JSON.parse(api.mock.calls.find(([path]) => path === '/api/transactions/10')[1].body).revision).toBe('space-record-revision')
 })
+it('compares a concurrent edit and retries only after the user chooses which values to keep', async () => {
+  const edit = {id:10,revision:'old',type:'expense',amount:2,description:'My edit',date:'2026-09-12T09:00:00Z',wallet_id:1,category_id:2,recurring_frequency:'none'}
+  let writes = 0
+  api.mockImplementation((path,options) => {
+    if (path === '/api/wallets') return Promise.resolve([{id:1,name:'Main Wallet',balance:50}])
+    if (path === '/api/categories') return Promise.resolve([{id:2,name:'Food',kind:'expense'}])
+    if (path === '/api/transactions/10' && !options?.method) return Promise.resolve({...edit,revision:'new',amount:3,description:'Other device'})
+    if (path === '/api/transactions/10' && writes++ === 0) return Promise.reject(Object.assign(new Error('Changed'),{status:409}))
+    return Promise.resolve({...edit,revision:'new'})
+  })
+  render(<TransactionModal open editing={edit} onClose={vi.fn()} onSaved={vi.fn()}/> )
+  await waitFor(() => expect(screen.getByRole('button',{name:'Save changes'})).toBeEnabled())
+  fireEvent.click(screen.getByRole('button',{name:'Save changes'}))
+  await waitFor(() => expect(screen.getByText('Review changes from another device')).toBeInTheDocument())
+  expect(screen.getByText('Other device')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button',{name:'Keep my edits'}))
+  fireEvent.click(screen.getByRole('button',{name:'Save changes'}))
+  await waitFor(() => expect(api.mock.calls.filter(([path,options])=>path==='/api/transactions/10' && options?.method==='PUT')).toHaveLength(2))
+  const writesSent=api.mock.calls.filter(([path,options])=>path==='/api/transactions/10' && options?.method==='PUT')
+  expect(JSON.parse(writesSent[1][1].body)).toEqual(expect.objectContaining({revision:'new',description:'My edit'}))
+})
 it('keeps image selection under collapsed More options and submits it with the entry',async()=>{
   await mount()
   const options=screen.getByText('More options').closest('details')
