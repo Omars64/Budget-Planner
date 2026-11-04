@@ -5,7 +5,7 @@ import SettingsSection from './SettingsSection'
 import './LogoSettings.css'
 
 const choices = [
-  { value: 'current', title: 'New wallet', image: '/flowbudget-logo.png' },
+  { value: 'current', title: 'New wallet', image: '/budgetly-wallet-icon.png' },
   { value: 'legacy', title: 'Legacy blue', image: '/flowbudget-logo-legacy.png' },
 ]
 

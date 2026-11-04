@@ -4,7 +4,7 @@ $root = Split-Path $PSScriptRoot -Parent
 $source = [System.Drawing.Image]::FromFile((Join-Path $root 'public/flowbudget-logo.png'))
 $res = Join-Path $root 'android/app/src/main/res'
 try {
-    function Save-Png([string]$path, [int]$width, [int]$height, [bool]$splash, [bool]$foreground) {
+    function Save-Png([string]$path, [int]$width, [int]$height, [bool]$splash, [bool]$foreground, [bool]$maskable = $false) {
         $bitmap = New-Object System.Drawing.Bitmap($width, $height)
         try {
             $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
@@ -13,8 +13,9 @@ try {
                 $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
                 $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
                 if ($splash) { $graphics.Clear([System.Drawing.ColorTranslator]::FromHtml('#F4F8FB')) }
+                elseif ($maskable) { $graphics.Clear([System.Drawing.ColorTranslator]::FromHtml('#00362B')) }
                 else { $graphics.Clear([System.Drawing.Color]::Transparent) }
-                $side = if ($splash) { [int]([Math]::Min($width, $height) * 0.42) } elseif ($foreground) { [int]($width * 0.67) } else { [Math]::Min($width, $height) }
+                $side = if ($splash) { [int]([Math]::Min($width, $height) * 0.42) } elseif ($foreground -or $maskable) { [int]($width * 0.70) } else { [int]([Math]::Min($width, $height) * 0.78) }
                 $left = [int](($width - $side) / 2)
                 $top = [int](($height - $side) / 2)
                 $graphics.DrawImage($source, $left, $top, $side, $side)
@@ -37,4 +38,5 @@ try {
             Save-Png $splash $w $h $true $false
         }
     }
+    Save-Png (Join-Path $root 'public/budgetly-wallet-maskable.png') 1254 1254 $false $false $true
 } finally { $source.Dispose() }

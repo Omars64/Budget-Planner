@@ -249,7 +249,7 @@ export default function App() {
   useAppearance(settings, activeSpace?.accent)
   useEffect(() => {
     const icon = document.querySelector('link[rel="icon"]')
-    if (icon) icon.href = settings.logo_style === 'legacy' && session.user ? '/flowbudget-logo-legacy.png' : '/flowbudget-logo.png'
+    if (icon) icon.href = settings.logo_style === 'legacy' && session.user ? '/flowbudget-logo-legacy.png' : '/budgetly-wallet-icon.png'
   }, [settings.logo_style, session.user])
   const accountPage = ['/settings', '/admin', '/feedback', '/ask-ai'].includes(currentLocation.pathname)
   const viewSettings = activeSpace && !accountPage ? {...settings, currency: activeSpace.currency, accent_color: activeSpace.accent} : settings
