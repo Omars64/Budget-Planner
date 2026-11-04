@@ -91,16 +91,16 @@ def candidate(db, actor, item_id):
     return row
 
 
-def matches(db, wallet_id, amount, date, kind):
+def matches(db, wallet_id, amount, date, kind, window=timedelta(minutes=30)):
     return db.query(Transaction).filter(Transaction.wallet_id == wallet_id, Transaction.amount == amount,
         Transaction.type == kind, Transaction.is_opening_balance.is_(False),
-        Transaction.date >= date - timedelta(days=1), Transaction.date <= date + timedelta(days=1)).order_by(Transaction.date.desc()).limit(5).all()
+        Transaction.date >= date - window, Transaction.date <= date + window).order_by(Transaction.date.desc()).limit(5).all()
 
 
 def serialize(db, row):
     kind = 'income' if row.transaction_type == 'refund' else 'transfer' if row.transaction_type == 'withdrawal' else row.transaction_type
     duplicates = matches(db, row.wallet_id, row.amount, row.occurred_at, kind) if row.wallet_id else []
-    originals = matches(db, row.wallet_id, row.amount, row.occurred_at, 'expense') if row.wallet_id and row.transaction_type == 'refund' else []
+    originals = matches(db, row.wallet_id, row.amount, row.occurred_at, 'expense', timedelta(days=30)) if row.wallet_id and row.transaction_type == 'refund' else []
     return {k: getattr(row, k) for k in ('id', 'space_id', 'source_package', 'source_app', 'transaction_type', 'currency', 'merchant', 'account_last4', 'wallet_id', 'category_id', 'status', 'transaction_id')} | {
         'amount': str(row.amount), 'occurred_at': row.occurred_at.isoformat(), 'confidence': float(row.confidence), 'reasons': json.loads(row.reasons),
         'duplicates': [{'id': t.id, 'description': t.description, 'date': t.date.isoformat()} for t in duplicates],
@@ -219,7 +219,7 @@ def approve(item_id: int, payload: ApprovalIn, actor=Depends(workspace_actor), d
         raise HTTPException(422, 'Refunds must credit the wallet')
     duplicates = matches(db, payload.wallet_id, payload.amount, payload.date, payload.type)
     if duplicates and not payload.add_anyway:
-        raise HTTPException(409, 'A similar transaction already exists. Review it or explicitly choose Add anyway.')
+        raise HTTPException(409, 'A transaction with this amount and type was recorded in this wallet within 30 minutes. Check it, then choose Add anyway if this is a separate payment.')
     if payload.refund_of_id:
         original = db.query(Transaction).filter_by(id=payload.refund_of_id, user_id=owner_id, wallet_id=payload.wallet_id, type='expense').first()
         if row.transaction_type != 'refund' or not original:
