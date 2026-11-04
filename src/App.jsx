@@ -218,7 +218,7 @@ export default function App() {
   const currentLocation = useLocation()
   const { confirm, confirmation } = useConfirmation()
   const [session, setSession] = useState({ loading: true, user: null })
-  const [settings, setSettings] = useState(() => ({ ...readDeviceAppearance(), currency: 'KWD', display_name: 'Budgetly', week_starts_on: 'sunday', compact_numbers: false }))
+  const [settings, setSettings] = useState(() => ({ ...readDeviceAppearance(), logo_style: 'current', currency: 'KWD', display_name: 'Budgetly', week_starts_on: 'sunday', compact_numbers: false }))
   const [appearance, setAppearance] = useState({ profile_image: '', wallpaper_image: '' })
   const [refreshKey, setRefreshKey] = useState(0)
   const plannedRead = useRef(null)
@@ -247,6 +247,10 @@ export default function App() {
   const spaceState = useSpaces(session.user, notify, confirm)
   const { activeSpace } = spaceState
   useAppearance(settings, activeSpace?.accent)
+  useEffect(() => {
+    const icon = document.querySelector('link[rel="icon"]')
+    if (icon) icon.href = settings.logo_style === 'legacy' && session.user ? '/flowbudget-logo-legacy.png' : '/flowbudget-logo.png'
+  }, [settings.logo_style, session.user])
   const accountPage = ['/settings', '/admin', '/feedback', '/ask-ai'].includes(currentLocation.pathname)
   const viewSettings = activeSpace && !accountPage ? {...settings, currency: activeSpace.currency, accent_color: activeSpace.accent} : settings
   useEffect(()=>installMoneyInputDefaults(document,viewSettings.currency),[viewSettings.currency])

@@ -818,6 +818,7 @@ def get_settings(user: User = Depends(current_user), db: Session = Depends(get_d
     if display_name in {"FlowBudget", "Flow Budget"}:
         display_name = "Budgetly"
     return {
+        'logo_style': setting(db, user.id, 'logo_style', 'current'),
         'bank_duplicate_window_minutes': int(setting(db, user.id, 'bank_duplicate_window_minutes', '5')),
         'quiet_hours_enabled': setting(db,user.id,'quiet_hours_enabled','false') == 'true',
         'support_popup_enabled': setting(db, user.id, 'support_popup_enabled', 'true') == 'true',

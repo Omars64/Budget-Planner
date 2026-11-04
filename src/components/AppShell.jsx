@@ -105,7 +105,7 @@ export default function AppShell({ children }) {
     <aside ref={sidebar} className={`sidebar glass ${menu ? 'open' : ''}`}>
       <div className="sidebar-head">
         <div className="brand">
-          <BrandLogo />
+          <BrandLogo style={settings.logo_style} />
           <div><strong>Budgetly</strong><small>Personal finance</small></div>
         </div>
         <button className="icon-button mobile-only" onClick={() => setMenu(false)} aria-label="Close menu"><X size={19}/></button>

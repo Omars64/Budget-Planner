@@ -190,6 +190,7 @@ class PinPayload(BaseModel):
 
 
 class SettingsPayload(BaseModel):
+    logo_style: Literal['current', 'legacy'] = 'current'
     bank_duplicate_window_minutes: Literal[1, 2, 5, 10, 15, 30] = 5
     support_popup_enabled: bool = True
     support_sidebar_enabled: bool = True

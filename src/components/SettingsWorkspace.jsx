@@ -7,7 +7,7 @@ import './SettingsWorkspace.css'
 
 const groups = [
   { id: 'account', title: 'Account & security', description: 'Profile, password and sign-in', icon: ShieldCheck, label: 'Your account', terms: 'password session fingerprint biometric passkey account profile' },
-  { id: 'appearance', title: 'Look & feel', description: 'Theme, text size and motion', icon: Palette, label: 'Your preferences', terms: 'font colour color accent wallpaper seasonal halloween winter summer rain autumn spring motion vibration comfort appearance welcome greeting animation speed' },
+  { id: 'appearance', title: 'Look & feel', description: 'Theme, text size and motion', icon: Palette, label: 'Your preferences', terms: 'logo legacy font colour color accent wallpaper seasonal halloween winter summer rain autumn spring motion vibration comfort appearance welcome greeting animation speed' },
   { id: 'money', title: 'Money & categories', description: 'Currency and transaction defaults', icon: Banknote, terms: 'currency kwd categories default wallet entry templates display locale week numbers budget name' },
   { id: 'notifications', title: 'Notifications', description: 'Updates, reminders and scheduled entries', icon: Bell, terms: 'upcoming expense update quiet hours reminder scheduled notification' },
   { id: 'android', title: 'Android app', description: 'Download the latest Budgetly APK', icon: Smartphone, terms: 'download apk install android phone latest version release mobile app' },
@@ -16,7 +16,7 @@ const groups = [
   { id: 'support', title: 'Support & about', description: 'Coffee preferences and app information', icon: Coffee, terms: 'coffee tip support popup sidebar about' },
 ]
 const titleGroups = {
-  'Personal preferences': 'appearance', 'Workspace wallpaper': 'appearance', 'Seasonal appearance': 'appearance', 'Welcome animation': 'appearance',
+  'Personal preferences': 'appearance', 'Workspace wallpaper': 'appearance', 'Seasonal appearance': 'appearance', 'Welcome animation': 'appearance', 'App logo': 'appearance',
   'Currency configuration': 'money', 'Display & locale': 'money', 'Categories': 'money', 'Transaction entry': 'money',
   'Notifications': 'notifications', 'Smart Bank Inbox': 'bank',
   'Biometric sign-in': 'account', 'Delete account': 'account', 'Guest workspace': 'account', 'Account features': 'account',

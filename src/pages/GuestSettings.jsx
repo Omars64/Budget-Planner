@@ -1,6 +1,7 @@
 import AppSelect from '../components/AppSelect'
 import SeasonalSettings from '../components/SeasonalSettings'
 import WelcomeAnimationSettings from '../components/WelcomeAnimationSettings'
+import LogoSettings from '../components/LogoSettings'
 import AndroidAppSettings from '../components/AndroidAppSettings'
 import { useEffect, useRef, useState } from 'react'
 import { Download, LogIn, Save, Trash2 } from 'lucide-react'
@@ -36,6 +37,7 @@ export default function GuestSettings() {
   }
   return <SettingsWorkspace guest>
     <WelcomeAnimationSettings settingsId="appearance"/>
+    <LogoSettings settingsId="appearance"/>
     <SettingsSection title="Guest workspace"><p>Stored only on this device. Clearing browser storage or uninstalling can remove these records.</p><button className="button primary" onClick={() => requestSignIn('cloud storage and account features')}><LogIn size={18}/>Sign in or create an account</button></SettingsSection>
     <SeasonalSettings settingsId="appearance"/><SettingsSection title="Personal preferences"><h4>Motion & feedback</h4><ComfortSettings/><form className="stack gap-16" onSubmit={save}>
       <label className="field"><span>Appearance</span><AppSelect aria-label="Appearance" value={form.theme} onChange={event => setForm({ ...form, theme: event.target.value })}><option value="system">Match device</option><option value="light">Light</option><option value="dark">Dark</option></AppSelect></label>
