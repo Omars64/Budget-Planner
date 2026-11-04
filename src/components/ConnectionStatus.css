@@ -1,4 +1,6 @@
-.connection-status.connection-status-feedback { background:var(--surface); color:var(--text); border:1px solid var(--line); }
+.connection-status.connection-status-feedback { position:fixed; top:auto; bottom:calc(88px + env(safe-area-inset-bottom,0px)); left:auto; right:16px; transform:none; width:min(380px,calc(100vw - 32px)); max-width:none; z-index:110; padding:16px 45px 16px 18px; background:var(--surface); color:var(--text); border:1px solid var(--line); border-radius:16px; box-shadow:0 16px 42px rgba(0,0,0,.22); text-align:left; font-size:14px; }
+.connection-status-dismiss { position:absolute; top:8px; right:8px; display:grid; place-items:center; width:32px; height:32px; border:0; border-radius:9px; background:transparent; color:var(--text); cursor:pointer; }
+.connection-status-dismiss:hover { background:var(--accent-soft); }
 .connection-status-feedback p { margin:6px 0; }
 .connection-status-actions { display:flex; justify-content:center; align-items:center; flex-wrap:wrap; gap:12px; margin-top:6px; }
 .connection-status-actions a { color:inherit; text-decoration:underline; }

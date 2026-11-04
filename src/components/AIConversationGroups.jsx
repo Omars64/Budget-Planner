@@ -1,3 +1,4 @@
+import AppSelect from './AppSelect'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Folder, Plus, Settings2 } from 'lucide-react'
 import { api, jsonBody } from '../lib/api'
@@ -58,7 +59,7 @@ export default function AIConversationGroups({ groups, onGroups, selected, onSel
     <Modal open={Boolean(editor)} onClose={() => { if (!saving) setEditor(null) }} title={editor?.id ? 'Group settings' : 'New group'}>
       <form className="stack gap-16" onSubmit={save}>
         <label className="field"><span>Group name</span><input required maxLength={80} value={editor?.name || ''} onChange={e => setEditor(v => ({ ...v, name: e.target.value }))}/></label>
-        <label className="field"><span>Memory / context</span><select value={editor?.memory_mode || 'group'} onChange={e => setEditor(v => ({ ...v, memory_mode: e.target.value }))}><option value="group">Group-only</option><option value="general">General</option></select></label>
+        <label className="field"><span>Memory / context</span><AppSelect value={editor?.memory_mode || 'group'} onChange={e => setEditor(v => ({ ...v, memory_mode: e.target.value }))}><option value="group">Group-only</option><option value="general">General</option></AppSelect></label>
         <p className="muted small">{editor?.memory_mode === 'general' ? 'May reference ungrouped chats and other General groups. Group-only chats stay excluded.' : 'References only conversations within this group.'} Wallet access and selected months stay separate. Memory is used when AI is enabled; built-in guidance does not recall earlier chats.</p>
         <label className="field"><span>Group context (optional)</span><textarea rows={3} maxLength={2000} value={editor?.context || ''} onChange={e => setEditor(v => ({ ...v, context: e.target.value }))}/></label>
         <div className="modal-actions">{editor?.id && <button type="button" className="button ghost danger" disabled={saving} onClick={remove}>Delete group</button>}<button className="button primary" disabled={saving}>{saving ? 'Saving...' : 'Save group'}</button></div>

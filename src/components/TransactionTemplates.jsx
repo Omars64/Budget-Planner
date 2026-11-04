@@ -1,3 +1,4 @@
+import AppSelect from './AppSelect'
 import { useState } from 'react'
 import { BookmarkPlus, Trash2 } from 'lucide-react'
 
@@ -16,7 +17,7 @@ export default function TransactionTemplates({ userId, scope, draft, onApply, di
     persist([item, ...items].slice(0, 12))
   }
   return <details className="form-options transaction-templates"><summary>Templates</summary><div className="stack gap-12">
-    <label className="field"><span>Saved entries on this device</span><select disabled={disabled} value={selected} onChange={e => { setSelected(e.target.value); const item = items.find(i => i.id === e.target.value); if (item) onApply(item) }}><option value="">Choose a template</option>{items.map(item => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
+    <label className="field"><span>Saved entries on this device</span><AppSelect disabled={disabled} value={selected} onChange={e => { setSelected(e.target.value); const item = items.find(i => i.id === e.target.value); if (item) onApply(item) }}><option value="">Choose a template</option>{items.map(item => <option value={item.id} key={item.id}>{item.name}</option>)}</AppSelect></label>
     <div className="button-row"><button className="button ghost small" type="button" disabled={disabled} onClick={save}><BookmarkPlus size={16}/>Save current fields</button>{selected && <button type="button" className="icon-button" title="Delete template" aria-label="Delete template" disabled={disabled} onClick={() => { persist(items.filter(item => item.id !== selected)); setSelected('') }}><Trash2 size={16}/></button>}</div>
     {message && <small role="status">{message}</small>}
   </div></details>

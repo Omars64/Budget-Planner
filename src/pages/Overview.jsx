@@ -1,3 +1,4 @@
+import AppMonthField from '../components/AppMonthField'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, CalendarClock, Inbox, Wallet } from 'lucide-react'
@@ -50,7 +51,7 @@ export default function Overview() {
     {data && <div aria-busy={data.month !== month} className={data.month !== month ? 'overview-loading' : ''}>
       <section className="overview-month-heading" aria-label="Reporting month">
         <div><p className="muted">Reporting activity</p><h2>Assigned to {displayedMonthLabel}</h2></div>
-        <div className="overview-controls"><label className="field"><span>Month</span><input type="month" min="1000-01" max="9999-12" value={month} onChange={e => e.target.value && setMonth(e.target.value)}/></label></div>
+        <div className="overview-controls"><label className="field"><span>Month</span><AppMonthField min="1000-01" max="9999-12" value={month} onChange={e => e.target.value && setMonth(e.target.value)}/></label></div>
       </section>
       <section key={data.month} className="overview-metrics month-reveal" aria-label="Selected month summary">
         <Link to="/transactions" state={{aiFilters:{month:data.month,type:'income'}}}><span>Money in</span><strong className="tx-amount income">{fmt(data.income)}</strong>{data.opening_funds > 0 && <small>{fmt(data.earned_income)} income + {fmt(data.opening_funds)} starting funds</small>}</Link>

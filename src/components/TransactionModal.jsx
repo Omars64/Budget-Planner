@@ -1,3 +1,4 @@
+import AppSelect from './AppSelect'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, Repeat2 } from 'lucide-react'
 import { dateInput, saveDate } from '../lib/time'
@@ -186,7 +187,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
       {!schedule && helpers.balancePreview && <BalancePreview wallet={wallets.find(w=>String(w.id)===String(form.wallet_id))} draft={form} editing={editing} currency={settings.currency}/>}
       <details className="form-options" open={advanced} onToggle={e => setAdvanced(e.currentTarget.open)}><summary>More options</summary><div className="stack gap-16">
         {!editing && <button className="button ghost small" type="button" disabled={busy || voiceActive} onClick={() => {clearDraft(draftKey);setForm({...blank(),wallet_id:wallets[0]?.id || ''});setErrors({});setError('')}}>Discard draft</button>}
-        <label className="field"><span><Repeat2 size={15}/> Repeat</span><select value={form.recurring_frequency} onChange={e => {if(isGuest && e.target.value!=='none')requestSignIn('repeating transactions');else set('recurring_frequency',e.target.value)}}><option value="none">Does not repeat</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select></label>
+        <label className="field"><span><Repeat2 size={15}/> Repeat</span><AppSelect value={form.recurring_frequency} onChange={e => {if(isGuest && e.target.value!=='none')requestSignIn('repeating transactions');else set('recurring_frequency',e.target.value)}}><option value="none">Does not repeat</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="yearly">Yearly</option></AppSelect></label>
         {form.recurring_frequency !== 'none' && <div><DateField label="Repeat until" value={form.recurring_until} min={form.date.slice(0,10)} onChange={value => set('recurring_until',value)} disabled={busy || loading}/>{errors.recurring_until && <small className="field-error">{errors.recurring_until}</small>}</div>}
 
         <label className="field"><span>Notes (optional)</span><textarea rows="3" value={form.notes} onChange={e => set('notes', e.target.value)}/></label>

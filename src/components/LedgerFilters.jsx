@@ -1,3 +1,5 @@
+import AppMonthField from './AppMonthField'
+import AppSelect from './AppSelect'
 import { useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight, ListFilter, Search, X } from 'lucide-react'
 import Modal from './Modal'
@@ -49,11 +51,11 @@ export default function LedgerFilters({ value, onChange, wallets, categories = [
           {saveError&&<p role="alert" className="form-error">{saveError}</p>}
         </div></details>
         <label className="field"><span>Search</span><input value={draft.search} onChange={e => update('search', e.target.value)} placeholder="Transactions or notes"/></label>
-        <label className="field"><span>Wallet</span><select aria-label="Wallet" value={draft.wallet} onChange={e => update('wallet', e.target.value)}><option value="">{shared ? 'All shared wallets' : 'All wallets'}</option>{wallets.map(w => <option key={w.wallet_id ?? w.id} value={w.wallet_id ?? w.id}>{w.name}{shared ? ' (' + (w.is_owner ? 'You' : w.owner_name || w.owner_email) + ')' : w.archived ? ' (Archived)' : ''}</option>)}</select></label>
-        <label className="field"><span>Month</span><input type="month" min="1000-01" max="9999-12" value={draft.month} onChange={e => update('month', e.target.value)}/></label>
-        <label className="field"><span>Category</span><select aria-label="Category" value={draft.category || ''} onChange={e => update('category', e.target.value)}><option value="">All categories</option><option value="0">Uncategorized</option>{availableCategories.map(c => <option key={c.id} value={c.id}>{c.name}{shared && c.owner_name ? ` (${c.owner_name})` : ''}</option>)}</select></label>
-        <div className="form-grid two"><label className="field"><span>Type</span><select value={draft.type} onChange={e => update('type', e.target.value)}><option value="all">All types</option><option value="expense">Expenses</option><option value="income">Income</option><option value="transfer">Transfers</option></select></label>
-          <label className="field"><span>Sort by</span><select value={draft.sort} onChange={e => update('sort', e.target.value)}><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label></div>
+        <label className="field"><span>Wallet</span><AppSelect aria-label="Wallet" value={draft.wallet} onChange={e => update('wallet', e.target.value)}><option value="">{shared ? 'All shared wallets' : 'All wallets'}</option>{wallets.map(w => <option key={w.wallet_id ?? w.id} value={w.wallet_id ?? w.id}>{w.name}{shared ? ' (' + (w.is_owner ? 'You' : w.owner_name || w.owner_email) + ')' : w.archived ? ' (Archived)' : ''}</option>)}</AppSelect></label>
+        <label className="field"><span>Month</span><AppMonthField min="1000-01" max="9999-12" value={draft.month} onChange={e => update('month', e.target.value)}/></label>
+        <label className="field"><span>Category</span><AppSelect aria-label="Category" value={draft.category || ''} onChange={e => update('category', e.target.value)}><option value="">All categories</option><option value="0">Uncategorized</option>{availableCategories.map(c => <option key={c.id} value={c.id}>{c.name}{shared && c.owner_name ? ` (${c.owner_name})` : ''}</option>)}</AppSelect></label>
+        <div className="form-grid two"><label className="field"><span>Type</span><AppSelect value={draft.type} onChange={e => update('type', e.target.value)}><option value="all">All types</option><option value="expense">Expenses</option><option value="income">Income</option><option value="transfer">Transfers</option></AppSelect></label>
+          <label className="field"><span>Sort by</span><AppSelect value={draft.sort} onChange={e => update('sort', e.target.value)}><option value="newest">Newest first</option><option value="oldest">Oldest first</option></AppSelect></label></div>
         <div className="modal-actions"><button type="button" className="button ghost" onClick={() => setDraft({ ...draft, ...defaultLedgerFilters })}>Clear filters</button><button className="button primary">Apply filters</button></div>
       </form>
     </Modal>

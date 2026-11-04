@@ -1,3 +1,4 @@
+import AppSelect from '../components/AppSelect'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, BookOpen, History, MailPlus, Trash2, Users, Wallet } from 'lucide-react'
@@ -287,9 +288,9 @@ export default function SharedTransactions() {
       <Modal open={inviteOpen} onClose={() => setInviteOpen(false)} title="Share a wallet">
         <div className="panel-head"><div><p className="eyebrow">Share a wallet</p><h3>Invite by email</h3></div><MailPlus className="muted-icon"/></div>
         <form className="stack gap-12" onSubmit={submitShare}>
-          <label className="field"><span>Wallet</span><select required value={share.wallet_id} onChange={e => setShare({ ...share, wallet_id: e.target.value })}><option value="">Choose a wallet</option>{personalWallets.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}</select></label>
+          <label className="field"><span>Wallet</span><AppSelect required value={share.wallet_id} onChange={e => setShare({ ...share, wallet_id: e.target.value })}><option value="">Choose a wallet</option>{personalWallets.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}</AppSelect></label>
           <label className="field"><span>User email</span><input required type="email" value={share.email} onChange={e => setShare({ ...share, email: e.target.value })} placeholder="person@example.com"/></label>
-          <label className="field"><span>Permission</span><select value={share.permission} onChange={e => setShare({ ...share, permission: e.target.value })}><option value="view">Viewer</option><option value="add">Add only</option><option value="edit">Editor (add, edit, delete)</option></select></label>
+          <label className="field"><span>Permission</span><AppSelect value={share.permission} onChange={e => setShare({ ...share, permission: e.target.value })}><option value="view">Viewer</option><option value="add">Add only</option><option value="edit">Editor (add, edit, delete)</option></AppSelect></label>
           <button className="button primary self-start" disabled={sharing || !share.wallet_id || !share.email}>{sharing ? 'Sharing…' : 'Share wallet'}</button>
         </form>
       </Modal>

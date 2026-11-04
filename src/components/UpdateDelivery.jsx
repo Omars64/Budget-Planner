@@ -1,3 +1,4 @@
+import AppSelect from './AppSelect'
 import { useEffect, useState } from 'react'
 import { BellRing, RefreshCw } from 'lucide-react'
 import { api } from '../lib/api'
@@ -40,7 +41,7 @@ export default function UpdateDelivery() {
   return <details className="update-delivery" onToggle={event => { if (event.currentTarget.open) void refresh() }}>
     <summary>Update delivery</summary>
     <div className="stack gap-12">
-      {!!devices.length && <label className="field"><span>Registered device</span><select value={selected} disabled={busy} onChange={event => setSelected(event.target.value)}>{devices.map((device,index) => <option key={device.id} value={device.id}>{device.platform === 'android' ? 'Android' : 'Browser'} {index+1} · v{device.installed_version}</option>)}</select></label>}
+      {!!devices.length && <label className="field"><span>Registered device</span><AppSelect value={selected} disabled={busy} onChange={event => setSelected(event.target.value)}>{devices.map((device,index) => <option key={device.id} value={device.id}>{device.platform === 'android' ? 'Android' : 'Browser'} {index+1} · v{device.installed_version}</option>)}</AppSelect></label>}
       <div className="button-row"><button type="button" className="button ghost" disabled={busy} onClick={() => void refresh(true)}><RefreshCw size={17}/>Reconnect this device</button><button type="button" className="button ghost" disabled={busy || !selected || !enabled} onClick={() => void test()}><BellRing size={17}/>Test notification</button></div>
       {message && <p role="status" className="muted">{message}</p>}
     </div>

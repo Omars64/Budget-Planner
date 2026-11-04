@@ -1,3 +1,4 @@
+import AppSelect from './AppSelect'
 import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { CalendarDays, ChevronLeft, ChevronRight, Clock3, Keyboard } from 'lucide-react'
@@ -43,10 +44,10 @@ function DatePicker({ initial, onSave, onClose, min, max }) {
   return <PickerDialog title="Choose date" onClose={onClose}>
     <header className="transaction-picker-head">
       <p className="transaction-picker-label">Select date</p>
-      <select className="transaction-picker-year" aria-label="Calendar year" value={picked.getUTCFullYear()} onChange={e => {
+      <AppSelect className="transaction-picker-year" aria-label="Calendar year" value={picked.getUTCFullYear()} onChange={e => {
         const y = Number(e.target.value), m = picked.getUTCMonth()
         pick(calendarDate(y, m, Math.min(picked.getUTCDate(), calendarDate(y, m + 1, 0).getUTCDate())))
-      }}>{years.map(y => <option key={y}>{y}</option>)}</select>
+      }}>{years.map(y => <option key={y}>{y}</option>)}</AppSelect>
       <h3>{calendarLabel(picked, { weekday: 'short', month: 'short', day: 'numeric' })}</h3>
     </header>
     <div className="transaction-picker-calendar">

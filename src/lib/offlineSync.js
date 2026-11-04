@@ -3,7 +3,7 @@ import { deleteOffline, listOffline, readOffline, writeOffline, updateOffline } 
 let activeUserId = null
 const currentSyncs = new Map()
 const queuePath = path => path.split('?')[0] === '/api/transactions' || path.split('?')[0] === '/api/shared/transactions'
-const cachedPath = path => /^\/api\/(wallets(?:\?|$)|categories(?:\?|$)|transactions(?:\?|$)|shared\/(?:wallets(?:\/\d+\/categories)?|transactions)(?:\?|$)|dashboard(?:\?|$)|attention(?:\?|$)|budgets(?:\?|$)|goals(?:\?|$)|debts(?:\?|$)|planned-transactions(?:\?|$))/.test(path)
+const cachedPath = path => /^\/api\/(wallets(?:\?|$)|categories(?:\?|$)|transactions(?:\?|$)|bank-inbox(?:\?|$)|shared\/(?:wallets(?:\/\d+\/categories)?|transactions)(?:\?|$)|dashboard(?:\?|$)|attention(?:\?|$)|budgets(?:\?|$)|goals(?:\?|$)|debts(?:\?|$)|planned-transactions(?:\?|$))/.test(path)
 const notify = () => window.dispatchEvent(new Event('budgetly:offline-queue-changed'))
 const onlineCandidates = new WeakSet()
 export const discardUncertainMessage = 'This entry may already have reached your wallet. Retry sync to confirm its result before removing it. Removing a local entry cannot undo a server save.'

@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import SpaceSwitcher from './SpaceSwitcher'
 
@@ -87,8 +87,8 @@ it('keeps the Space and confirmation available when deletion fails', async () =>
 it('offers only Viewer and Manager, defaults to Viewer and preserves an existing Manager', () => {
   render(<SpaceSwitcher/> )
   openMembers()
-  const role = screen.getByRole('combobox', { name: 'Role' })
-  expect(within(role).getAllByRole('option').map(option => option.value)).toEqual(['view', 'edit'])
+  const role = screen.getByLabelText('Role')
+  expect([...role.options].map(option => option.value)).toEqual(['view', 'edit'])
   expect(role).toHaveValue('view')
   fireEvent.click(screen.getByRole('button', { name: 'Change role for manager@test.example' }))
   expect(role).toHaveValue('edit')
@@ -106,7 +106,7 @@ it.each(['edit', 'add', 'view'])('keeps settings and membership read-only for %s
   expect(screen.queryByRole('button', { name: 'Delete Space', exact: true })).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Members', exact: true }))
   expect(screen.getByText('manager@test.example')).toBeInTheDocument()
-  expect(screen.queryByRole('combobox', { name: 'Role' })).not.toBeInTheDocument()
+  expect(screen.queryByLabelText('Role')).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: /Change role/ })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: /Remove/ })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Save membership' })).not.toBeInTheDocument()
@@ -163,11 +163,11 @@ it('keeps failed membership drafts, reports the error inline, and allows retry',
   render(<SpaceSwitcher/>)
   openMembers('Trip')
   fireEvent.change(screen.getByRole('textbox', { name: 'Email' }), { target: { value: 'new@test.example' } })
-  fireEvent.change(screen.getByRole('combobox', { name: 'Role' }), { target: { value: 'edit' } })
+  fireEvent.change(screen.getByLabelText('Role'), { target: { value: 'edit' } })
   fireEvent.click(screen.getByRole('button', { name: 'Save membership' }))
   expect(await screen.findByRole('alert')).toHaveTextContent('Membership could not be saved.')
   expect(screen.getByRole('textbox', { name: 'Email' })).toHaveValue('new@test.example')
-  expect(screen.getByRole('combobox', { name: 'Role' })).toHaveValue('edit')
+  expect(screen.getByLabelText('Role')).toHaveValue('edit')
   expect(screen.getByRole('button', { name: 'Save membership' })).toBeEnabled()
   expect(mocks.app.reloadSpaces).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: 'Save membership' }))

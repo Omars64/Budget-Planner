@@ -1,3 +1,4 @@
+import AppSelect from './AppSelect'
 import { useRef, useState } from 'react'
 import { Upload, Download } from 'lucide-react'
 import Modal from './Modal'
@@ -32,7 +33,7 @@ export default function StatementImport({wallets, compact=false}) {
     <Modal open={open} protectChanges isDirty={Boolean(text)} onClose={()=>!operation.current&&setOpen(false)} title="Review bank statement" size="large">
       <form className="stack gap-16" onSubmit={preview}>
         <details><summary>CSV format</summary><p className="muted">Date, description, amount, type (income or expense). Dates use YYYY-MM-DD or YYYY-MM-DDTHH:mm in Kuwait time. Up to 500 rows.</p><a href="/statement-example.csv" download className="button ghost"><Download size={16}/>Example CSV</a></details>
-        <label className="field"><span>Wallet</span><select required disabled={busy} value={wallet} onChange={event=>{setWallet(event.target.value);reset()}}><option value="">Choose wallet</option>{wallets.filter(item=>!item.archived).map(item=><option value={item.id} key={item.id}>{item.name} · {money(item.balance,settings.currency)}</option>)}</select></label>
+        <label className="field"><span>Wallet</span><AppSelect required disabled={busy} value={wallet} onChange={event=>{setWallet(event.target.value);reset()}}><option value="">Choose wallet</option>{wallets.filter(item=>!item.archived).map(item=><option value={item.id} key={item.id}>{item.name} · {money(item.balance,settings.currency)}</option>)}</AppSelect></label>
         <label className="field"><span>CSV statement</span><input required disabled={busy} type="file" accept=".csv,text/csv" onChange={async event=>{
           const file=event.target.files?.[0],version=++fileVersion.current;reset();setText('');setError('')
           if(!file)return
@@ -46,7 +47,7 @@ export default function StatementImport({wallets, compact=false}) {
         <p className="muted">Matching keeps the existing record unchanged and does not add another transaction.</p>
         <div className="import-preview">{rows.map(row=><div className="security-item stack gap-10" key={row.line}>
           <label className="check-row"><input type="checkbox" disabled={busy||!!row.error||row.duplicate} checked={selected.includes(row.line)} onChange={event=>setSelected(current=>event.target.checked?[...current,row.line]:current.filter(line=>line!==row.line))}/><span>Row {row.line}: {row.error||`${row.transaction.description} · ${money(row.transaction.amount,settings.currency)} · ${row.transaction.date.slice(0,10)}`}{row.duplicate?' · Already recorded':''}</span></label>
-          {!row.error&&!row.duplicate&&row.candidates?.length>0&&<label className="field"><span>Possible match for row {row.line}</span><select disabled={busy||!selected.includes(row.line)} value={matches[row.line]||''} onChange={event=>setMatches(current=>({...current,[row.line]:event.target.value}))}><option value="">Add as a separate transaction</option>{row.candidates.map(item=><option key={item.id} value={item.id}>Match {item.description} · {item.date.slice(0,10)} · #{item.id}</option>)}</select></label>}
+          {!row.error&&!row.duplicate&&row.candidates?.length>0&&<label className="field"><span>Possible match for row {row.line}</span><AppSelect disabled={busy||!selected.includes(row.line)} value={matches[row.line]||''} onChange={event=>setMatches(current=>({...current,[row.line]:event.target.value}))}><option value="">Add as a separate transaction</option>{row.candidates.map(item=><option key={item.id} value={item.id}>Match {item.description} · {item.date.slice(0,10)} · #{item.id}</option>)}</AppSelect></label>}
         </div>)}</div>
         <button type="button" className="button primary" disabled={busy||!selected.length} onClick={save}>{busy?'Saving...':`Confirm ${selected.length} rows`}</button>
       </div>}

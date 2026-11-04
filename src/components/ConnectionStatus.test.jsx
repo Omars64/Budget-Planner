@@ -55,6 +55,16 @@ test('offline feedback does not promise that unverified device storage will save
   expect(screen.queryByText(/New entries will be saved/)).toBeNull()
 })
 
+test('offline notice can be dismissed without covering the page for the rest of the outage', async()=>{
+  vi.stubGlobal('navigator',{onLine:false})
+  render(<MemoryRouter><ConnectionStatus/></MemoryRouter>)
+  expect(screen.getByRole('status')).toHaveTextContent('Offline')
+  fireEvent.click(screen.getByRole('button',{name:'Dismiss connection notice'}))
+  expect(screen.queryByRole('status')).toBeNull()
+  await act(async()=>window.dispatchEvent(new Event('budgetly:offline-data')))
+  expect(screen.queryByRole('status')).toBeNull()
+})
+
 test('a stale queue read cannot resurrect entries removed by a newer read', async()=>{
   let resolveOld
   state.read.mockImplementationOnce(()=>new Promise(resolve=>{resolveOld=resolve}))

@@ -129,15 +129,19 @@ async function send(path, options = {}) {
   if ((!options.method || options.method === 'GET') && navigator.onLine === false) {
     const cached = await readFallback()
     if (cached !== undefined) return cached
+    throw Object.assign(new Error('No saved data is available for this view. Reconnect to load it.'), { network: true })
   }
   const headers = new Headers(options.headers || {})
   if (options.body && !(options.body instanceof FormData)) headers.set('Content-Type', 'application/json')
   if (requestToken) headers.set('Authorization', `Bearer ${requestToken}`)
   let response
-  try { response = await fetch(`${apiBase}${path}`, { ...options, headers }) }
+  const timeout = new AbortController()
+  const limit = window.setTimeout(() => timeout.abort(), options.method && options.method !== 'GET' ? 20000 : 8000)
+  const signal = options.signal ? AbortSignal.any([options.signal, timeout.signal]) : timeout.signal
+  try { response = await fetch(`${apiBase}${path}`, { ...options, headers, signal }) }
   catch (cause) {
     checkIdentity()
-    if (cause?.name === 'AbortError') throw cause
+    if (options.signal?.aborted) throw cause
     if (!options.method || options.method === 'GET') {
       const cached = await readFallback()
       if (cached !== undefined) return cached
@@ -147,7 +151,7 @@ async function send(path, options = {}) {
       : 'Could not reach Budgetly. Check your connection and retry; transaction retries are protected against duplicates.')
     error.network = true
     throw error
-  }
+  } finally { window.clearTimeout(limit) }
   checkIdentity()
   if (response.status === 204) { responseCache.clear(); return null }
   let data = null

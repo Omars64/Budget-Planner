@@ -66,8 +66,8 @@ export default function Transactions() {
     </section></details>
 
     <section className="ledger-list" aria-label="Recorded transactions">
-      <div className="ledger-count">{rows.length}{ledger.hasMore ? '+' : ''} transaction{rows.length === 1 ? '' : 's'}</div>
-      {loading && !rows.length ? <div className="list-skeleton"><i/><i/><i/><i/></div> : !rows.length ? <EmptyState title="No matching transactions" text="Try another filter or add a transaction." action={<div className="button-row"><button className="button ghost" onClick={() => setFilters({...defaultLedgerFilters})}>Clear filters</button><button className="button primary" disabled={!canAdd} onClick={() => {setEditing(null);setModal(true)}}>Add transaction</button></div>}/> : <div className="date-groups">
+      <div className="ledger-count">{ledger.error && !ledger.updatedAt ? 'Records unavailable' : `${rows.length}${ledger.hasMore ? '+' : ''} transaction${rows.length === 1 ? '' : 's'}`}</div>
+      {ledger.error && !ledger.updatedAt ? <EmptyState title="Saved records unavailable" text="Reconnect to load this view. Any entries waiting to sync are shown above." action={<button className="button ghost" onClick={ledger.retry}>Retry loading</button>}/> : loading && !rows.length ? <div className="list-skeleton"><i/><i/><i/><i/></div> : !rows.length ? <EmptyState title="No matching transactions" text="Try another filter or add a transaction." action={<div className="button-row"><button className="button ghost" onClick={() => setFilters({...defaultLedgerFilters})}>Clear filters</button><button className="button primary" disabled={!canAdd} onClick={() => {setEditing(null);setModal(true)}}>Add transaction</button></div>}/> : <div className="date-groups">
         {Object.entries(grouped).map(([day, txs]) => <div className="date-group" key={day}>
           <LedgerDateHeader day={day}/>
           {txs.map(tx => <LedgerRow key={tx.id} tx={tx} fmt={fmt} onOpen={() => setSelected(tx)}/> )}

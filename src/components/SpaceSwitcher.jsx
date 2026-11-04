@@ -1,3 +1,4 @@
+import AppSelect from './AppSelect'
 import { useEffect, useRef, useState } from 'react'
 import { Check, ChevronDown, Plus, Users, UserRound, Settings2, Trash2 } from 'lucide-react'
 import { useApp } from '../App'
@@ -149,7 +150,7 @@ export default function SpaceSwitcher({ library = false }) {
             <h3>Add or update member</h3>
             <fieldset disabled={Boolean(busy)} className="space-form-fields stack gap-16">
               <label className="field"><span>Email</span><input type="email" required value={member.email} onChange={e => changeMember({ ...member, email: e.target.value })} aria-invalid={Boolean(memberError)} aria-describedby={memberError ? 'space-member-error' : undefined}/></label>
-              <label className="field"><span>Role</span><select value={member.role} onChange={e => changeMember({ ...member, role: e.target.value })}><option value="view">Viewer · read only</option><option value="edit">Manager · manage records</option></select></label>
+              <label className="field"><span>Role</span><AppSelect value={member.role} onChange={e => changeMember({ ...member, role: e.target.value })}><option value="view">Viewer · read only</option><option value="edit">Manager · manage records</option></AppSelect></label>
               <div className="space-save-row"><button className="button primary" disabled={Boolean(busy)}>{busy === 'members' ? 'Saving membership...' : busy === 'confirm' ? 'Awaiting confirmation...' : 'Save membership'}</button><span role="status" aria-live="polite">{busy === 'members' ? 'Saving membership...' : memberStatus}</span>{memberError && <p id="space-member-error" className="form-error" role="alert">{memberError}</p>}</div>
             </fieldset>
           </form>}

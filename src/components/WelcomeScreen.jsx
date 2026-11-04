@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowRight, CalendarDays, Users, Wallet } from 'lucide-react'
+import { ArrowRight, CalendarDays, Download, Users, Wallet } from 'lucide-react'
 import Modal from './Modal'
 import WelcomeGreeting from './WelcomeGreeting'
 import { useWelcomeSpeed } from '../lib/welcomeAnimation'
@@ -10,10 +10,24 @@ export default function WelcomeScreen({ onGuest, returningGuest = false, renderA
   const [working, setWorking] = useState(false)
   const [error, setError] = useState('')
   const [replay, setReplay] = useState(0)
+  const [installPrompt, setInstallPrompt] = useState(null)
+  const [showInstallHelp, setShowInstallHelp] = useState(false)
   const duration = useWelcomeSpeed()
   const motion = useAppMotion()
   const active = useRef(true)
   useEffect(() => { active.current = true; return () => { active.current = false } }, [])
+  useEffect(() => {
+    const ready = event => { event.preventDefault(); setInstallPrompt(event) }
+    window.addEventListener('beforeinstallprompt', ready)
+    return () => window.removeEventListener('beforeinstallprompt', ready)
+  }, [])
+  const isDesktop = typeof window.matchMedia === 'function' && window.matchMedia('(pointer:fine)').matches
+  const installed = typeof window.matchMedia === 'function' && window.matchMedia('(display-mode:standalone)').matches
+  const install = async () => {
+    if (!installPrompt) { setShowInstallHelp(true); return }
+    await installPrompt.prompt()
+    setInstallPrompt(null)
+  }
   const enter = async () => {
     if (working) return
     setWorking(true); setError('')
@@ -22,7 +36,7 @@ export default function WelcomeScreen({ onGuest, returningGuest = false, renderA
     finally { if (active.current) setWorking(false) }
   }
   return <div className="welcome-screen" data-motion={motion} style={{ '--welcome-duration': `${duration}s` }}>
-    <header className="welcome-header"><button type="button" className="welcome-text-button" disabled={working} onClick={() => setReplay(value => value + 1)}>Replay greeting</button></header>
+    <header className="welcome-header">{isDesktop && !installed && <button type="button" className="welcome-install" onClick={() => void install()}><Download size={17} aria-hidden="true"/> Install on PC</button>}<button type="button" className="welcome-text-button" disabled={working} onClick={() => setReplay(value => value + 1)}>Replay greeting</button></header>
     <main className="welcome-content">
       <WelcomeGreeting duration={duration} replay={replay}/>
       <div key={replay} className="welcome-arrival">
@@ -40,5 +54,6 @@ export default function WelcomeScreen({ onGuest, returningGuest = false, renderA
     <Modal open={Boolean(authMode)} onClose={() => { if (!working) setAuthMode(null) }} title="Your Budgetly account" size="small" layerClass="welcome-auth-layer">
       {authMode && <div key={authMode}>{renderAuth(authMode, setWorking)}</div>}
     </Modal>
+    <Modal open={showInstallHelp} onClose={() => setShowInstallHelp(false)} title="Install Budgetly on your PC" size="small"><p>In Chrome or Edge, open the browser menu and choose “Install Budgetly” or “Install this site as an app.” It opens in its own window. Saved pages and queued entries remain on this device until they sync.</p><p className="muted">Sign in while connected before using saved records offline. Confirm each entry says it was saved on this device before closing the form.</p></Modal>
   </div>
 }

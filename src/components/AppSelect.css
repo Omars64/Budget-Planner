@@ -1,0 +1,19 @@
+.app-select{display:block;position:relative;width:100%;min-width:0}
+.app-select-native{position:absolute!important;width:1px!important;height:1px!important;opacity:0!important;pointer-events:none!important;overflow:hidden!important}
+.app-select-trigger{width:100%;min-height:48px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 15px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--text);font:inherit;text-align:left;cursor:pointer}
+.app-select-trigger span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app-select-trigger:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.app-select-trigger:disabled{opacity:.55;cursor:default}
+.app-select-layer .modal{width:min(100%,520px)}
+.app-select-search{display:flex;align-items:center;gap:10px;margin:0 0 12px;padding:8px 12px;border:1px solid var(--line);border-radius:12px}
+.app-select-search input{width:100%;border:0;background:transparent;color:var(--text);font:inherit;outline:0}
+.app-select-options{display:grid;gap:4px;max-height:min(54dvh,440px);overflow:auto}
+.app-select-options button{display:flex;justify-content:space-between;align-items:center;width:100%;min-height:48px;padding:11px 14px;border:0;border-radius:10px;background:transparent;color:var(--text);font:inherit;text-align:left;cursor:pointer}
+.app-select-options button:hover,.app-select-options button[aria-selected=true]{background:var(--accent-soft)}
+.app-select-options button:disabled{opacity:.5;cursor:default}
+.app-month{display:block;position:relative;width:100%}
+.app-month-picker{display:grid;gap:16px}
+.app-month-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.app-month-grid button{min-height:46px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--text);font:inherit;cursor:pointer}
+.app-month-grid button:hover,.app-month-grid button[aria-pressed=true]{background:var(--accent-soft);border-color:var(--accent)}
+.app-month-grid button:disabled{opacity:.4;cursor:default}

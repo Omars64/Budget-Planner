@@ -1,4 +1,5 @@
 import { useId } from 'react'
+import AppMonthField from './AppMonthField'
 
 export default function ReportingMonthField({ value, onChange, type, error, disabled = false }) {
   const id = useId()
@@ -7,8 +8,7 @@ export default function ReportingMonthField({ value, onChange, type, error, disa
   const required = type === 'income'
   return <label className="field reporting-month-field">
     <span>Month this is for{required ? ' (required)' : ' (optional)'}</span>
-    <input
-      type="month"
+    <AppMonthField
       aria-label="Month this is for"
       aria-invalid={Boolean(error)}
       aria-describedby={error ? errorId : helpId}

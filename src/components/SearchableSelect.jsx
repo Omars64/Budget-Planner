@@ -1,3 +1,4 @@
+import AppSelect from './AppSelect'
 import { useId, useState } from 'react'
 
 // Retain the native picker and keyboard behavior; search narrows long lists.
@@ -13,7 +14,7 @@ export default function SearchableSelect({ label, value, onChange, options, rece
   return <div className="field searchable-field">
     <label htmlFor={id}>{label}</label>
     {options.length > 6 && <input type="search" aria-label={`Search ${label.toLowerCase()}`} placeholder="Search..." value={search} disabled={disabled} onChange={e => setSearch(e.target.value)}/>}
-    <select id={id} aria-label={label} value={value} disabled={disabled} aria-invalid={Boolean(error)} aria-describedby={error ? `${id}-error` : undefined} onChange={e => {
+    <AppSelect id={id} aria-label={label} value={value} disabled={disabled} aria-invalid={Boolean(error)} aria-describedby={error ? `${id}-error` : undefined} onChange={e => {
       onChange(e.target.value)
       const next = [e.target.value, ...recent.filter(v => v !== e.target.value)].slice(0, 5)
       if (rememberRecent) setRecent(next)
@@ -22,7 +23,7 @@ export default function SearchableSelect({ label, value, onChange, options, rece
     }}>
       <option value="">{placeholder}</option>
       {rows.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-    </select>
+    </AppSelect>
     {error && <small id={`${id}-error`} className="field-error">{error}</small>}
   </div>
 }

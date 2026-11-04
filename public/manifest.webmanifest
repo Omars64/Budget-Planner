@@ -1,0 +1,13 @@
+{
+  "name": "Budgetly",
+  "short_name": "Budgetly",
+  "description": "Personal and shared money planning",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#101b29",
+  "theme_color": "#0a4173",
+  "icons": [
+    { "src": "/flowbudget-logo.png", "sizes": "1254x1254", "type": "image/png", "purpose": "any" }
+  ]
+}
