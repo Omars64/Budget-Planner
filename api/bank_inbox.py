@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.exc import IntegrityError
 from .database import get_db
 from .auth_dependency import current_user
-from .models import BankCandidate, BankSourceMapping, BankMerchantMemory, Wallet, Category, Space, User, Transaction
+from .models import AppSetting, BankCandidate, BankSourceMapping, BankMerchantMemory, Wallet, Category, Space, User, Transaction
 from .spaces import member_role, workspace_actor
 from .schemas import TransactionWriteIn
 from .timekeeping import ledger_time
@@ -91,7 +91,17 @@ def candidate(db, actor, item_id):
     return row
 
 
-def matches(db, wallet_id, amount, date, kind, window=timedelta(minutes=30)):
+def duplicate_window(db, user_id):
+    cache_key = f'bank_duplicate_window:{user_id}'
+    if cache_key in db.info:
+        return db.info[cache_key]
+    row = db.get(AppSetting, {'user_id': user_id, 'key': 'bank_duplicate_window_minutes'})
+    minutes = int(row.value) if row and row.value in {'1', '2', '5', '10', '15', '30'} else 5
+    db.info[cache_key] = minutes
+    return minutes
+
+
+def matches(db, wallet_id, amount, date, kind, window=timedelta(minutes=5)):
     return db.query(Transaction).filter(Transaction.wallet_id == wallet_id, Transaction.amount == amount,
         Transaction.type == kind, Transaction.is_opening_balance.is_(False),
         Transaction.date >= date - window, Transaction.date <= date + window).order_by(Transaction.date.desc()).limit(5).all()
@@ -99,7 +109,7 @@ def matches(db, wallet_id, amount, date, kind, window=timedelta(minutes=30)):
 
 def serialize(db, row):
     kind = 'income' if row.transaction_type == 'refund' else 'transfer' if row.transaction_type == 'withdrawal' else row.transaction_type
-    duplicates = matches(db, row.wallet_id, row.amount, row.occurred_at, kind) if row.wallet_id else []
+    duplicates = matches(db, row.wallet_id, row.amount, row.occurred_at, kind, timedelta(minutes=duplicate_window(db, row.user_id))) if row.wallet_id else []
     originals = matches(db, row.wallet_id, row.amount, row.occurred_at, 'expense', timedelta(days=30)) if row.wallet_id and row.transaction_type == 'refund' else []
     return {k: getattr(row, k) for k in ('id', 'space_id', 'source_package', 'source_app', 'transaction_type', 'currency', 'merchant', 'account_last4', 'wallet_id', 'category_id', 'status', 'transaction_id')} | {
         'amount': str(row.amount), 'occurred_at': row.occurred_at.isoformat(), 'confidence': float(row.confidence), 'reasons': json.loads(row.reasons),
@@ -217,9 +227,10 @@ def approve(item_id: int, payload: ApprovalIn, actor=Depends(workspace_actor), d
         raise HTTPException(422, 'Bank alerts must be recorded once')
     if row.transaction_type == 'refund' and payload.type != 'income':
         raise HTTPException(422, 'Refunds must credit the wallet')
-    duplicates = matches(db, payload.wallet_id, payload.amount, payload.date, payload.type)
+    window_minutes = duplicate_window(db, actor.id)
+    duplicates = matches(db, payload.wallet_id, payload.amount, payload.date, payload.type, timedelta(minutes=window_minutes))
     if duplicates and not payload.add_anyway:
-        raise HTTPException(409, 'A transaction with this amount and type was recorded in this wallet within 30 minutes. Check it, then choose Add anyway if this is a separate payment.')
+        raise HTTPException(409, f'A transaction with this amount and type was recorded in this wallet within {window_minutes} minutes. Check it, then choose Add anyway if this is a separate payment.')
     if payload.refund_of_id:
         original = db.query(Transaction).filter_by(id=payload.refund_of_id, user_id=owner_id, wallet_id=payload.wallet_id, type='expense').first()
         if row.transaction_type != 'refund' or not original:

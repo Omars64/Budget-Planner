@@ -89,6 +89,24 @@ def test_same_amount_on_prior_day_is_not_a_duplicate(spaces):
     assert result.status_code == 200, result.text
 
 
+def test_duplicate_window_defaults_to_five_minutes_and_can_be_changed(spaces):
+    client, _, _, ids = spaces
+    item = client.post('/api/bank-inbox/ingest', json=alert()).json()['id']
+    assert client.post(f'/api/bank-inbox/{item}/route', json={'wallet_id': ids['private']}).status_code == 200
+    earlier = transaction(ids['private'], amount='6.750', date='2026-10-08T11:53:00+03:00')
+    assert client.post('/api/transactions?space_id=personal', json=earlier).status_code == 201
+    path = f'/api/bank-inbox/{item}/approve?space_id=personal'
+    current = transaction(ids['private'], amount='6.750', date='2026-10-08T12:00:00+03:00')
+    assert client.get('/api/settings').json()['bank_duplicate_window_minutes'] == 5
+    assert client.get('/api/bank-inbox?space_id=personal').json()['items'][0]['duplicates'] == []
+    assert client.put('/api/settings', json={'bank_duplicate_window_minutes': 10}).status_code == 200
+    assert len(client.get('/api/bank-inbox?space_id=personal').json()['items'][0]['duplicates']) == 1
+    assert client.post(path, json=current).status_code == 409
+    assert client.put('/api/settings', json={'bank_duplicate_window_minutes': 5}).status_code == 200
+    assert client.post(path, json=current).status_code == 200
+    assert client.put('/api/settings', json={'bank_duplicate_window_minutes': 0}).status_code == 422
+
+
 def test_currency_security_precision_and_income_month(spaces):
     client, _, _, ids = spaces
     cbk = client.post('/api/bank-inbox/ingest', json=alert(content_hash='e'*64, merchant='WAMD transfer', reasons=['Transfer direction needs review', 'Signed amount: direction needs review']))
