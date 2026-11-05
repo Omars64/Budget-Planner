@@ -1,4 +1,5 @@
 {
+  "6.18.1": [{"title":"Clearer Windows download","detail":"The welcome page now offers one Windows download button without a second browser-install option."}],
   "6.18.0": [{"title":"Budgetly for Windows","detail":"Download a standalone Windows installer from the welcome screen. The desktop app now checks for new installer versions and keeps its current interface available offline."},{"title":"Wallet logo across devices","detail":"The approved green wallet logo now appears in the Windows installer and app alongside the browser and Android branding."}],
   "6.17.1": [{"title":"Wallet logo shown consistently","detail":"Budgetly now loads the approved wallet logo from a fresh image path in browser and installed apps. Android keeps the complete icon within the launcher shape."}],
   "6.17.0": [{"title":"A new Budgetly logo","detail":"The new wallet logo appears on Android, the browser and installed app shortcuts. Choose the legacy blue logo for branding inside Budgetly in Settings → Look & feel → App logo."}],
