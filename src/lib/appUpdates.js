@@ -21,6 +21,7 @@ export async function fetchWebRelease(signal) {
 
 export const RELEASES_URL = 'https://github.com/Omars64/Budget-Planner/releases'
 export const MANIFEST_URL = publicApiUrl('/api/app-updates/latest')
+export const WINDOWS_MANIFEST_URL = publicApiUrl('/api/app-updates/windows')
 export const AppUpdater = registerPlugin('BudgetlyUpdater')
 export const androidUpdatesAvailable = () => Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android'
 
@@ -49,4 +50,22 @@ export async function fetchRelease(signal) {
   const body = await response.text()
   if (body.length > 16384) throw new Error('The update information is too large.')
   return validateRelease(JSON.parse(body))
+}
+
+export function validateWindowsRelease(value) {
+  if (!value || value.schema !== 1 || !/^\d+\.\d+\.\d+$/.test(value.version) ||
+      !Number.isSafeInteger(value.size) || value.size < 1 || value.size > 536870912 ||
+      !/^[a-f0-9]{64}$/.test(value.sha256)) throw new Error('Invalid Windows release information.')
+  const expected = `https://github.com/Omars64/Budget-Planner/releases/download/v${value.version}/Budgetly-Setup-${value.version}.exe`
+  if (value.url !== expected) throw new Error('Invalid Windows installer address.')
+  return { schema: 1, version: value.version, size: value.size, sha256: value.sha256, url: expected }
+}
+
+export async function fetchWindowsRelease(signal) {
+  const response = await fetch(WINDOWS_MANIFEST_URL, { signal, cache: 'no-store', credentials: 'omit' })
+  if (response.status === 404) return null
+  if (!response.ok) throw new Error('Windows release check unavailable.')
+  const body = await response.text()
+  if (body.length > 4096) throw new Error('Oversized Windows release information.')
+  return validateWindowsRelease(JSON.parse(body))
 }

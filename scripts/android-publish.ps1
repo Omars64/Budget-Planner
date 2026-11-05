@@ -1,5 +1,5 @@
 function Invoke-BudgetlyNativeCommand([string]$Program, [string[]]$Arguments) {
-    $showOutput = $Program -eq 'powershell.exe' -or
+    $showOutput = $Program -eq 'powershell.exe' -or $Program -eq 'npm.cmd' -or
         ($Program -eq 'git.exe' -and $Arguments[0] -in @('commit', 'push')) -or
         ($Program -eq 'gh.exe' -and $Arguments[0] -eq 'release' -and $Arguments[1] -in @('create', 'upload', 'edit'))
     $output = [System.Collections.Generic.List[string]]::new()
@@ -96,10 +96,27 @@ function Invoke-BudgetlyRelease {
             }
         }
         $null = Run powershell.exe ($BuildArguments + '-CheckOnly' | Select-Object -Unique)
+        if (!(Get-Command npm.cmd -ErrorAction SilentlyContinue) -or !(Test-Path -LiteralPath (Join-Path $Root 'node_modules/.bin/electron-builder.cmd'))) {
+            throw 'Windows installer tools are missing. Run npm ci, then retry the release launcher.'
+        }
         if ($CheckOnly) { Write-Host 'Release checks passed. No commit, push, build, or publication performed.'; return }
 
         Write-Host 'Building and testing locally before making any Git or production changes...' -ForegroundColor Cyan
         $null = Run powershell.exe $BuildArguments
+        Write-Host 'Building the Windows installer from the same tested source...' -ForegroundColor Cyan
+        $env:NODE_USE_SYSTEM_CA = '1'
+        $null = Run npm.cmd @('run', 'desktop:installer')
+        $null = Run node.exe @('scripts/windows-release-manifest.mjs')
+        $windowsDirectory = Join-Path $Root 'dist-desktop'
+        $installer = Join-Path $windowsDirectory "Budgetly-Setup-$version.exe"
+        $windowsManifestPath = Join-Path $windowsDirectory 'windows-update.json'
+        $windowsManifest = Get-Content -LiteralPath $windowsManifestPath -Raw | ConvertFrom-Json
+        $windowsFile = Get-Item -LiteralPath $installer
+        if ($windowsManifest.version -ne $version -or $windowsManifest.size -ne $windowsFile.Length -or
+            $windowsManifest.sha256 -ne (Get-BudgetlyFileSha256 $installer) -or
+            $windowsManifest.url -ne "https://github.com/$repo/releases/download/$tag/Budgetly-Setup-$version.exe") {
+            throw 'Windows installer and update manifest do not match. Nothing will be pushed or published.'
+        }
         $directory = Join-Path $Root 'android/app/build/outputs/apk/release'
         $apk = Join-Path $directory "Budgetly-$version.apk"
         $manifestPath = Join-Path $directory 'update.json'
@@ -157,9 +174,9 @@ function Invoke-BudgetlyRelease {
         if ($existing) {
             $draft = Run gh.exe @('release', 'view', $tag, '--repo', $repo, '--json', 'targetCommitish') | ConvertFrom-Json
             if ($draft.targetCommitish -ne $commit) { throw "Existing draft $tag targets a different commit. Resolve it manually before retrying." }
-            $null = Run gh.exe @('release', 'upload', $tag, $apk, $manifestPath, '--repo', $repo, '--clobber')
+            $null = Run gh.exe @('release', 'upload', $tag, $apk, $manifestPath, $installer, $windowsManifestPath, '--repo', $repo, '--clobber')
         } else {
-            $null = Run gh.exe @('release', 'create', $tag, $apk, $manifestPath, '--repo', $repo,
+            $null = Run gh.exe @('release', 'create', $tag, $apk, $manifestPath, $installer, $windowsManifestPath, '--repo', $repo,
                 '--target', $commit, '--title', "Budgetly $version", '--generate-notes', '--draft')
         }
         $null = Run gh.exe @('release', 'edit', $tag, '--repo', $repo, '--draft=false', '--latest')

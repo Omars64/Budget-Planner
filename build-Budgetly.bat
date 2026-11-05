@@ -1,6 +1,6 @@
 @echo off
 setlocal
-title Budgetly Android Build and GitHub Release
+title Budgetly Android and Windows Build and GitHub Release
 pushd "%~dp0"
 if errorlevel 1 exit /b 1
 where powershell.exe >nul 2>&1

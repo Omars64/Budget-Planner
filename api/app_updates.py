@@ -20,6 +20,22 @@ MANIFEST_URL = 'https://github.com/Omars64/Budget-Planner/releases/latest/downlo
 ALLOWED_HOSTS = {'github.com', 'release-assets.githubusercontent.com', 'objects.githubusercontent.com'}
 _cache = {'until': 0, 'release': None}
 _lock = Lock()
+WINDOWS_MANIFEST_URL = 'https://github.com/Omars64/Budget-Planner/releases/latest/download/windows-update.json'
+_windows_cache = {'until': 0, 'release': None}
+
+
+def validate_windows_release(value):
+    if not isinstance(value, dict):
+        raise ValueError('Invalid Windows release')
+    version = value.get('version')
+    url = urlsplit(value.get('url', ''))
+    if (value.get('schema') != 1 or not isinstance(version, str) or not re.fullmatch(r'\d+\.\d+\.\d+', version)
+            or type(value.get('size')) is not int or not 0 < value['size'] <= 536870912
+            or not isinstance(value.get('sha256'), str) or not re.fullmatch(r'[a-f0-9]{64}', value['sha256'])
+            or url.scheme != 'https' or url.netloc != 'github.com' or url.query or url.fragment
+            or url.path != f'/Omars64/Budget-Planner/releases/download/v{version}/Budgetly-Setup-{version}.exe'):
+        raise ValueError('Invalid Windows release')
+    return {key: value[key] for key in ('schema', 'version', 'size', 'sha256', 'url')}
 
 
 def validate_release(value):
@@ -51,8 +67,7 @@ def validate_release(value):
     return result
 
 
-def load_release():
-    url = MANIFEST_URL
+def load_release(url=MANIFEST_URL, validator=validate_release):
     with httpx.Client(timeout=10, follow_redirects=False, trust_env=False) as client:
         for _ in range(6):
             parsed = urlsplit(url)
@@ -73,7 +88,7 @@ def load_release():
                     body.extend(chunk)
                     if len(body) > 16384:
                         raise ValueError('Oversized release metadata')
-                return validate_release(json.loads(body))
+                return validator(json.loads(body))
     raise ValueError('Too many release redirects')
 
 
@@ -91,4 +106,21 @@ def latest_release(response: Response):
     if release is None:
         response.status_code = 404
         return {'detail': 'No published Android release yet.'}
+    return release
+
+
+@router.get('/api/app-updates/windows')
+def windows_release(response: Response):
+    with _lock:
+        if _windows_cache['until'] <= time.monotonic():
+            try:
+                _windows_cache['release'] = load_release(WINDOWS_MANIFEST_URL, validate_windows_release)
+                _windows_cache['until'] = time.monotonic() + 300
+            except Exception:
+                raise HTTPException(503, 'Windows update checks are temporarily unavailable. Please retry.') from None
+        release = _windows_cache['release']
+    response.headers['Cache-Control'] = 'public, max-age=0, s-maxage=300'
+    if release is None:
+        response.status_code = 404
+        return {'detail': 'No published Windows release yet.'}
     return release

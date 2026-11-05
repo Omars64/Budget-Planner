@@ -1,8 +1,14 @@
 import { afterEach, expect, test, vi } from 'vitest'
-import { fetchRelease, validateRelease, MANIFEST_URL } from './appUpdates'
+import { fetchRelease, validateRelease, validateWindowsRelease, MANIFEST_URL } from './appUpdates'
 
 const valid = { schema: 1, packageId: 'com.flowbudget.app', version: '5.8.0', versionCode: 43, size: 1024,
   sha256: 'a'.repeat(64), url: 'https://github.com/Omars64/Budget-Planner/releases/download/v5.8.0/Budgetly-5.8.0.apk' }
+const windows = { schema: 1, version: '6.18.0', size: 12345678, sha256: 'b'.repeat(64), url: 'https://github.com/Omars64/Budget-Planner/releases/download/v6.18.0/Budgetly-Setup-6.18.0.exe' }
+test('Windows installer metadata stays pinned to the matching official release', () => {
+  expect(validateWindowsRelease(windows)).toEqual(windows)
+  expect(() => validateWindowsRelease({ ...windows, url: windows.url.replace('6.18.0.exe', '6.17.1.exe') })).toThrow()
+  expect(() => validateWindowsRelease({ ...windows, url: 'https://example.com/install.exe' })).toThrow()
+})
 afterEach(() => vi.unstubAllGlobals())
 test('accepts the official release and strips unrelated fields', () => {
   expect(validateRelease({ ...valid, token: 'not-used' })).toEqual(valid)

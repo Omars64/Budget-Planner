@@ -1,9 +1,12 @@
 {
   "name": "flowbudget",
+  "description": "Budgetly personal finance and shared spaces",
+  "author": "Omar Solanki",
   "private": true,
-  "version": "6.17.1",
-  "androidVersionCode": 118,
+  "version": "6.18.0",
+  "androidVersionCode": 119,
   "type": "module",
+  "main": "desktop/main.cjs",
   "scripts": {
     "version:sync": "node scripts/version.mjs",
     "version:check": "node scripts/version.mjs --check",
@@ -21,6 +24,7 @@
     "android:apk": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-android.ps1",
     "android:release-manifest": "node scripts/android-release-manifest.mjs",
     "preview": "vite preview",
+    "desktop:installer": "npm run build && electron-builder --win nsis --x64",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint ."
@@ -49,12 +53,39 @@
       "uuid": "11.1.1"
     }
   },
+  "build": {
+    "appId": "com.flowbudget.desktop",
+    "productName": "Budgetly",
+    "directories": {
+      "output": "dist-desktop"
+    },
+    "files": [
+      "dist/**/*",
+      "desktop/**/*",
+      "package.json",
+      "!node_modules/**/*"
+    ],
+    "asar": true,
+    "win": {
+      "target": "nsis",
+      "icon": "desktop/icon.ico",
+      "artifactName": "Budgetly-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  },
   "devDependencies": {
     "@playwright/test": "1.64.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",
     "@vitejs/plugin-react": "^6.1.1",
+    "electron": "44.4.5",
+    "electron-builder": "26.15.3",
     "eslint": "^9.36.0",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^6.1.1",

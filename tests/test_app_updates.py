@@ -10,6 +10,17 @@ from api import app_updates as updates
 RELEASE = {'schema': 1, 'packageId': 'com.flowbudget.app', 'version': '5.8.0', 'versionCode': 43,
            'size': 1024, 'sha256': 'a' * 64,
            'url': 'https://github.com/Omars64/Budget-Planner/releases/download/v5.8.0/Budgetly-5.8.0.apk'}
+WINDOWS_RELEASE = {'schema': 1, 'version': '6.18.0', 'size': 12345678, 'sha256': 'b' * 64,
+                   'url': 'https://github.com/Omars64/Budget-Planner/releases/download/v6.18.0/Budgetly-Setup-6.18.0.exe'}
+
+
+def test_windows_manifest_rejects_external_or_mismatched_installer():
+    assert updates.validate_windows_release(WINDOWS_RELEASE) == WINDOWS_RELEASE
+    for bad_url in ('https://example.com/Budgetly-Setup-6.18.0.exe',
+                    WINDOWS_RELEASE['url'].replace('6.18.0.exe', '6.17.1.exe'),
+                    WINDOWS_RELEASE['url'] + '?download=1'):
+        with pytest.raises(ValueError):
+            updates.validate_windows_release({**WINDOWS_RELEASE, 'url': bad_url})
 
 
 def test_manifest_preserves_valid_audiences_without_promoting_unknown_audiences():

@@ -4,6 +4,7 @@ import Modal from './Modal'
 import WelcomeGreeting from './WelcomeGreeting'
 import { useWelcomeSpeed } from '../lib/welcomeAnimation'
 import { useAppMotion } from '../lib/appMotion'
+import WindowsReleaseDownload from './WindowsReleaseDownload'
 
 export default function WelcomeScreen({ onGuest, returningGuest = false, renderAuth }) {
   const [authMode, setAuthMode] = useState(() => returningGuest || new URLSearchParams(window.location.search).has('reset') ? 'login' : null)
@@ -36,7 +37,7 @@ export default function WelcomeScreen({ onGuest, returningGuest = false, renderA
     finally { if (active.current) setWorking(false) }
   }
   return <div className="welcome-screen" data-motion={motion} style={{ '--welcome-duration': `${duration}s` }}>
-    <header className="welcome-header">{isDesktop && !installed && <button type="button" className="welcome-install" onClick={() => void install()}><Download size={17} aria-hidden="true"/> Install on PC</button>}<button type="button" className="welcome-text-button" disabled={working} onClick={() => setReplay(value => value + 1)}>Replay greeting</button></header>
+    <header className="welcome-header"><div className="welcome-installs">{isDesktop && !window.budgetlyDesktop && <WindowsReleaseDownload compact/>}{isDesktop && !installed && !window.budgetlyDesktop && <button type="button" className="welcome-install" onClick={() => void install()}><Download size={17} aria-hidden="true"/> Install browser app</button>}</div><button type="button" className="welcome-text-button" disabled={working} onClick={() => setReplay(value => value + 1)}>Replay greeting</button></header>
     <main className="welcome-content">
       <WelcomeGreeting duration={duration} replay={replay}/>
       <div key={replay} className="welcome-arrival">

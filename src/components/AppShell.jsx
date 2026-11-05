@@ -14,6 +14,7 @@ import ScrollMemory from './ScrollMemory'
 import Milestone from './Milestone'
 import ConnectionStatus from './ConnectionStatus'
 import AndroidUpdate from './AndroidUpdate'
+import WindowsUpdate from './WindowsUpdate'
 import { useContainedScroll, useScrollLock } from '../lib/scrollLock'
 import BrandFooter from './BrandFooter'
 import { useWorkspacePreferences } from '../lib/workspacePreferences'
@@ -141,6 +142,7 @@ export default function AppShell({ children }) {
       </header>
       <div className="mobile-space"><SpaceSwitcher/></div>
       <AndroidUpdate userId={user?.id} role={user?.role} guest={isGuest}/>
+      <WindowsUpdate/>
       {isGuest && <div className="guest-banner"><span>Guest mode · Saved on this device</span><button className="button ghost small" onClick={() => requestSignIn('cloud storage and more features')}>Sign in</button></div>}
       <motion.div className="page-wrap" data-tour-page={location.pathname} key={location.pathname} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .18, ease: 'easeOut' }}>{children}</motion.div>
       <BrandFooter className="app-footer"/>
