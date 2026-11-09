@@ -1,0 +1,69 @@
+/* Overview shows only the balance, selected-month activity, actionable work and three recent entries. */
+.budgetly-v2 .overview-focus.overview-page {
+  background: transparent;
+  display: grid;
+  gap: 14px;
+  border-radius: 0;
+  overflow: visible;
+}
+.budgetly-v2 .overview-focus > div[aria-busy] { display: grid; gap: 14px; }
+.budgetly-v2 .overview-focus :is(.overview-balance,.overview-focus-month,.overview-focus-action,.overview-recent) {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  min-width: 0;
+}
+.budgetly-v2 .overview-focus .overview-balance {
+  padding: 22px 24px;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+}
+.budgetly-v2 .overview-focus .overview-balance h1 { margin: 8px 0 0; font-size: clamp(30px, 4vw, 38px); }
+.budgetly-v2 .overview-focus-wallet-link { display: inline-flex; align-items: center; gap: 5px; color: var(--accent-text,var(--accent)); font-weight: 650; text-decoration: none; }
+.budgetly-v2 .overview-focus-month { padding: 22px 24px; }
+.budgetly-v2 .overview-focus-month-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; }
+.budgetly-v2 .overview-focus-month-head h2 { margin: 0; font-size: 18px; }
+.budgetly-v2 .overview-focus-month-head .field { margin: 0; }
+.budgetly-v2 .overview-focus-month-head .field > span { font-size: 12px; }
+.budgetly-v2 .overview-focus-month-head .field input { width: 180px; }
+.budgetly-v2 .overview-focus-metrics { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0; margin-top: 18px; }
+.budgetly-v2 .overview-focus-metrics > a { display: grid; gap: 5px; min-width: 0; color: inherit; text-decoration: none; }
+.budgetly-v2 .overview-focus-metrics > a + a { border-left: 1px solid var(--line); padding-left: 24px; }
+.budgetly-v2 .overview-focus-metrics span { color: var(--muted); font-size: 13px; }
+.budgetly-v2 .overview-focus-metrics strong { font-size: clamp(18px,2.4vw,24px); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.budgetly-v2 .overview-focus-metrics > a:hover strong { text-decoration: underline; text-underline-offset: 4px; }
+.budgetly-v2 .overview-focus-action { display: flex; align-items: center; gap: 14px; padding: 16px 20px; min-height: 68px; color: var(--text); text-decoration: none; }
+.budgetly-v2 .overview-focus-action > svg:first-child { color: var(--accent-text,var(--accent)); flex: none; }
+.budgetly-v2 .overview-focus-action > svg:last-child { margin-left: auto; flex: none; }
+.budgetly-v2 .overview-focus-action span { display: grid; gap: 3px; min-width: 0; }
+.budgetly-v2 .overview-focus-action small { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.budgetly-v2 .overview-focus .overview-recent { padding: 20px 24px; border-bottom: 1px solid var(--line); }
+.budgetly-v2 .overview-focus .overview-recent .panel-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.budgetly-v2 .overview-focus .overview-recent h2 { margin: 0; font-size: 18px; }
+.budgetly-v2 .overview-focus .overview-recent .ledger-entry { padding: 12px 0; }
+.budgetly-v2 .overview-focus .overview-balance-details { border: 0; }
+.budgetly-v2 .overview-focus .overview-balance-details > summary { padding: 14px 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.budgetly-v2 .overview-focus .overview-balance-details[open] { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.budgetly-v2 .overview-focus .overview-balance-details[open] > summary { border: 0; border-bottom: 1px solid var(--line); border-radius: 14px 14px 0 0; }
+.budgetly-v2 .overview-focus .overview-balance-details-content { padding: 0 20px 20px; }
+body[data-seasonal] .budgetly-v2 .overview-focus :is(.overview-balance,.overview-focus-month,.overview-focus-action,.overview-recent,.overview-balance-details[open],.overview-balance-details > summary) {
+  background: rgba(var(--season-glass-rgb),var(--season-tint,.07)) !important;
+  border-color: var(--season-line);
+  backdrop-filter: blur(1.2px);
+}
+@media (max-width: 650px) {
+  .budgetly-v2 .overview-focus.overview-page,
+  .budgetly-v2 .overview-focus > div[aria-busy] { gap: 12px; }
+  .budgetly-v2 .overview-focus :is(.overview-balance,.overview-focus-month,.overview-recent) { padding: 18px 16px; }
+  .budgetly-v2 .overview-focus-wallet-link { display: none; }
+  .budgetly-v2 .overview-focus-month-head { align-items: end; }
+  .budgetly-v2 .overview-focus-month-head .field input { width: 138px; }
+  .budgetly-v2 .overview-focus-metrics > a + a { padding-left: 14px; }
+  .budgetly-v2 .overview-focus-metrics strong { font-size: clamp(16px,4.2vw,20px); }
+  .budgetly-v2 .overview-focus-action { padding: 14px 16px; }
+}
+@media (max-width: 380px) {
+  .budgetly-v2 .overview-focus-month-head .field { width: 100%; }
+  .budgetly-v2 .overview-focus-month-head .field input { width: 100%; }
+  .budgetly-v2 .overview-focus-metrics strong { font-size: 16px; }
+}

@@ -1,101 +1,70 @@
-import AppMonthField from '../components/AppMonthField'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, CalendarClock, Inbox, Wallet } from 'lucide-react'
-import { dateInput } from '../lib/time'
-import { api, money } from '../lib/api'
-import { useApp } from '../App'
-import ProgressBar from '../components/ProgressBar'
+import { ArrowRight, Bell, CalendarClock } from 'lucide-react'
+import AppMonthField from '../components/AppMonthField'
+import AnimatedMoney from '../components/AnimatedMoney'
 import EmptyState from '../components/EmptyState'
 import LedgerRow, { TransactionDetails } from '../components/LedgerRow'
+import { api, money } from '../lib/api'
+import { dateInput } from '../lib/time'
 import { useViewState } from '../lib/viewState'
-import AnimatedMoney from '../components/AnimatedMoney'
-import { useWorkspacePreferences } from '../lib/workspacePreferences'
-import { frequentPages } from '../lib/pageUsage'
-import { guestRoutes } from '../lib/guest'
-import WeeklySummary from '../components/WeeklySummary'
-import PlannerSummary from '../components/PlannerSummary'
-import '../everyday-money.css'
+import { useApp } from '../App'
+import '../overview-focus.css'
 
 export default function Overview() {
   const { user, settings, refreshKey, isGuest, activeSpace } = useApp()
   const [data, setData] = useState(null)
-  const [preferences] = useWorkspacePreferences(user?.id)
   const [attention, setAttention] = useState(null)
   const [month, setMonth] = useViewState(`overview:${user?.id}:month`, dateInput().slice(0, 7))
   const [error, setError] = useState('')
   const [selected, setSelected] = useState(null)
   const [retry, setRetry] = useState(0)
+
   useEffect(() => {
     const controller = new window.AbortController()
     setError('')
-    if (!isGuest) api('/api/attention', {signal:controller.signal}).then(value => { if (!controller.signal.aborted) setAttention(Number.isInteger(value.count) ? value.count : null) }).catch(() => { if (!controller.signal.aborted) setAttention(null) })
+    if (!isGuest) api('/api/attention', { signal: controller.signal })
+      .then(value => { if (!controller.signal.aborted) setAttention(Number.isInteger(value.count) ? value.count : null) })
+      .catch(() => { if (!controller.signal.aborted) setAttention(null) })
     api(`/api/dashboard?month=${month}`, { signal: controller.signal })
       .then(value => { if (!controller.signal.aborted) setData(value) })
       .catch(e => { if (!controller.signal.aborted) setError(e.message) })
     return () => controller.abort()
-  }, [month, refreshKey, retry])
+  }, [month, refreshKey, retry, isGuest])
+
   const fmt = value => money(value, settings.currency, settings.compact_numbers)
   const displayedMonth = data?.month || month
   const [reportYear, reportMonth] = displayedMonth.split('-').map(Number)
   const displayedMonthLabel = new Date(reportYear, reportMonth - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
   const otherBalanceActivity = data ? Math.round((Number(data.total_balance) - Number(data.net)) * 1000) / 1000 : 0
-  const filteredLink = { aiFilters: { month: displayedMonth } }
+  const nextUpcoming = data?.weekly?.upcoming?.next
+  const action = !isGuest && (attention > 0
+    ? { to: '/attention', title: 'Needs your attention', detail: `${attention} ${attention === 1 ? 'item' : 'items'} to review`, icon: Bell }
+    : nextUpcoming ? { to: '/upcoming', title: 'Upcoming payment', detail: nextUpcoming.description, icon: CalendarClock } : null)
+  const ActionIcon = action?.icon
+
   if (!data && !error) return <div className="skeleton-page"><div/><div/><div/></div>
 
-  return <div className="overview-page everyday-page everyday-overview">
-    <section className="overview-balance">
+  return <div className="overview-page overview-focus">
+    <section className="overview-balance" aria-label="Available wallet balance">
       <div><p className="muted">Available now · {activeSpace ? 'Space wallets' : 'Personal wallets'}</p><h1>{data ? <AnimatedMoney value={data.total_balance} currency={settings.currency} compact={settings.compact_numbers}/> : '-'}</h1></div>
+      <Link to="/wallets" className="overview-focus-wallet-link">Wallets <ArrowRight size={16} aria-hidden="true"/></Link>
     </section>
-    {error && <div className="form-error" role="alert">{error}<button className="button ghost small" onClick={()=>setRetry(v=>v+1)}>Retry</button>{data && <small>Showing the last loaded summary for {data.month}.</small>}</div>}
-    {data && <div aria-busy={data.month !== month} className={data.month !== month ? 'overview-loading' : ''}>
-      <section className="overview-month-heading" aria-label="Reporting month">
-        <div><p className="muted">Reporting activity</p><h2>Assigned to {displayedMonthLabel}</h2></div>
-        <div className="overview-controls"><label className="field"><span>Month</span><AppMonthField min="1000-01" max="9999-12" value={month} onChange={e => e.target.value && setMonth(e.target.value)}/></label></div>
+    {error && <div className="form-error" role="alert">{error}<button className="button ghost small" onClick={() => setRetry(value => value + 1)}>Retry</button>{data && <small>Showing the last loaded summary for {data.month}.</small>}</div>}
+    {data && <div className={data.month !== month ? 'overview-loading' : ''} aria-busy={data.month !== month}>
+      <section className="overview-focus-month" aria-label="Selected month summary">
+        <div className="overview-focus-month-head"><h2>{displayedMonthLabel} activity</h2><label className="field"><span>Month</span><AppMonthField min="1000-01" max="9999-12" value={month} onChange={event => event.target.value && setMonth(event.target.value)}/></label></div>
+        <div className="overview-focus-metrics">
+          <Link to="/transactions" state={{ aiFilters: { month: displayedMonth, type: 'income' } }}><span>Money in</span><strong className="tx-amount income">{fmt(data.income)}</strong></Link>
+          <Link to="/transactions" state={{ aiFilters: { month: displayedMonth, type: 'expense', exclude_opening: true } }}><span>Spent</span><strong className="tx-amount expense">{fmt(data.expense)}</strong></Link>
+        </div>
       </section>
-      <section key={data.month} className="overview-metrics month-reveal" aria-label="Selected month summary">
-        <Link to="/transactions" state={{aiFilters:{month:data.month,type:'income'}}}><span>Money in</span><strong className="tx-amount income">{fmt(data.income)}</strong>{data.opening_funds > 0 && <small>{fmt(data.earned_income)} income + {fmt(data.opening_funds)} starting funds</small>}</Link>
-        <Link to="/transactions" state={{aiFilters:{month:displayedMonth,type:'expense',exclude_opening:true}}}><span>Spent</span><strong className="tx-amount expense">{fmt(data.expense)}</strong></Link>
-        <div className="overview-month-net"><span>Month's net change</span><strong className={data.net < 0 ? 'tx-amount expense' : 'tx-amount income'}>{data.net > 0 ? '+' : ''}{fmt(data.net)}</strong>{data.opening_debt > 0 && <small>Includes {fmt(data.opening_debt)} starting debt</small>}</div>
-      </section>
-      <details className="overview-balance-details"><summary>Balance and reporting details</summary><div className="overview-balance-details-content"><p><strong>Wallet balances</strong></p><ul>{(data.wallets || []).map(wallet => <li key={wallet.id}><span>{wallet.name}</span><strong>{fmt(wallet.balance)}</strong></li>)}</ul><p>Monthly totals use the month each transaction belongs to. An entry recorded earlier can count toward {displayedMonthLabel}. Changing the month does not change your available balance.</p><p><strong>Why are the figures different?</strong></p><dl><div><dt>Other balance activity</dt><dd>{fmt(otherBalanceActivity)}</dd></div><div><dt>Assigned to {displayedMonthLabel}</dt><dd>{data.net > 0 ? '+' : ''}{fmt(data.net)}</dd></div><div><dt>Available now</dt><dd>{fmt(data.total_balance)}</dd></div></dl><small>This compares reporting allocations with today's wallet balances; it is not your balance on the first day of the month. Transfers between these wallets cancel out.</small></div></details>
-      {!isGuest && <nav className="everyday-overview-actions" aria-label="Next actions">
-        <Link to="/upcoming"><CalendarClock size={22}/><span><strong>Upcoming payments</strong><small>Due dates, reminders and automatic entries</small></span><ArrowRight size={17}/></Link>
-        <Link to="/bank-messages"><Inbox size={22}/><span><strong>Review bank alerts</strong><small>Check alerts before adding them to your records</small></span><ArrowRight size={17}/></Link>
-      </nav>}
+      {action && <Link to={action.to} className="overview-focus-action"><ActionIcon size={20} aria-hidden="true"/><span><strong>{action.title}</strong><small>{action.detail}</small></span><ArrowRight size={17} aria-hidden="true"/></Link>}
       <section className="overview-section overview-recent">
-        <div className="panel-head"><h3>Recent activity</h3><Link to="/transactions" state={filteredLink} className="overview-link">View all transactions <ArrowRight size={15}/></Link></div>
-        {data.recent_transactions.length ? data.recent_transactions.map(tx => <LedgerRow key={tx.id} tx={tx} fmt={fmt} showDate onOpen={() => setSelected(tx)}/>) : <EmptyState title="No transactions this month" text="Add a transaction to start recording your activity."/>}
+        <div className="panel-head"><h2>Recent activity</h2><Link to="/transactions" state={{ aiFilters: { month: displayedMonth } }} className="overview-link">View all <ArrowRight size={16} aria-hidden="true"/></Link></div>
+        {data.recent_transactions.length ? data.recent_transactions.slice(0, 3).map(tx => <LedgerRow key={tx.id} tx={tx} fmt={fmt} showDate onOpen={() => setSelected(tx)}/>) : <EmptyState title="No transactions this month" text="Add a transaction to start recording your activity."/>}
       </section>
-      {!isGuest && <Link className="overview-attention-link" to="/attention">{attention === null ? 'Review reminders' : attention === 0 ? 'All caught up' : `${attention} ${attention === 1 ? 'item needs' : 'items need'} attention`} <ArrowRight size={16}/></Link>}
-      {data.shared?.wallet_count > 0 && <section className="overview-shared" aria-label="Shared wallets summary"><div><span>Shared balance</span><strong>{fmt(data.shared.balance)}</strong><small>{data.shared.wallet_count} shared wallets, separate from personal</small></div><Link to="/shared-transactions">View shared <ArrowRight size={16}/></Link></section>}
-      <details className="overview-disclosure"><summary>Wallet balances</summary>
-      <section className="overview-wallets" aria-label="Personal wallets">
-        {[...(data.wallets || [])].sort((a,b) => Number(preferences.favoriteWallets.includes(b.id))-Number(preferences.favoriteWallets.includes(a.id))).map(w => <Link key={w.id} to="/transactions" state={{ aiFilters: { wallet: String(w.id), month: '' } }}><span><Wallet size={16}/>{w.name}</span><strong>{fmt(w.balance)}</strong></Link>)}
-        {!data.wallets?.length && <Link to="/wallets">Add {activeSpace ? 'a space' : 'a personal'} wallet <ArrowRight size={16}/></Link>}
-      </section>
-      </details>
-      {((preferences.weeklySummary !== false && data.weekly) || !isGuest) && <details className="overview-disclosure"><summary>Weekly summary & planning</summary>
-      {preferences.weeklySummary !== false && data.weekly && <WeeklySummary value={data.weekly} fmt={fmt}/>}
-      {!isGuest && <PlannerSummary refreshKey={refreshKey} fmt={fmt}/>}
-      </details>}
-      <details className="overview-disclosure"><summary>Monthly spending & budget details</summary><div className="overview-columns">
-        <section className="overview-section">
-          <div className="panel-head"><h3>Budget progress</h3><Link to="/budgets" className="overview-link">View all <ArrowRight size={15}/></Link></div>
-          {data.budgets.length ? <div className="overview-budgets">{[...data.budgets].sort((a, b) => b.progress - a.progress).slice(0, 3).map(b => <Link className="record-link" key={b.id} to="/transactions" state={{aiFilters:{type:'expense',category:b.category_id ? String(b.category_id) : '',month:b.records_month || '',date_from:b.records_month ? '' : b.records_from,date_to:b.records_month ? '' : b.records_to,exclude_opening:true}}}>
-            <div className="overview-pair"><strong>{b.name}</strong><span>{Math.round(b.progress)}% used</span></div>
-            <ProgressBar value={b.progress} warning={b.progress >= 90}/>
-            <div className="overview-pair muted"><span>{fmt(b.spent)} of {fmt(b.limit_amount)} ({b.period})</span><strong className={b.spent > b.limit_amount ? 'tx-amount expense' : ''}>{fmt(Math.abs(b.limit_amount - b.spent))} {b.spent > b.limit_amount ? 'over' : 'left'}</strong></div>
-          </Link>)}</div> : <EmptyState title="No budgets yet" text="Set a spending limit in Budgets."/>}
-        </section>
-        <section className="overview-section">
-          <div className="panel-head"><h3>Top spending</h3><Link to="/transactions" state={{aiFilters:{month:displayedMonth,type:'expense',exclude_opening:true}}} className="overview-link">View all <ArrowRight size={15}/></Link></div>
-          {data.category_spending.length ? <div className="overview-categories">{data.category_spending.slice(0, 3).map(c => <Link className="record-link" key={c.id} to="/transactions" state={{aiFilters:{month:displayedMonth,type:'expense',category:String(c.id),exclude_opening:true}}}><div className="overview-pair"><span>{c.name}</span><strong>{fmt(c.value)}</strong></div><div className="mini-track"><i style={{ width: `${Math.min(100, c.value / (data.expense || 1) * 100)}%`, background: c.color }}/></div></Link>)}</div> : <EmptyState title="No spending this month" text="Your expenses will appear here."/>}
-        </section>
-      </div></details>
-      {preferences.personalizedShortcuts !== false && <details className="overview-disclosure"><summary>Your shortcuts</summary><nav className="overview-shortcuts" aria-label="Your shortcuts">{frequentPages(user?.id,isGuest ? guestRoutes : null).map(([path,label]) => <Link key={path} to={path}>{label}<ArrowRight size={16}/></Link>)}</nav></details>}
-
-
+      <details className="overview-balance-details"><summary>Balance &amp; month details</summary><div className="overview-balance-details-content"><p><strong>Wallet balances</strong></p><ul>{(data.wallets || []).map(wallet => <li key={wallet.id}><span>{wallet.name}</span><strong>{fmt(wallet.balance)}</strong></li>)}</ul>{data.opening_funds > 0 && <p>Money in includes {fmt(data.earned_income)} income and {fmt(data.opening_funds)} starting funds.</p>}{data.opening_debt > 0 && <p>Month change includes {fmt(data.opening_debt)} starting debt.</p>}<p>Monthly totals use the month each transaction belongs to. An entry recorded earlier can count toward {displayedMonthLabel}. Changing the month does not change your available balance.</p><p><strong>Why are the figures different?</strong></p><dl><div><dt>Other balance activity</dt><dd>{fmt(otherBalanceActivity)}</dd></div><div><dt>Assigned to {displayedMonthLabel}</dt><dd>{data.net > 0 ? '+' : ''}{fmt(data.net)}</dd></div><div><dt>Available now</dt><dd>{fmt(data.total_balance)}</dd></div></dl><small>This compares reporting allocations with today's wallet balances; it is not your balance on the first day of the month. Transfers between these wallets cancel out.</small></div></details>
     </div>}
     <TransactionDetails tx={selected} fmt={fmt} onClose={() => setSelected(null)}/>
   </div>
