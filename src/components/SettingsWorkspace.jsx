@@ -8,7 +8,7 @@ import './SettingsWorkspace.css'
 const groups = [
   { id: 'account', title: 'Account & security', description: 'Profile, password and sign-in', icon: ShieldCheck, label: 'Your account', terms: 'password session fingerprint biometric passkey account profile' },
   { id: 'appearance', title: 'Look & feel', description: 'Theme, text size and motion', icon: Palette, label: 'Your preferences', terms: 'logo legacy font colour color accent wallpaper seasonal halloween winter summer rain autumn spring motion vibration comfort appearance welcome greeting animation speed' },
-  { id: 'money', title: 'Money & categories', description: 'Currency and transaction defaults', icon: Banknote, terms: 'currency kwd categories default wallet entry templates display locale week numbers budget name' },
+  { id: 'money', title: 'Money & categories', description: 'Currency and transaction defaults', icon: Banknote, terms: 'currency kwd categories default wallet balances entry templates display locale week numbers budget name' },
   { id: 'notifications', title: 'Notifications', description: 'Updates, reminders and scheduled entries', icon: Bell, terms: 'upcoming expense update quiet hours reminder scheduled notification' },
   { id: 'android', title: 'Android app', description: 'Download the latest Budgetly APK', icon: Smartphone, terms: 'download apk install android phone latest version release mobile app' },
   { id: 'bank', title: 'Bank messages', description: 'Connected apps and wallet matching', icon: Landmark, terms: 'smart bank inbox notification access card matching capture android' },
@@ -66,7 +66,9 @@ export default function SettingsWorkspace({ children, guest = false }) {
   }, [displayed, mobileDetail, mode])
   useEffect(() => () => { sequence.current++; body.current?.getAnimations?.().forEach(animation => animation.cancel()) }, [])
 
-  useEffect(() => {
+  // The tutorial polls the committed DOM on animation frames. Register the
+  // listener in the same commit so it can handle the first reveal request.
+  useLayoutEffect(() => {
     const reveal = event => {
       const title = event.detail?.section
       const section = [...document.querySelectorAll('[data-settings-group] [data-tour-section]')].find(element => element.dataset.tourSection === title)

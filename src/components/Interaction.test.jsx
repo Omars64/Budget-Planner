@@ -112,10 +112,12 @@ test('saved completion does not auto-open and admin steps are role-specific', as
   expect(tutorialSteps(true).some(step => step.route === '/admin')).toBe(true)
 })
 
-test('quick start covers wallet, transaction and balance without the full settings tour', () => {
+test('quick start covers wallet setup, transaction entry, balances and filters without the full settings tour', () => {
   const quick = tutorialSteps(true, 'quick')
-  expect(quick).toHaveLength(4)
-  expect(quick.map(step=>step.route)).toEqual(['/wallets','/transactions','/','/'])
+  expect(quick.map(step => step.route)).toEqual(['/wallets', '/transactions', '/transactions', '/transactions', '/', '/'])
+  expect(quick.filter(step => step.route === '/transactions').map(step => step.selector)).toEqual([
+    '[data-tour="add-transaction"]', '[data-tour="wallet-balances"]', '.filter-trigger',
+  ])
 })
 
 test('dialogs are portalled outside an animated page and Android Back closes only the top dialog', () => {

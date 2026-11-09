@@ -14,6 +14,7 @@ import { defaultLedgerFilters } from '../lib/ledgerDefaults'
 import LedgerPagination from '../components/LedgerPagination'
 import useLedger from '../lib/useLedger'
 import { useViewState } from '../lib/viewState'
+import { readWorkspacePreferences } from '../lib/workspacePreferences'
 import AnimatedMoney from '../components/AnimatedMoney'
 import OfflinePending from '../components/OfflinePending'
 import TransactionSaveState from '../components/TransactionSaveState'
@@ -22,6 +23,7 @@ import LedgerRow, { LedgerDateHeader, TransactionDetails } from '../components/L
 export default function Transactions() {
   const location = useLocation()
   const { user, settings, refreshKey, refresh, notify ,confirm, isGuest, activeSpace, spaceKey = 'personal', canManage = true, canAdd = true } = useApp()
+  const [walletBalancesOpen] = useState(() => readWorkspacePreferences(user?.id).walletBalancesOpen)
   const [filters, setFilters] = useViewState(`${spaceKey}:${user?.id}:filters`, defaultLedgerFilters, location.state?.aiFilters ? {...defaultLedgerFilters,...location.state.aiFilters} : undefined)
   useEffect(() => { if (location.state?.aiFilters) setFilters({...defaultLedgerFilters,...location.state.aiFilters}) }, [location.key])
   const ledger = useLedger('/api/transactions', { ...filters, scope: 'personal' }, refreshKey, false, `${spaceKey}:${user?.id}`)
@@ -60,7 +62,7 @@ export default function Transactions() {
     {ledger.error && ledger.updatedAt && <small className="muted">Showing records last updated at {new Date(ledger.updatedAt).toLocaleTimeString()}.</small>}
 
 
-    <details className="everyday-disclosure transaction-balances"><summary>Current wallet balances<small>View available money without changing your filters</small></summary>
+    <details className="everyday-disclosure transaction-balances" open={walletBalancesOpen}><summary data-tour="wallet-balances">Current wallet balances<small>View available money without changing your filters</small></summary>
     <section className="transaction-wallets" aria-label="Current wallet balances">
       {wallets.filter(wallet => filters.wallet ? String(wallet.id) === filters.wallet : !wallet.archived).map(wallet => <div className="transaction-wallet-balance glass" key={wallet.id}><span><Wallet size={15}/>{wallet.name}</span><strong><AnimatedMoney value={wallet.balance} currency={settings.currency} compact={settings.compact_numbers}/></strong></div>)}
     </section></details>

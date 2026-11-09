@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useState } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
@@ -51,7 +51,7 @@ test('settings events reveal inline section headings when moving forward and bac
   function Workspace() {
     const { pathname } = useLocation()
     const [section, setSection] = useState('')
-    useEffect(() => {
+    useLayoutEffect(() => {
       const open = event => {
         opened(pathname, event.detail)
         setSection(event.detail.section)

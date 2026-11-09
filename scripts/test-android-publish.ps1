@@ -3,6 +3,9 @@ $ErrorActionPreference = 'Stop'
 $root = Join-Path (Split-Path $PSScriptRoot -Parent) ('.verification/publish-test-' + [guid]::NewGuid())
 $directory = Join-Path $root 'android/app/build/outputs/apk/release'
 $null = New-Item -ItemType Directory -Path $directory -Force
+$desktopTools = Join-Path $root 'node_modules/.bin'
+$null = New-Item -ItemType Directory -Path $desktopTools -Force
+'@echo off' | Set-Content -LiteralPath (Join-Path $desktopTools 'electron-builder.cmd')
 @{version='1.2.3';androidVersionCode=10} | ConvertTo-Json | Set-Content (Join-Path $root 'package.json')
 $apk = Join-Path $directory 'Budgetly-1.2.3.apk'
 'test fixture only' | Set-Content $apk
@@ -10,6 +13,16 @@ $manifest = @{version='1.2.3';versionCode=10;packageId='com.flowbudget.app';size
     sha256=(Get-BudgetlyFileSha256 $apk);
     url='https://github.com/Omars64/Budget-Planner/releases/download/v1.2.3/Budgetly-1.2.3.apk'}
 $manifest | ConvertTo-Json | Set-Content (Join-Path $directory 'update.json')
+$desktopDirectory = Join-Path $root 'dist-desktop'
+$null = New-Item -ItemType Directory -Path $desktopDirectory -Force
+$installer = Join-Path $desktopDirectory 'Budgetly-Setup-1.2.3.exe'
+'Windows installer fixture only' | Set-Content -LiteralPath $installer
+@{
+    version = '1.2.3'
+    size = (Get-Item -LiteralPath $installer).Length
+    sha256 = Get-BudgetlyFileSha256 $installer
+    url = 'https://github.com/Omars64/Budget-Planner/releases/download/v1.2.3/Budgetly-Setup-1.2.3.exe'
+} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $desktopDirectory 'windows-update.json')
 $passed = 0
 $hashFixture = Join-Path $root 'sha256-fixture.txt'
 [System.IO.File]::WriteAllText($hashFixture, 'abc')
@@ -21,9 +34,11 @@ $logFixture = Join-Path $root 'native-output.log'
 $null = Start-Transcript -LiteralPath $logFixture
 try {
 foreach ($exitCode in @(0, 7)) {
-    $result = Invoke-BudgetlyNativeCommand powershell.exe @('-NoProfile', '-Command', "[Console]::Error.WriteLine('Synthetic warning, not a failure'); Write-Output 'Synthetic stdout'; exit $exitCode")
+    $result = Invoke-BudgetlyNativeCommand powershell.exe @('-NoProfile', '-Command', "[Console]::Error.WriteLine('Synthetic warning, not a failure'); [Console]::Error.WriteLine(); [Console]::Error.WriteLine('Synthetic diagnostic'); Write-Output 'Synthetic stdout'; exit $exitCode")
     if ($result.ExitCode -ne $exitCode -or ($result.Output -join "`n") -notmatch 'Synthetic warning' -or
-        ($result.Output -join "`n") -notmatch 'Synthetic stdout') { throw 'Native runner lost output or process exit code' }
+        ($result.Output -join "`n") -notmatch 'Synthetic diagnostic' -or
+        ($result.Output -join "`n") -notmatch 'Synthetic stdout' -or
+        ($result.Output -join "`n") -match 'System.Management.Automation.RemoteException') { throw 'Native runner lost output or process exit code' }
     $passed++
 }
 } finally { $null = Stop-Transcript }
@@ -69,10 +84,11 @@ foreach ($case in @('success','transient-read','auth-failure','unchanged','check
     $manifest.sha256=if($case -eq 'bad-hash'){'bad'}else{Get-BudgetlyFileSha256 $apk}
     $manifest | ConvertTo-Json | Set-Content (Join-Path $directory 'update.json')
     $failed=$false
+    $failureMessage=''
     try { Invoke-BudgetlyRelease -Root $root -BuildArguments @('build') -Runner $runner -CheckOnly:($case -eq 'check') }
-    catch { $failed=$true }
+    catch { $failed=$true; $failureMessage=$_.Exception.Message }
     $shouldFail=$case -in @('auth-failure','secret-file','secret-content','push-failure','build-failure','upload-failure','existing-published','bad-hash','deployment-failure','quality-failure')
-    if($failed -ne $shouldFail){throw "Unexpected outcome: $case. Calls: $($state.Calls -join '; ')"}
+    if($failed -ne $shouldFail){throw "Unexpected outcome: $case. Error: $failureMessage. Calls: $($state.Calls -join '; ')"}
     $calls=$state.Calls -join "`n"
     if($shouldFail -and $calls -match 'release edit'){throw "Published failed case: $case"}
     if($case -in @('build-failure', 'bad-hash') -and $calls -match 'git.exe (add|commit|push)'){throw 'Failed build validation changed Git or deployed unverified source'}

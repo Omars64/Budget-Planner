@@ -1,3 +1,4 @@
+import { useId } from 'react'
 import AppSelect from './AppSelect'
 import { ArrowDown, ArrowUp, Trash2 } from 'lucide-react'
 import { useApp } from '../App'
@@ -6,6 +7,8 @@ import { clearEntryMemory, secondaryPages, useWorkspacePreferences } from '../li
 export default function WorkspacePreferences() {
   const { user, notify, isGuest } = useApp()
   const [prefs, save] = useWorkspacePreferences(user?.id)
+  const walletBalanceLabel = useId()
+  const walletBalanceDescription = useId()
   const persist = patch => { if (!save(patch)) notify('Device preferences could not be saved.', 'error') }
   const move = (group, path, direction) => {
     const order = prefs.navOrder.filter(value => secondaryPages.some(([id,,section]) => id === value && section === group))
@@ -16,6 +19,12 @@ export default function WorkspacePreferences() {
     persist({navOrder:all})
   }
   return <div className="workspace-preferences stack gap-16">
+    <label className="check-row">
+      <input type="checkbox" role="switch" aria-labelledby={walletBalanceLabel} aria-describedby={walletBalanceDescription}
+        checked={prefs.walletBalancesOpen} onChange={event => persist({ walletBalancesOpen: event.target.checked })}/>
+      <span><strong id={walletBalanceLabel}>Show wallet balances by default</strong>
+        <small id={walletBalanceDescription} className="settings-control-description">Expand Current wallet balances when you open Transactions on this device.</small></span>
+    </label>
     <details className="ledger-disclosure"><summary>Overview and feedback</summary><div className="stack gap-16">
       <label className="check-row"><input type="checkbox" checked={prefs.personalizedShortcuts !== false} onChange={event => persist({personalizedShortcuts:event.target.checked})}/><span>Frequently used shortcuts</span></label>
       <label className="check-row"><input type="checkbox" checked={prefs.weeklySummary !== false} onChange={event => persist({weeklySummary:event.target.checked})}/><span>Weekly summary</span></label>

@@ -9,6 +9,7 @@ param(
     [string]$SdkHome
 )
 $ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 . (Join-Path $PSScriptRoot 'android-publish.ps1')
 $buildArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'build-android-all.ps1'))
 foreach ($flag in @('Debug', 'SkipInstall', 'SkipTests', 'CheckOnly')) {

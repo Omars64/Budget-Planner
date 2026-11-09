@@ -8,7 +8,8 @@ function Invoke-BudgetlyNativeCommand([string]$Program, [string[]]$Arguments) {
         # Native stderr includes normal warnings. Only exit codes decide failure.
         $ErrorActionPreference = 'Continue'
         & $Program @Arguments 2>&1 | ForEach-Object {
-            $line = $_.ToString()
+            $line = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { $_.ToString() }
+            if ($line -eq 'System.Management.Automation.RemoteException') { $line = '' }
             $output.Add($line)
             if ($showOutput) { Write-Host $line }
         }

@@ -4,10 +4,12 @@ import { duplicateDraft } from './transactionDraft'
 
 beforeEach(() => { localStorage.clear(); vi.restoreAllMocks() })
 test('preferences are isolated by account and sanitize corrupt values', () => {
-  saveWorkspacePreferences(1,{favoriteWallets:[2,2,-1,'3'],notesView:'list',navOrder:['/notes','/unknown']})
+  saveWorkspacePreferences(1,{favoriteWallets:[2,2,-1,'3'],notesView:'list',navOrder:['/notes','/unknown'],walletBalancesOpen:true})
   expect(readWorkspacePreferences(1).favoriteWallets).toEqual([2])
   expect(readWorkspacePreferences(1).notesView).toBe('list')
   expect(readWorkspacePreferences(2).notesView).toBe('grid')
+  expect(readWorkspacePreferences(1).walletBalancesOpen).toBe(true)
+  expect(readWorkspacePreferences(2).walletBalancesOpen).toBe(false)
   expect(readWorkspacePreferences(1).navOrder).toHaveLength(secondaryPages.length)
   expect(readWorkspacePreferences(1).navOrder[0]).toBe('/notes')
 })

@@ -5,8 +5,8 @@ import { useApp } from '../App'
 import { api, jsonBody } from '../lib/api'
 import { tutorialSteps } from '../lib/tutorialSteps'
 import { useScrollLock } from '../lib/scrollLock'
+import { trackTutorialTarget, tutorialStage } from '../lib/tutorialPosition'
 import Modal from './Modal'
-import { effectiveMotion } from '../lib/comfort'
 
 function isVisibleTarget(element) {
   if (element.closest('[hidden], [data-settings-group][aria-hidden="true"]')) return false
@@ -35,10 +35,10 @@ function waitForTarget(step, signal) {
       if (signal.aborted) return finish(false)
       const page = document.querySelector('.page-wrap')
       if (page?.dataset.tourPage === step.route) {
+        if (targetFor(step)) return finish(true)
         if (step.route === '/settings' && step.section) {
           window.dispatchEvent(new window.CustomEvent('budgetly:settings-open', { detail: { section: step.section } }))
         }
-        if (targetFor(step)) return finish(true)
       }
       if (window.performance.now() > deadline) return finish(false)
       frame = window.requestAnimationFrame(tick)
@@ -49,7 +49,7 @@ function waitForTarget(step, signal) {
 }
 
 export default function AppTutorial({ request }) {
-  const { user, notify } = useApp()
+  const { user, notify, activeSpace, canAdd, canManage } = useApp()
   const navigate = useNavigate()
   const [welcome, setWelcome] = useState(false)
   const [running, setRunning] = useState(false)
@@ -113,56 +113,72 @@ export default function AppTutorial({ request }) {
     try {
       const { driver } = await import('driver.js')
       if (aborter.signal.aborted) return
-      const steps = tutorialSteps(user.role === 'admin', mode)
+      const steps = tutorialSteps(user.role === 'admin', mode).filter(step => {
+        if (activeSpace && step.route === '/ask-ai') return false
+        if (canAdd === false && ['[data-tour="add-transaction"]', '[data-tour="new-plan"]'].includes(step.selector)) return false
+        return canManage !== false || step.route !== '/wallets'
+      })
       let outcome = 'skipped'
       let moving = false
-      let refreshTimer
-      const move = async index => {
+      let finished = false
+      let stopPositioning
+      const finish = () => {
+        if (finished) return
+        finished = true
+        aborter.abort()
+        stopPositioning?.()
+        tour.current = null
+        if (!mounted.current) return
+        setRunning(false)
+        setStarting(false)
+        void save(outcome)
+        navigate('/')
+      }
+      const close = () => { instance.destroy(); finish() }
+      const move = async (index, direction = 1) => {
         if (moving || aborter.signal.aborted) return
-        if (index >= steps.length) { outcome = 'completed'; instance.destroy(); return }
+        if (index < 0) return
+        if (index >= steps.length) { outcome = 'completed'; close(); return }
         moving = true
-        navigate(steps[index].route)
+        if (document.querySelector('.page-wrap')?.dataset.tourPage !== steps[index].route) navigate(steps[index].route)
         const ready = await waitForTarget(steps[index], aborter.signal)
+        moving = false
         if (ready) {
           instance.drive(index)
-          window.clearTimeout(refreshTimer)
-          refreshTimer = window.setTimeout(() => instance.refresh(), 350)
         } else if (!aborter.signal.aborted) {
-          notify(`Skipped unavailable tutorial step: ${steps[index].title}`, 'error')
-          moving = false
-          return move(index + 1)
+          if (index + direction < 0) {
+            // Return to the current step if earlier controls are unavailable.
+            return move(instance.getActiveIndex())
+          }
+          return move(index + direction, direction)
         }
-        moving = false
       }
       const instance = driver({
-        animate: effectiveMotion() === 'full',
+        animate: false, overlayColor: '#08121f', overlayOpacity: .68, ...tutorialStage,
         allowScroll: true, disableActiveInteraction: true, overlayClickBehavior: () => {},
-        showProgress: true, progressText: '{{current}} of {{total}}', popoverClass: 'budgetly-tour',
+        showProgress: true, progressText: 'Tutorial · {{current}} of {{total}}', popoverClass: 'budgetly-tour',
         nextBtnText: 'Next', prevBtnText: 'Back', doneBtnText: 'Finish',
         steps: steps.map(step => ({ element: () => targetFor(step), onHighlighted: element => {
           const details = step.section && element?.parentElement
           if (details instanceof window.HTMLDetailsElement && !details.open) details.open = true
         }, popover: { title: step.title, description: step.description } })),
         onNextClick: (_, __, { index }) => { void move(index + 1) },
-        onPrevClick: (_, __, { index }) => { void move(Math.max(0, index - 1)) },
-        onDoneClick: () => { outcome = 'completed'; instance.destroy() },
-        onCloseClick: () => instance.destroy(),
-        onPopoverRender: popover => {
+        onPrevClick: (_, __, { index }) => { void move(index - 1, -1) },
+        onDoneClick: () => { outcome = 'completed'; close() },
+        onCloseClick: close,
+        onPopoverRender: (popover, { state }) => {
           popover.closeButton.textContent = 'Skip'
           popover.closeButton.setAttribute('aria-label', 'Skip tutorial')
+          popover.wrapper.setAttribute('aria-modal', 'true')
+          popover.wrapper.insertBefore(popover.progress, popover.title)
+          stopPositioning?.()
+          if (state.activeElement) {
+            stopPositioning = trackTutorialTarget(popover.wrapper, state.activeElement, () => instance.refresh())
+          }
         },
-        onDestroyed: () => {
-          aborter.abort()
-          window.clearTimeout(refreshTimer)
-          tour.current = null
-          if (!mounted.current) return
-          setRunning(false)
-          setStarting(false)
-          void save(outcome)
-          navigate('/')
-        },
+        onDestroyed: finish,
       })
-      tour.current = instance
+      tour.current = { destroy: close }
       setWelcome(false)
       setRunning(true)
       await move(0)

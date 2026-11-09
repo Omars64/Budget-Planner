@@ -3,8 +3,8 @@
   "description": "Budgetly personal finance and shared spaces",
   "author": "Omar Solanki",
   "private": true,
-  "version": "6.19.0",
-  "androidVersionCode": 121,
+  "version": "6.19.1",
+  "androidVersionCode": 122,
   "type": "module",
   "main": "desktop/main.cjs",
   "scripts": {
