@@ -15,4 +15,5 @@ pytest-cache-files-*/
 .DS_Store
 .vercel/
 .android-signing/
+*.pfx
 browser-layout-evidence.json

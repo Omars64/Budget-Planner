@@ -29,6 +29,7 @@ import { SUPPORT_URL } from '../lib/support'
 import Modal from './Modal'
 import { PageActionsProvider } from './PageActions'
 import { api } from '../lib/api'
+import { attentionKeys, useNotificationReads } from '../lib/notificationReads'
 
 const nav = workspaceNavigation
 const primaryRoutes = new Set(['/', '/transactions', '/wallets', '/upcoming'])
@@ -38,7 +39,8 @@ export default function AppShell({ children }) {
   const navigate = useNavigate()
   const nativeAndroid = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android'
   const [notificationsOpen, setNotificationsOpen] = useState(false)
-  const [attentionCount, setAttentionCount] = useState(null)
+  const [notificationRequest, setNotificationRequest] = useState(0)
+  const [attention, setAttention] = useState(null)
   const [pageActions, setPageActions] = useState(null)
   const [floatingAction, setFloatingAction] = useState(null)
   const [collapsed, setCollapsed] = useState(() => {
@@ -78,7 +80,8 @@ export default function AppShell({ children }) {
     return () => window.removeEventListener('keydown', quickFind)
   }, [navSearch, nativeAndroid, navigate])
   useContainedScroll(sidebar)
-  const { user, settings, appearance, refresh, refreshKey, notify, lock, isGuest, requestSignIn, activeSpace, spaceKey, canAdd, bankInboxCount = 0 } = useApp()
+  const { user, settings, appearance, refresh, refreshKey, notify, lock, isGuest, requestSignIn, activeSpace, spaceKey, canAdd, bankInboxCount = 0, bankInboxLatestId = 0 } = useApp()
+  const seen = useNotificationReads(isGuest ? null : user?.id, spaceKey)
   const [preferences] = useWorkspacePreferences(user?.id)
   const keyboardOpen = useKeyboardViewport()
   const location = useLocation()
@@ -101,15 +104,19 @@ export default function AppShell({ children }) {
     if (!shouldLoadAttention) return
     const controller = new AbortController()
     api('/api/attention', { signal:controller.signal })
-      .then(value => { if (!controller.signal.aborted) setAttentionCount(Number.isInteger(value?.count) ? value.count : null) })
-      .catch(() => { if (!controller.signal.aborted) setAttentionCount(null) })
+      .then(value => {
+        if (!controller.signal.aborted && Array.isArray(value?.items)) setAttention(attentionKeys(value.items, value.generated_at))
+      })
+      .catch(() => { /* Keep the last available notification snapshot. */ })
     return () => controller.abort()
-  }, [shouldLoadAttention, refreshKey])
-  const notificationCount = bankInboxCount + (attentionCount ?? 0)
+  }, [shouldLoadAttention, refreshKey, notificationRequest])
+  const attentionUnread = attention?.filter(key => !seen.attention.includes(key)).length ?? 0
+  const bankUnread = bankInboxCount > 0 && bankInboxLatestId > seen.bank
+  const notificationCount = Number(bankUnread) + attentionUnread
   const notificationLabel = [
     'Notifications',
-    bankInboxCount > 0 && `${bankInboxCount} bank alerts pending`,
-    attentionCount > 0 && `${attentionCount} attention ${attentionCount === 1 ? 'item' : 'items'}`,
+    bankUnread && 'New bank alerts',
+    attentionUnread > 0 && `${attentionUnread} new attention ${attentionUnread === 1 ? 'item' : 'items'}`,
   ].filter(Boolean).join(', ')
   const isWallets = location.pathname === '/wallets'
   const pageParams = new URLSearchParams(location.search)
@@ -132,7 +139,7 @@ export default function AppShell({ children }) {
     {!nativeAndroid && <aside ref={sidebar} className="sidebar glass">
       <div className="sidebar-head">
         <div className="brand">
-          <BrandLogo style={settings.logo_style} />
+          <BrandLogo style={settings.logo_style} palette={settings.color_palette} />
           <div><strong>Budgetly</strong><small>Personal finance</small></div>
         </div>
         <button className="icon-button sidebar-toggle" onClick={toggleSidebar} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed}>{collapsed ? <ChevronRight size={22}/> : <ChevronLeft size={22}/>}</button>
@@ -155,7 +162,7 @@ export default function AppShell({ children }) {
       <header className="topbar" role="banner">
         <div className="mobile-space"><SpaceSwitcher/></div>
         <div className="header-controls">
-          {!isGuest && <button type="button" className="icon-button notification-trigger" aria-label={notificationLabel} aria-haspopup="dialog" onClick={() => setNotificationsOpen(true)}><Bell size={20} aria-hidden="true"/>{notificationCount > 0 && <small className="bank-inbox-badge" aria-hidden="true">{notificationCount}</small>}</button>}
+          {!isGuest && <button type="button" className="icon-button notification-trigger" aria-label={notificationLabel} aria-haspopup="dialog" onClick={() => { setNotificationRequest(value => value + 1); setNotificationsOpen(true) }}><Bell size={20} aria-hidden="true"/>{notificationCount > 0 && <small className="bank-inbox-badge" aria-hidden="true">{notificationCount}</small>}</button>}
           <Link to="/settings" className="header-user-tag" aria-label="Account and preferences" title={isGuest ? 'Guest' : user?.username}>
             {appearance.profile_image ? <img className="header-user-avatar" src={appearance.profile_image} alt=""/> : <span className="header-user-avatar" aria-hidden="true">{(isGuest ? 'Guest' : user?.username || 'Budgetly').slice(0,1).toUpperCase()}</span>}
           </Link>
@@ -188,10 +195,10 @@ export default function AppShell({ children }) {
     <Modal open={notificationsOpen} onClose={() => setNotificationsOpen(false)} title="Notifications" size="small">
       <div className="notification-inbox">
         <Link className="notification-inbox-link" to="/bank-messages" onClick={() => setNotificationsOpen(false)}>
-          <span><strong>Bank Inbox</strong><small>{bankInboxCount ? 'Review captured alerts before recording them' : 'No bank alerts waiting for review'}</small></span><BankInboxBadge/><ChevronRight size={17} aria-hidden="true"/>
+          <span><strong>Bank Inbox</strong><small>{bankInboxCount ? `${bankInboxCount} waiting for review` : 'No bank alerts waiting for review'}</small></span>{bankUnread && <span className="bank-inbox-badge">New</span>}<ChevronRight size={17} aria-hidden="true"/>
         </Link>
         <Link className="notification-inbox-link" to="/attention" onClick={() => setNotificationsOpen(false)}>
-          <span><strong>Needs your attention</strong><small>{attentionCount === null ? 'View items to review' : attentionCount === 0 ? 'No items to review' : `${attentionCount} ${attentionCount === 1 ? 'item' : 'items'} to review`}</small></span><ChevronRight size={17} aria-hidden="true"/>
+          <span><strong>Needs your attention</strong><small>{attention?.length === 0 ? 'No items to review' : 'Review budgets, plans and deadlines'}</small></span>{attentionUnread > 0 && <span className="bank-inbox-badge" aria-label={`${attentionUnread} new`}>{attentionUnread}</span>}<ChevronRight size={17} aria-hidden="true"/>
         </Link>
         <Link className="notification-inbox-link" to="/upcoming" onClick={() => setNotificationsOpen(false)}><strong>Upcoming reminders</strong><ChevronRight size={17} aria-hidden="true"/></Link>
       </div>

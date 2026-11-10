@@ -13,7 +13,7 @@ try {
                 $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
                 $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
                 if ($splash) { $graphics.Clear([System.Drawing.ColorTranslator]::FromHtml('#F4F8FB')) }
-                elseif ($maskable) { $graphics.Clear([System.Drawing.ColorTranslator]::FromHtml('#00362B')) }
+                elseif ($maskable) { $graphics.Clear([System.Drawing.ColorTranslator]::FromHtml('#101E33')) }
                 else { $graphics.Clear([System.Drawing.Color]::Transparent) }
                 $side = if ($splash) { [int]([Math]::Min($width, $height) * 0.42) } elseif ($foreground -or $maskable) { [int]($width * 0.70) } else { [int]([Math]::Min($width, $height) * 0.78) }
                 $left = [int](($width - $side) / 2)

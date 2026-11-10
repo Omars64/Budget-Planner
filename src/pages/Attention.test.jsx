@@ -5,6 +5,7 @@ import Attention from './Attention'
 import { api } from '../lib/api'
 
 vi.mock('../lib/api', () => ({ api: vi.fn() }))
+vi.mock('../App', () => ({ useApp: () => ({ user:{ id:731 }, spaceKey:'personal' }) }))
 afterEach(cleanup)
 beforeEach(() => {
   vi.clearAllMocks()

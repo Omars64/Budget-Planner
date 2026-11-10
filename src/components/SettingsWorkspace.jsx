@@ -10,7 +10,7 @@ const groups = [
   { id: 'appearance', title: 'Look & feel', description: 'Theme, text size and motion', icon: Palette, label: 'Your preferences', terms: 'logo legacy font colour color accent wallpaper seasonal halloween winter summer rain autumn spring motion vibration comfort appearance welcome greeting animation speed' },
   { id: 'money', title: 'Money & categories', description: 'Currency and transaction defaults', icon: Banknote, terms: 'currency kwd categories default wallet balances entry templates display locale week numbers budget name' },
   { id: 'notifications', title: 'Notifications', description: 'Updates, reminders and scheduled entries', icon: Bell, terms: 'upcoming expense update quiet hours reminder scheduled notification' },
-  { id: 'android', title: 'Android app', description: 'Download the latest Budgetly APK', icon: Smartphone, terms: 'download apk install android phone latest version release mobile app' },
+  { id: 'android', title: 'Android app', description: 'Latest version and release notes', icon: Smartphone, terms: 'android phone latest version release mobile app' },
   { id: 'bank', title: 'Bank messages', description: 'Connected apps and wallet matching', icon: Landmark, terms: 'smart bank inbox notification access card matching capture android' },
   { id: 'backup', title: 'Backups & data', description: 'Google Drive, exports and recovery', icon: CloudUpload, label: 'Your data', terms: 'trash deleted recovery restore google drive export statement privacy reset guest records' },
   { id: 'support', title: 'Support & about', description: 'Coffee preferences and app information', icon: Coffee, terms: 'coffee tip support popup sidebar about' },

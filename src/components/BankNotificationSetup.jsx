@@ -1,4 +1,6 @@
 import AppSelect from './AppSelect'
+import InfoButton from './InfoButton'
+import Modal from './Modal'
 import { useCallback, useEffect, useState } from 'react'
 import { BellRing, RefreshCw, Trash2 } from 'lucide-react'
 import { useApp } from '../App'
@@ -12,6 +14,7 @@ export default function BankNotificationSetup() {
   const [mappings, setMappings] = useState([]), [destination, setDestination] = useState(String(activeSpace?.id || 'personal')), [wallets, setWallets] = useState([])
   const [mapping, setMapping] = useState({ source_package: '', account_last4: '', wallet_id: '' })
   const [busy, setBusy] = useState(false), [error, setError] = useState('')
+  const [helpOpen, setHelpOpen] = useState(false)
   const [duplicateMinutes, setDuplicateMinutes] = useState(settings?.bank_duplicate_window_minutes || 5)
   useEffect(() => setDuplicateMinutes(settings?.bank_duplicate_window_minutes || 5), [settings?.bank_duplicate_window_minutes])
   const load = useCallback(async () => {
@@ -47,13 +50,20 @@ export default function BankNotificationSetup() {
     if (checked) notify('Bank app enabled. New alerts wait for your approval.')
   })
   return <div className="stack gap-16 bank-setup">
-    <p className="muted">Only selected apps are read. Nothing enters your ledger without approval. Security codes are discarded on your phone.</p>
     {error && <p className="form-error" role="alert">{error}</p>}
     <form className="stack gap-12" onSubmit={event => { event.preventDefault(); void act(async () => { const saved = await api('/api/settings', { method: 'PUT', ...jsonBody({ bank_duplicate_window_minutes: Number(duplicateMinutes) }) }); setSettings?.(current => ({ ...current, ...saved })); notify('Duplicate check window saved') }) }}>
-      <label className="field"><span>Possible duplicate window</span><AppSelect value={duplicateMinutes} disabled={busy} onChange={event => setDuplicateMinutes(Number(event.target.value))}>{[1, 2, 5, 10, 15, 30].map(minutes => <option key={minutes} value={minutes}>{minutes} minute{minutes === 1 ? '' : 's'}</option>)}</AppSelect></label>
-      <small className="muted">Alerts with the same amount and type in the same wallet are flagged only when recorded within this time. You can still approve a separate payment after checking it.</small>
+      <div className="bank-setup-duplicate-row">
+        <label className="field"><span>Possible duplicate window</span><AppSelect value={duplicateMinutes} disabled={busy} onChange={event => setDuplicateMinutes(Number(event.target.value))}>{[1, 2, 5, 10, 15, 30].map(minutes => <option key={minutes} value={minutes}>{minutes} minute{minutes === 1 ? '' : 's'}</option>)}</AppSelect></label>
+        <InfoButton label="How bank alerts and duplicate checks work" onClick={() => setHelpOpen(true)}/>
+      </div>
       <button type="submit" className="button ghost self-start" disabled={busy || Number(duplicateMinutes) === (settings?.bank_duplicate_window_minutes || 5)}>Save duplicate check</button>
     </form>
+    <Modal open={helpOpen} onClose={() => setHelpOpen(false)} title="Bank alerts & duplicate checks" size="small">
+      <div className="stack gap-16">
+        <p>Budgetly reads alerts from the apps you select, discards security codes on your phone, and records a transaction only after your approval.</p>
+        <p>The duplicate check compares the amount and type in the same wallet within the window you choose. You can still approve a separate payment after reviewing the match.</p>
+      </div>
+    </Modal>
     {native ? <>
       {!granted && allowed.length > 0 && <p role="alert" className="form-error">Android notification access is off. Your selected apps are saved; enable access below to resume capture.</p>}
       <div className="section-row"><strong>Notification access: {granted ? 'Enabled' : 'Disabled'}</strong><button type="button" className="icon-button" aria-label="Refresh bank access" onClick={load}><RefreshCw size={18}/></button></div>

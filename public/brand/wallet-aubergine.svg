@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="tile" x2=".88" y2="1"><stop stop-color="#4d8c93"/><stop offset=".55" stop-color="#150929"/><stop offset="1" stop-color="#0d061a"/></linearGradient>
+    <linearGradient id="back" x2=".9" y2="1"><stop stop-color="#4d8c93"/><stop offset="1" stop-color="#150929"/></linearGradient>
+    <linearGradient id="card" x2=".8" y2="1"><stop stop-color="#b1f7df"/><stop offset="1" stop-color="#43f4b3"/></linearGradient>
+    <linearGradient id="face" x2=".82" y2="1"><stop stop-color="#4d8c93"/><stop offset=".4" stop-color="#563477"/><stop offset="1" stop-color="#150929"/></linearGradient>
+    <linearGradient id="clasp" x2="1" y2="1"><stop stop-color="#fff0ba"/><stop offset="1" stop-color="#ad7a39"/></linearGradient>
+  </defs>
+  <rect x="3" y="3" width="250" height="250" rx="57" fill="url(#tile)"/><rect x="4" y="4" width="248" height="248" rx="56" fill="none" stroke="#faf9fc" stroke-opacity=".18" stroke-width="2"/>
+  <g stroke-linejoin="round">
+    <path d="M42 105Q44 90 65 87L184 64Q207 60 209 84V186Q209 215 184 220H72Q41 220 40 193Z" fill="#000" opacity=".27" transform="translate(3 5)"/>
+    <path d="M57 98V88Q57 66 78 60L162 35Q182 28 189 48L202 96Z" fill="url(#back)" stroke="#4d8c93" stroke-width="2"/>
+    <path d="M62 113V99Q62 81 83 76L183 54Q206 49 209 73L211 102Z" fill="url(#card)" stroke="#bef7e4" stroke-width="2"/>
+    <path d="M40 102Q40 95 49 92Q49 104 68 102L181 80Q207 75 211 100V183Q211 210 185 214L74 216Q40 216 40 190Z" fill="url(#face)" stroke="#4d8c93" stroke-width="2"/>
+    <path d="M49 94Q50 106 69 103L180 81Q199 78 207 92" fill="none" stroke="#8cf6d0" stroke-opacity=".74" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M187 122L219 117Q225 116 225 124V154Q225 162 216 163L184 165Q170 166 169 153V141Q169 127 187 122Z" fill="#000" opacity=".26" transform="translate(2 4)"/>
+    <path d="M187 119L219 115Q225 114 225 123V151Q225 159 216 160L184 163Q170 164 169 150V139Q169 124 187 119Z" fill="url(#face)" stroke="#4d8c93" stroke-width="2"/>
+    <circle cx="191" cy="140" r="9" fill="url(#clasp)" stroke="#ffe9a4" stroke-opacity=".44"/>
+  </g>
+</svg>

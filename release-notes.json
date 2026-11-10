@@ -1,4 +1,9 @@
 {
+  "6.22.0": [
+    {"title":"A wallet logo for every palette","detail":"The redesigned wallet logo follows your palette inside Budgetly and in the browser tab."},
+    {"title":"Cleaner settings and notifications","detail":"Appearance preferences save as you change them. Read alerts clear their bell badges, and Bank Messages help sits behind an info button."},
+    {"title":"Simpler downloads and installation","detail":"Android visitors can download Budgetly from the welcome page. Windows updates reuse your existing installation settings. In-app installation requires releases signed by the same verified publisher."}
+  ],
   "6.21.1": [
     {"title":"Quicker access to balances and filters","detail":"Find wallet balances beside the month filter in Transactions. In Upcoming, tap Details for filters or use the floating plus to schedule an entry."},
     {"title":"Less clutter on daily screens","detail":"Open the bell for attention items, and use the info buttons on Overview and Bank Inbox for extra details."},

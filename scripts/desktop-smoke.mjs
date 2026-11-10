@@ -10,7 +10,7 @@ try {
   console.log('Window opened:', page.url())
   await page.getByText('A little clarity.').waitFor({ timeout: 20000 })
   const logo = await page.locator('link[rel="icon"]').getAttribute('href')
-  if (!logo?.includes('budgetly-wallet')) throw new Error('Windows app favicon is not the wallet logo.')
+  if (!logo?.includes('/brand/wallet-')) throw new Error('Windows app favicon is not the wallet logo.')
   const desktop = await page.evaluate(() => window.budgetlyDesktop?.version)
   if (!desktop) throw new Error('Packaged desktop identity missing.')
   const apiStatus = await page.evaluate(async () => { try { return (await fetch('/api/app-updates/web', { cache: 'no-store' })).status } catch { return 0 } })

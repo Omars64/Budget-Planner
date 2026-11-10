@@ -33,6 +33,8 @@ const More = lazy(() => import('./pages/More'))
 const Spaces = lazy(() => import('./pages/Spaces'))
 const BankMessages = lazy(() => import('./pages/BankMessages'))
 import BrandLogo from './components/BrandLogo'
+import { brandLogoUrl } from './lib/brandLogo'
+import { paletteKey } from './lib/colorPalettes'
 import BrandFooter from './components/BrandFooter'
 import PasswordInput from './components/PasswordInput'
 import { useConfirmation } from './components/Confirmation'
@@ -248,12 +250,17 @@ export default function App() {
   }, [])
   const spaceState = useSpaces(session.user, notify, confirm)
   const { activeSpace } = spaceState
-  const bankInboxCount = usePendingBankAlerts(!isGuest && spaceState.spacesReady ? session.user?.id : null, activeSpace?.id)
+  const { count:bankInboxCount, latestId:bankInboxLatestId } = usePendingBankAlerts(!isGuest && spaceState.spacesReady ? session.user?.id : null, activeSpace?.id)
   useAppearance(settings, activeSpace?.accent)
   useEffect(() => {
     const icon = document.querySelector('link[rel="icon"]')
-    if (icon) icon.href = settings.logo_style === 'legacy' && session.user ? '/flowbudget-logo-legacy.png' : '/budgetly-wallet-icon.png'
-  }, [settings.logo_style, session.user])
+    if (icon) {
+      const url = brandLogoUrl(settings.color_palette, session.user ? settings.logo_style : 'current')
+      icon.type = url.endsWith('.svg') ? 'image/svg+xml' : 'image/png'
+      icon.href = url
+    }
+    window.budgetlyDesktop?.setPaletteIcon?.(paletteKey(settings.color_palette))
+  }, [settings.color_palette, settings.logo_style, session.user])
   const accountPage = ['/settings', '/admin', '/feedback', '/ask-ai'].includes(currentLocation.pathname)
   const viewSettings = activeSpace && !accountPage ? {...settings, currency: activeSpace.currency, accent_color: activeSpace.accent} : settings
   useEffect(()=>installMoneyInputDefaults(document,viewSettings.currency),[viewSettings.currency])
@@ -423,8 +430,8 @@ export default function App() {
     user: session.user, settings: viewSettings, accountSettings: settings, setSettings, appearance, setAppearance, ...spaceState,
     spaceKey: activeSpace ? `space:${activeSpace.id}` : 'personal',
     canAdd: !activeSpace || ['owner', 'edit'].includes(activeSpace.role), canManage: !activeSpace || ['owner', 'edit'].includes(activeSpace.role),
-    bankInboxCount, refreshKey, refresh, notify, confirm, reloadSettings: loadSettings, reloadAppearance: loadAppearance, reloadUser, isGuest, requestSignIn, lock: isGuest ? () => setGuestSigningIn(true) : signOut,
-  }), [session.user, settings, viewSettings, spaceState, activeSpace, appearance, bankInboxCount, refreshKey, refresh, notify, confirm, loadSettings, loadAppearance, reloadUser, signOut, isGuest, requestSignIn])
+    bankInboxCount, bankInboxLatestId, refreshKey, refresh, notify, confirm, reloadSettings: loadSettings, reloadAppearance: loadAppearance, reloadUser, isGuest, requestSignIn, lock: isGuest ? () => setGuestSigningIn(true) : signOut,
+  }), [session.user, settings, viewSettings, spaceState, activeSpace, appearance, bankInboxCount, bankInboxLatestId, refreshKey, refresh, notify, confirm, loadSettings, loadAppearance, reloadUser, signOut, isGuest, requestSignIn])
 
   if (session.loading) return <div className="app-loading"><BrandLogo className="pulse" /></div>
   if (!session.user || guestSigningIn) return <WelcomeScreen onGuest={enterGuest} returningGuest={isGuest} renderAuth={(mode, setWorking) => <LoginScreen initialMode={mode} embedded onBusyChange={setWorking} onLogin={completeLogin} onGuest={enterGuest} returningGuest={isGuest}/>}/>

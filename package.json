@@ -3,8 +3,8 @@
   "description": "Budgetly personal finance and shared spaces",
   "author": "Omar Solanki",
   "private": true,
-  "version": "6.21.1",
-  "androidVersionCode": 125,
+  "version": "6.22.0",
+  "androidVersionCode": 126,
   "type": "module",
   "main": "desktop/main.cjs",
   "scripts": {
@@ -72,7 +72,12 @@
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
+      "guid": "50e524d4-9fa7-5b66-ba6c-7066f1dc8e93",
+      "include": "desktop/installer.nsh",
       "allowToChangeInstallationDirectory": true,
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
     }

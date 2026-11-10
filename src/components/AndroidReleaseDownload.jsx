@@ -5,7 +5,7 @@ import { SettingsVisibleContext } from '../lib/settingsContext'
 
 const unavailable = 'Unable to check the latest Android version. Connect to the internet and try again.'
 
-export default function AndroidReleaseDownload() {
+export default function AndroidReleaseDownload({ showDownload = true }) {
   const active = useContext(SettingsVisibleContext)
   const [release, setRelease] = useState(null)
   const [status, setStatus] = useState('idle')
@@ -30,18 +30,18 @@ export default function AndroidReleaseDownload() {
   }, [active, retry])
 
   return <div className="stack gap-16" aria-busy={status === 'loading'}>
-    <p>Get the latest published Budgetly app for your Android phone.</p>
+    {showDownload && <p>Get the latest published Budgetly app for your Android phone.</p>}
     <div role="status" aria-live="polite">
       {status === 'loading' && <p className="muted">Checking the latest Android release…</p>}
       {status === 'error' && <p className="form-error">{unavailable}</p>}
       {status === 'empty' && <p className="muted">No Android release is currently published.</p>}
-      {release && <p><strong>Latest Android release: v{release.version}</strong><br/><span className="muted">{(release.size / 1000000).toFixed(1)} MB · APK for Android</span></p>}
+      {release && <p><strong>Latest Android release: v{release.version}</strong>{showDownload && <><br/><span className="muted">{(release.size / 1000000).toFixed(1)} MB · Android</span></>}</p>}
     </div>
     <div className="button-row">
-      {release && <a className="button primary" href={release.url} target="_blank" rel="noopener noreferrer"><Download size={19} aria-hidden="true"/>Download Budgetly APK</a>}
+      {showDownload && release && <a className="button primary" href={release.url} target="_blank" rel="noopener noreferrer"><Download size={19} aria-hidden="true"/>Download Budgetly</a>}
       <a className="button ghost" href={release ? `${RELEASES_URL}/tag/v${release.version}` : RELEASES_URL} target="_blank" rel="noopener noreferrer"><ExternalLink size={18} aria-hidden="true"/>{release ? 'Release notes' : 'Browse releases'}</a>
       <button type="button" className="button ghost" disabled={status === 'loading'} onClick={() => setRetry(value => value + 1)}><RefreshCw size={18} aria-hidden="true"/>Check latest version</button>
     </div>
-    <p className="muted">To update, install over your existing Budgetly app. Do not uninstall it first.</p>
+    {showDownload && <p className="muted">To update, install over your existing Budgetly app to keep your records on this device.</p>}
   </div>
 }

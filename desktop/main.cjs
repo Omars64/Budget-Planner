@@ -1,10 +1,19 @@
-const { app, BrowserWindow, ipcMain, net, shell, session } = require('electron')
+const { app, BrowserWindow, ipcMain, nativeImage, net, shell, session } = require('electron')
 const fs = require('node:fs/promises')
 const path = require('node:path')
+const { registerWindowsUpdates } = require('./windows-update.cjs')
 
 const origin = 'https://budget-planner-ecru-seven.vercel.app'
 const assets = path.join(__dirname, '..', 'dist')
 const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.woff2': 'font/woff2' }
+let mainWindow
+const paletteIcons = new Set(['navy', 'aubergine', 'burgundy', 'pine', 'graphite'])
+
+function isBudgetlyFrame(event) {
+  const frame = event.senderFrame
+  if (!frame || mainWindow?.webContents !== event.sender || frame !== event.sender.mainFrame || !frame.url.startsWith(origin + '/')) return false
+  return new URL(frame.url).pathname === '/'
+}
 
 async function serve(request) {
   const url = new URL(request.url)
@@ -25,6 +34,8 @@ async function serve(request) {
 
 function createWindow() {
   const win = new BrowserWindow({ width: 1280, height: 820, minWidth: 920, minHeight: 620, title: 'Budgetly', icon: path.join(__dirname, 'icon.ico'), webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, preload: path.join(__dirname, 'preload.cjs') } })
+  mainWindow = win
+  win.on('closed', () => { if (mainWindow === win) mainWindow = null })
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (url === 'about:blank' || url.startsWith('https://accounts.google.com/')) return { action: 'allow', overrideBrowserWindowOptions: { webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true } } }
     if (url.startsWith('https://')) void shell.openExternal(url)
@@ -36,10 +47,22 @@ function createWindow() {
   void win.loadURL(origin + '/')
 }
 
-app.whenReady().then(async () => {
+if (!app.requestSingleInstanceLock()) app.quit()
+else app.whenReady().then(() => {
   ipcMain.on('budgetly:version', event => { event.returnValue = app.getVersion() })
+  registerWindowsUpdates(origin, isBudgetlyFrame)
+  ipcMain.on('budgetly:palette-icon', (event, palette) => {
+    if (!isBudgetlyFrame(event) || !paletteIcons.has(palette)) return
+    const icon = nativeImage.createFromPath(path.join(__dirname, 'brand', palette + '.png'))
+    if (!icon.isEmpty()) mainWindow.setIcon(icon)
+  })
   session.defaultSession.protocol.handle('https', serve)
   createWindow()
+  app.on('second-instance', () => {
+    if (!mainWindow) return
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.focus()
+  })
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
 })
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })

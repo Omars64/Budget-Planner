@@ -1,10 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowRight, CalendarDays, Users, Wallet } from 'lucide-react'
+import { ArrowRight, CalendarDays, Download, Users, Wallet } from 'lucide-react'
+import { Capacitor } from '@capacitor/core'
 import Modal from './Modal'
 import WelcomeGreeting from './WelcomeGreeting'
 import { useWelcomeSpeed } from '../lib/welcomeAnimation'
 import { useAppMotion } from '../lib/appMotion'
 import WindowsReleaseDownload from './WindowsReleaseDownload'
+import { fetchRelease } from '../lib/appUpdates'
+
+function AndroidWelcomeDownload() {
+  const [url, setUrl] = useState('/download')
+  useEffect(() => {
+    const request = new AbortController()
+    fetchRelease(request.signal).then(release => {
+      if (!request.signal.aborted && release) setUrl(release.url)
+    }).catch(() => {})
+    return () => request.abort()
+  }, [])
+  return <a className="welcome-install" href={url}><Download size={17} aria-hidden="true"/>Download Budgetly</a>
+}
 
 export default function WelcomeScreen({ onGuest, returningGuest = false, renderAuth }) {
   const [authMode, setAuthMode] = useState(() => returningGuest || new URLSearchParams(window.location.search).has('reset') ? 'login' : null)
@@ -15,7 +29,9 @@ export default function WelcomeScreen({ onGuest, returningGuest = false, renderA
   const motion = useAppMotion()
   const active = useRef(true)
   useEffect(() => { active.current = true; return () => { active.current = false } }, [])
-  const isDesktop = typeof window.matchMedia === 'function' && window.matchMedia('(pointer:fine)').matches
+  const isAndroid = /Android/i.test(navigator.userAgent) || navigator.userAgentData?.platform === 'Android'
+  const isDesktop = !isAndroid && !navigator.userAgentData?.mobile && !/iPhone|iPad|iPod/i.test(navigator.userAgent) && window.matchMedia?.('(pointer:fine)').matches
+  const isWeb = !Capacitor.isNativePlatform() && !window.budgetlyDesktop
   const enter = async () => {
     if (working) return
     setWorking(true); setError('')
@@ -24,7 +40,7 @@ export default function WelcomeScreen({ onGuest, returningGuest = false, renderA
     finally { if (active.current) setWorking(false) }
   }
   return <div className="welcome-screen" data-motion={motion} style={{ '--welcome-duration': `${duration}s` }}>
-    <header className="welcome-header"><div className="welcome-installs">{isDesktop && !window.budgetlyDesktop && <WindowsReleaseDownload compact/>}</div><button type="button" className="welcome-text-button" disabled={working} onClick={() => setReplay(value => value + 1)}>Replay greeting</button></header>
+    <header className="welcome-header"><div className="welcome-installs">{isWeb && (isAndroid ? <AndroidWelcomeDownload/> : isDesktop && <WindowsReleaseDownload compact/>)}</div><button type="button" className="welcome-text-button" disabled={working} onClick={() => setReplay(value => value + 1)}>Replay greeting</button></header>
     <main className="welcome-content">
       <WelcomeGreeting duration={duration} replay={replay}/>
       <div key={replay} className="welcome-arrival">

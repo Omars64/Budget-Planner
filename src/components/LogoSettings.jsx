@@ -2,11 +2,12 @@ import { useState } from 'react'
 import { useApp } from '../App'
 import { api, jsonBody } from '../lib/api'
 import SettingsSection from './SettingsSection'
+import BrandLogo from './BrandLogo'
 import './LogoSettings.css'
 
 const choices = [
-  { value: 'current', title: 'New wallet', image: '/budgetly-wallet-icon.png' },
-  { value: 'legacy', title: 'Legacy blue', image: '/flowbudget-logo-legacy.png' },
+  { value: 'current', title: 'Palette wallet' },
+  { value: 'legacy', title: 'Legacy blue' },
 ]
 
 export default function LogoSettings() {
@@ -26,10 +27,10 @@ export default function LogoSettings() {
   }
 
   return <SettingsSection title="App logo" className="logo-settings">
-    <p className="muted">Choose the logo shown inside Budgetly. The Android and installed app icons use the new wallet logo.</p>
+    <p className="muted">The wallet logo follows your color palette. Choose Legacy blue to use the original logo inside Budgetly.</p>
     <div className="logo-choices" role="group" aria-label="App logo">
       {choices.map(choice => <button key={choice.value} type="button" className="logo-choice" aria-pressed={selected === choice.value} disabled={saving} onClick={() => choose(choice.value)}>
-        <img src={choice.image} alt="" width="64" height="64" />
+        <BrandLogo style={choice.value} palette={(accountSettings || settings).color_palette} alt=""/>
         <strong>{choice.title}</strong>
         <span aria-hidden="true" className="logo-choice-indicator" />
       </button>)}

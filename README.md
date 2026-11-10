@@ -152,6 +152,12 @@ For phone testing, transfer the release APK to your Android device, open it, and
 
 If the emulator launches but HTTPS requests fail with `Trust anchor for certification path not found`, check whether PC antivirus HTTPS scanning is replacing the server certificate. This machine's AVG Web/Mail Shield does that. Windows trusts its certificate, but the emulator does not. Test the release on a physical phone using a trusted connection instead of disabling TLS verification or adding an antivirus CA to the production app. Emulator startup and release signing were verified; authenticated workflows and bank-app coexistence still require physical-device testing.
 
+## Windows installer and updates
+
+Run `npm run desktop:installer` to build the Windows installer. An upgrade reuses a single registered Budgetly installation and reopens the app. A first install or a PC with both installation scopes still shows Setup.
+
+For verified distribution, configure Electron Builder with a trusted Windows code-signing identity. Set `BUDGETLY_REQUIRE_WINDOWS_SIGNING=1` before running the release batch to require valid Authenticode signatures from the same publisher on the installer and app. Existing unsigned installations need one manual installation of the first signed version. Later signed updates can use **Update and restart** inside Budgetly.
+
 ## First launch
 
 The first API startup creates the database and seeds a small demo dataset with wallets, transactions, budgets, goals and a debt. You can remove these records normally or use **Settings → Demo data → Reset demo data** to restore them.

@@ -35,7 +35,10 @@ def validate_windows_release(value):
             or url.scheme != 'https' or url.netloc != 'github.com' or url.query or url.fragment
             or url.path != f'/Omars64/Budget-Planner/releases/download/v{version}/Budgetly-Setup-{version}.exe'):
         raise ValueError('Invalid Windows release')
-    return {key: value[key] for key in ('schema', 'version', 'size', 'sha256', 'url')}
+    result = {key: value[key] for key in ('schema', 'version', 'size', 'sha256', 'url')}
+    if type(value.get('signed')) is bool:
+        result['signed'] = value['signed']
+    return result
 
 
 def validate_release(value):

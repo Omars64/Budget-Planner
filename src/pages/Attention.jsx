@@ -3,11 +3,14 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api'
 import EmptyState from '../components/EmptyState'
+import { useApp } from '../App'
+import { attentionKeys, markNotificationsSeen } from '../lib/notificationReads'
 
 const icons = { plan: CalendarClock, budget: Gauge, debt: HandCoins, goal: Target }
 const severityLabels = { danger: 'Needs attention', warning: 'Worth checking', info: 'Coming up' }
 
 export default function Attention() {
+  const { user, spaceKey } = useApp() || {}
   const [data, setData] = useState({ items: [], count: 0, has_more: false })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -16,13 +19,16 @@ export default function Attention() {
     setError('')
     try {
       const result = await api('/api/attention', { signal })
-      if (!signal?.aborted) setData(result)
+      if (!signal?.aborted) {
+        setData(result)
+        if (document.visibilityState !== 'hidden') markNotificationsSeen(user?.id, spaceKey, { attention:attentionKeys(result.items, result.generated_at) })
+      }
     } catch (err) {
       if (!signal?.aborted) setError(err.message || 'Could not load attention items.')
     } finally {
       if (!signal?.aborted) setLoading(false)
     }
-  }, [])
+  }, [user?.id, spaceKey])
   useEffect(() => {
     const controller = new window.AbortController()
     void load(controller.signal)

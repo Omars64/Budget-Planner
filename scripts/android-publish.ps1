@@ -92,7 +92,7 @@ function Invoke-BudgetlyRelease {
         if ($existing -and !$existing.isDraft) { throw "Release $tag is already published. Set a new version; existing releases are never overwritten." }
         $tracked = Run git.exe @('ls-files', '--cached', '--others', '--exclude-standard')
         foreach ($path in ($tracked -split "`n")) {
-            if ($path -match '(^|/)(\.android-signing|\.vercel)/|(^|/)\.env($|\.)|\.(p12|jks|keystore|pem|key|clixml|apk|aab)$') {
+            if ($path -match '(^|/)(\.android-signing|\.vercel)/|(^|/)\.env($|\.)|\.(p12|pfx|jks|keystore|pem|key|clixml|apk|aab)$') {
                 if ($path -ne '.env.example') { throw "Refusing to stage sensitive or generated file: $path. Ignore it before releasing." }
             }
         }

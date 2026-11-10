@@ -14,7 +14,7 @@ export default function usePendingBankAlerts(userId, spaceId) {
       request = controller
       try {
         const result = await api(`/api/bank-inbox/stats?space_id=${spaceId ?? 'personal'}`, { signal:controller.signal })
-        if (!controller.signal.aborted) setPending({ scope, count:result.pending })
+        if (!controller.signal.aborted) setPending({ scope, count:result.pending, latestId:result.latest_pending_id || 0 })
       } catch { /* Keep the last count for this workspace until it can refresh. */ }
     }
     void load()
@@ -26,5 +26,5 @@ export default function usePendingBankAlerts(userId, spaceId) {
       window.removeEventListener('online',load)
     }
   },[scope,spaceId])
-  return scope && pending?.scope === scope ? pending.count : 0
+  return scope && pending?.scope === scope ? pending : { count:0, latestId:0 }
 }

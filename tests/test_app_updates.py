@@ -16,6 +16,8 @@ WINDOWS_RELEASE = {'schema': 1, 'version': '6.18.0', 'size': 12345678, 'sha256':
 
 def test_windows_manifest_rejects_external_or_mismatched_installer():
     assert updates.validate_windows_release(WINDOWS_RELEASE) == WINDOWS_RELEASE
+    assert updates.validate_windows_release({**WINDOWS_RELEASE, 'signed': True})['signed'] is True
+    assert 'signed' not in updates.validate_windows_release({**WINDOWS_RELEASE, 'signed': 'true'})
     for bad_url in ('https://example.com/Budgetly-Setup-6.18.0.exe',
                     WINDOWS_RELEASE['url'].replace('6.18.0.exe', '6.17.1.exe'),
                     WINDOWS_RELEASE['url'] + '?download=1'):

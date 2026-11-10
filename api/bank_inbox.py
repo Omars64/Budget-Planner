@@ -6,6 +6,7 @@ from decimal import Decimal
 from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from .database import get_db
 from .auth_dependency import current_user
@@ -198,7 +199,10 @@ def inbox(status: Literal['pending', 'ignored', 'approved'] = 'pending', limit: 
 
 @router.get('/stats')
 def stats(actor=Depends(workspace_actor), db=Depends(get_db)):
-    return {'pending': db.query(BankCandidate).filter_by(user_id=actor.id, space_id=scope_id(db), status='pending').count()}
+    pending, latest_id = db.query(func.count(BankCandidate.id), func.max(BankCandidate.id)).filter(
+        BankCandidate.user_id == actor.id, BankCandidate.space_id == scope_id(db), BankCandidate.status == 'pending',
+    ).one()
+    return {'pending': pending, 'latest_pending_id': latest_id or 0}
 
 
 @router.get('/{item_id}')

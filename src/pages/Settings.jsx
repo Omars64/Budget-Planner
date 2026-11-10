@@ -31,10 +31,11 @@ import { useApp } from '../App'
 import Modal from '../components/Modal'
 import { configureReminder, isNativeApp } from '../lib/deviceNotifications'
 import { LocalNotifications } from '@capacitor/local-notifications'
-import { readNotificationSettings, saveNotificationSettings, stripNotificationSettings } from '../lib/notificationSettings'
+import { readNotificationSettings, saveNotificationSettings } from '../lib/notificationSettings'
 import { disableBiometric, setupBiometric, cancelBiometric, passwordOnlyEnabled } from '../lib/biometric'
 import BiometricEnrollment from '../components/BiometricEnrollment'
 import ComfortSettings from '../components/ComfortSettings'
+import AppearancePreferences from '../components/AppearancePreferences'
 import WorkspacePreferences from '../components/WorkspacePreferences'
 import { DateField, TimeField } from '../components/DateTimeField'
 import { mergeSettingsDraft } from '../lib/settingsDraft'
@@ -95,7 +96,13 @@ export default function Settings(){
     if(preferenceLock.current)return
     const section=e.currentTarget.dataset.preferencesForm
     preferenceLock.current=true;setSavingPreferences(true);setPreferenceStatus(current=>({...current,[section]:''}))
-    try{const fields=stripNotificationSettings(form);delete fields.color_palette;delete fields.theme;delete fields.accent_color;const updated=await api('/api/settings',{method:'PUT',...jsonBody(fields)});setSettings(current=>({...current,...updated}));setPreferenceStatus(current=>({...current,[section]:'Preferences saved.'}));notify('Settings saved')}
+    try {
+      const { display_name, week_starts_on, compact_numbers } = form
+      const updated = await api('/api/settings',{method:'PUT',...jsonBody({ display_name, week_starts_on, compact_numbers })})
+      setSettings(current => ({ ...current, display_name:updated.display_name, week_starts_on:updated.week_starts_on, compact_numbers:updated.compact_numbers }))
+      setPreferenceStatus(current=>({...current,[section]:'Preferences saved.'}))
+      notify('Settings saved')
+    }
     catch(err){notify(err.message,'error')}
     finally{preferenceLock.current=false;setSavingPreferences(false)}
   }
@@ -154,11 +161,7 @@ export default function Settings(){
     <AccountSecurity settingsId="account" settingsOrder={20}/>
     <TrashPanel settingsId="backup" settingsOrder={20}/>
     <SettingsSection title="Smart Bank Inbox"><BankNotificationSetup/></SettingsSection>
-    <SettingsSection title="Personal preferences" className=""><h4>Motion & feedback</h4><ComfortSettings/><h4>Appearance</h4><form onSubmit={save} data-preferences-form="appearance" aria-busy={savingPreferences} onChangeCapture={()=>setPreferenceStatus(current=>({...current,appearance:''}))} className="stack gap-16">
-      <label className="field"><span>Font</span><AppSelect aria-label="Font" value={form.font_family || 'system'} onChange={e => setForm({...form, font_family:e.target.value})}><option value="system">System</option><option value="arial">Arial</option><option value="georgia">Georgia</option><option value="verdana">Verdana</option></AppSelect></label>
-      <label className="field"><span>Text colour</span><AppSelect aria-label="Text colour" value={form.text_color || 'ink'} onChange={e => setForm({...form, text_color:e.target.value})}><option value="ink">Ink</option><option value="charcoal">Charcoal</option><option value="forest">Forest</option></AppSelect></label>
-      <button className="button primary" disabled={savingPreferences}><Save/>{savingPreferences?'Saving...':'Save preferences'}</button><p className="settings-save-status" role="status">{preferenceStatus.appearance}</p>
-    </form></SettingsSection>
+    <SettingsSection title="Personal preferences"><h4>Motion & feedback</h4><ComfortSettings/><h4>Appearance</h4><AppearancePreferences/></SettingsSection>
     <CurrencyConfiguration settingsId="money"/>
     <AndroidAppSettings settingsId="android"/>
     <SettingsSection title="Transaction entry"><WorkspacePreferences/></SettingsSection>

@@ -6,6 +6,8 @@ const valid = { schema: 1, packageId: 'com.flowbudget.app', version: '5.8.0', ve
 const windows = { schema: 1, version: '6.18.0', size: 12345678, sha256: 'b'.repeat(64), url: 'https://github.com/Omars64/Budget-Planner/releases/download/v6.18.0/Budgetly-Setup-6.18.0.exe' }
 test('Windows installer metadata stays pinned to the matching official release', () => {
   expect(validateWindowsRelease(windows)).toEqual(windows)
+  expect(validateWindowsRelease({ ...windows, signed:true }).signed).toBe(true)
+  expect(validateWindowsRelease({ ...windows, signed:'true' }).signed).toBeUndefined()
   expect(() => validateWindowsRelease({ ...windows, url: windows.url.replace('6.18.0.exe', '6.17.1.exe') })).toThrow()
   expect(() => validateWindowsRelease({ ...windows, url: 'https://example.com/install.exe' })).toThrow()
 })

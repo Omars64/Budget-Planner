@@ -1,6 +1,6 @@
 import AppSelect from '../components/AppSelect'
 import AppMonthField from '../components/AppMonthField'
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowRightLeft, Check, ClipboardPaste, RefreshCw, RotateCcw, X } from 'lucide-react'
 import InfoButton from '../components/InfoButton'
 import { useApp } from '../App'
@@ -8,6 +8,7 @@ import { api, jsonBody } from '../lib/api'
 import { categoryChoices } from '../lib/categoryChoices'
 import { dateInput, saveDate, showTime } from '../lib/time'
 import { currencyStep } from '../lib/currency'
+import { markNotificationsSeen } from '../lib/notificationReads'
 import { parseBankNotification, notificationHash } from '../lib/bankNotifications/parser'
 import { bankInboxChanged, syncBankNotifications } from '../lib/bankNotifications/native'
 import Modal from '../components/Modal'
@@ -21,7 +22,7 @@ const announceInboxChange = () => window.dispatchEvent(new CustomEvent(bankInbox
 const statusLabels = { pending: 'Waiting for review', approved: 'Approved', ignored: 'Ignored' }
 
 export default function BankMessages() {
-  const { user, settings, activeSpace, spaces, refresh, notify, canAdd } = useApp()
+  const { user, settings, activeSpace, spaceKey, spaces, refresh, notify, canAdd } = useApp()
   const [rows, setRows] = useState([]), [total, setTotal] = useState(0), [status, setStatus] = useState('pending'), [page, setPage] = useState(1)
   const [wallets, setWallets] = useState([]), [categories, setCategories] = useState([])
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [loading, setLoading] = useState(true)
@@ -29,26 +30,39 @@ export default function BankMessages() {
   const [selected, setSelected] = useState(null), [form, setForm] = useState({})
   const [route, setRoute] = useState(null), [target, setTarget] = useState('personal'), [targetWallets, setTargetWallets] = useState([]), [routeWallet, setRouteWallet] = useState('')
   const [inboxInfo, setInboxInfo] = useState(null)
+  const activeView = useRef(null)
   const switchInboxInfo = (event, view) => {
     event.currentTarget.closest('[role="dialog"]')?.focus({ preventScroll: true })
     setInboxInfo(view)
   }
-  const load = useCallback(async () => {
-    const result = await api(`/api/bank-inbox?status=${status}&page=${page}`)
+  const showInbox = useCallback(result => {
     setRows(result.items); setTotal(result.total)
-  }, [status, page])
+    if (status === 'pending' && page === 1 && result.items[0] && document.visibilityState !== 'hidden') {
+      markNotificationsSeen(user.id, spaceKey, { bank:result.items[0].id })
+    }
+  }, [status, page, user.id, spaceKey])
+  const load = useCallback(async () => {
+    const view = activeView.current
+    const result = await api(`/api/bank-inbox?status=${status}&page=${page}`)
+    if (view && activeView.current === view) showInbox(result)
+  }, [status, page, showInbox])
   useEffect(() => {
-    let alive = true
+    const view = {}
+    activeView.current = view
+    const alive = () => activeView.current === view
     setLoading(true)
     Promise.all([api(`/api/bank-inbox?status=${status}&page=${page}`), api('/api/wallets'), api('/api/categories')]).then(([result, accounts, cats]) => {
-      if (alive) { setRows(result.items); setTotal(result.total); setWallets(accounts.filter(wallet => !wallet.archived)); setCategories(cats) }
-    }).catch(failure => { if (alive) setError(failure.message) }).finally(() => { if (alive) setLoading(false) })
-    return () => { alive = false }
-  }, [status, page])
+      if (alive()) {
+        showInbox(result); setWallets(accounts.filter(wallet => !wallet.archived)); setCategories(cats)
+      }
+    }).catch(failure => { if (alive()) setError(failure.message) }).finally(() => { if (alive()) setLoading(false) })
+    return () => { activeView.current = null }
+  }, [status, page, showInbox])
   useEffect(() => {
     const changed = event => { if (event.detail !== 'inbox') void load().catch(failure => setError(failure.message)) }
     window.addEventListener(bankInboxChanged, changed)
-    return () => window.removeEventListener(bankInboxChanged, changed)
+    window.addEventListener('focus', changed)
+    return () => { window.removeEventListener(bankInboxChanged, changed); window.removeEventListener('focus', changed) }
   }, [load])
   useEffect(() => {
     if (!route) return

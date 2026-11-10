@@ -1,4 +1,6 @@
 .bank-inbox-list { display:grid; gap:12px; }
+.bank-setup-duplicate-row { display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:8px; }
+.bank-setup-duplicate-row .field { margin:0; }
 .bank-inbox-item { padding:18px; border:1px solid var(--line); border-radius:8px; background:var(--glass); display:grid; gap:12px; min-width:0; }
 .bank-inbox-badge { margin-left:auto; font-size:12px; min-width:22px; text-align:center; padding:2px 5px; background:var(--accent-soft); border-radius:8px; }
 .bank-inbox-item .section-row strong { overflow-wrap:anywhere; }

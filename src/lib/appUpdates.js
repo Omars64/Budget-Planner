@@ -58,7 +58,8 @@ export function validateWindowsRelease(value) {
       !/^[a-f0-9]{64}$/.test(value.sha256)) throw new Error('Invalid Windows release information.')
   const expected = `https://github.com/Omars64/Budget-Planner/releases/download/v${value.version}/Budgetly-Setup-${value.version}.exe`
   if (value.url !== expected) throw new Error('Invalid Windows installer address.')
-  return { schema: 1, version: value.version, size: value.size, sha256: value.sha256, url: expected }
+  return { schema: 1, version: value.version, size: value.size, sha256: value.sha256, url: expected,
+    ...(typeof value.signed === 'boolean' ? { signed:value.signed } : {}) }
 }
 
 export async function fetchWindowsRelease(signal) {
