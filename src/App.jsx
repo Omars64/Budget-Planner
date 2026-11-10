@@ -33,8 +33,7 @@ const More = lazy(() => import('./pages/More'))
 const Spaces = lazy(() => import('./pages/Spaces'))
 const BankMessages = lazy(() => import('./pages/BankMessages'))
 import BrandLogo from './components/BrandLogo'
-import { brandLogoUrl } from './lib/brandLogo'
-import { paletteKey } from './lib/colorPalettes'
+import { applyInstalledBrandIcon, brandLogoUrl } from './lib/brandLogo'
 import BrandFooter from './components/BrandFooter'
 import PasswordInput from './components/PasswordInput'
 import { useConfirmation } from './components/Confirmation'
@@ -254,13 +253,9 @@ export default function App() {
   useAppearance(settings, activeSpace?.accent)
   useEffect(() => {
     const icon = document.querySelector('link[rel="icon"]')
-    if (icon) {
-      const url = brandLogoUrl(settings.color_palette, session.user ? settings.logo_style : 'current')
-      icon.type = url.endsWith('.svg') ? 'image/svg+xml' : 'image/png'
-      icon.href = url
-    }
-    window.budgetlyDesktop?.setPaletteIcon?.(paletteKey(settings.color_palette))
+    if (icon) icon.href = brandLogoUrl(settings.color_palette, session.user ? settings.logo_style : 'current')
   }, [settings.color_palette, settings.logo_style, session.user])
+  useEffect(() => applyInstalledBrandIcon(settings.color_palette), [settings.color_palette])
   const accountPage = ['/settings', '/admin', '/feedback', '/ask-ai'].includes(currentLocation.pathname)
   const viewSettings = activeSpace && !accountPage ? {...settings, currency: activeSpace.currency, accent_color: activeSpace.accent} : settings
   useEffect(()=>installMoneyInputDefaults(document,viewSettings.currency),[viewSettings.currency])

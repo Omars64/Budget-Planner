@@ -59,12 +59,43 @@
                 <data android:scheme="https" android:host="budget-planner-ecru-seven.vercel.app" android:path="/api/auth/google/return" />
             </intent-filter>
 
+        </activity>
+
+        <activity-alias android:name=".LauncherNavy" android:targetActivity=".MainActivity"
+            android:icon="@mipmap/ic_launcher" android:enabled="true" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-
-        </activity>
+        </activity-alias>
+        <activity-alias android:name=".LauncherAubergine" android:targetActivity=".MainActivity"
+            android:icon="@mipmap/wallet_launcher_aubergine" android:enabled="false" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".LauncherBurgundy" android:targetActivity=".MainActivity"
+            android:icon="@mipmap/wallet_launcher_burgundy" android:enabled="false" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".LauncherPine" android:targetActivity=".MainActivity"
+            android:icon="@mipmap/wallet_launcher_pine" android:enabled="false" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".LauncherGraphite" android:targetActivity=".MainActivity"
+            android:icon="@mipmap/wallet_launcher_graphite" android:enabled="false" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
 
         <provider
             android:name="androidx.core.content.FileProvider"

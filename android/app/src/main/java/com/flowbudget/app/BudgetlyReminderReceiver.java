@@ -37,13 +37,10 @@ public class BudgetlyReminderReceiver extends BroadcastReceiver {
         NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager == null) return;
 
-        Intent launch = context.getPackageManager().getLaunchIntentForPackage(context.getPackageName());
-        PendingIntent content = null;
-        if (launch != null) {
-            launch.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-            content = PendingIntent.getActivity(context, NOTIFICATION_ID, launch,
-                    PendingIntent.FLAG_UPDATE_CURRENT | immutableFlag());
-        }
+        Intent launch = new Intent(context, MainActivity.class)
+                .setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        PendingIntent content = PendingIntent.getActivity(context, NOTIFICATION_ID, launch,
+                PendingIntent.FLAG_UPDATE_CURRENT | immutableFlag());
 
         NotificationCompat.Builder builder = new NotificationCompat.Builder(context, BudgetlyRemindersPlugin.CHANNEL_ID)
                 .setSmallIcon(com.flowbudget.app.R.drawable.flowbudget_notification)
@@ -54,7 +51,7 @@ public class BudgetlyReminderReceiver extends BroadcastReceiver {
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                 .setAutoCancel(true)
                 .setDefaults(Notification.DEFAULT_ALL);
-        if (content != null) builder.setContentIntent(content);
+        builder.setContentIntent(content);
         manager.notify(NOTIFICATION_ID, builder.build());
 
         long next = nextTrigger(prefs.getString("times", "[]"), System.currentTimeMillis());

@@ -1,4 +1,7 @@
 {
+  "6.22.1": [
+    {"title":"Textured palette logos","detail":"The five palettes now use the approved textured wallet artwork. The Android launcher icon and the open Windows app follow your selected palette."}
+  ],
   "6.22.0": [
     {"title":"A wallet logo for every palette","detail":"The redesigned wallet logo follows your palette inside Budgetly and in the browser tab."},
     {"title":"Cleaner settings and notifications","detail":"Appearance preferences save as you change them. Read alerts clear their bell badges, and Bank Messages help sits behind an info button."},
