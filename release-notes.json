@@ -1,4 +1,9 @@
 {
+  "6.21.1": [
+    {"title":"Quicker access to balances and filters","detail":"Find wallet balances beside the month filter in Transactions. In Upcoming, tap Details for filters or use the floating plus to schedule an entry."},
+    {"title":"Less clutter on daily screens","detail":"Open the bell for attention items, and use the info buttons on Overview and Bank Inbox for extra details."},
+    {"title":"Consistent palette accents","detail":"The five palettes in Look & feel now set your personal accent automatically."}
+  ],
   "6.21.0": [
     {"title":"Choose your Overview cards","detail":"Open Manage cards next to All wallets. Add, hide, or drag cards into order for this workspace on this device."},
     {"title":"Simpler money screens","detail":"Transactions and Upcoming use compact lists. Goals and debts have separate tabs and detail pages. Analytics shows monthly summaries and links to the new Spending tracker."}

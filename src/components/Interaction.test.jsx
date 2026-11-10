@@ -2,7 +2,6 @@ import { useRef, useState } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
-import AccentPicker from './AccentPicker'
 import Modal from './Modal'
 import AppTutorial from './AppTutorial'
 import { lockPageScroll, useContainedScroll } from '../lib/scrollLock'
@@ -59,23 +58,6 @@ test('Escape closes only the topmost identity prompt and leaves the parent locke
   expect(document.body.style.overflow).toBe('hidden')
   view.unmount()
   expect(document.body.style.overflow).toBe('auto')
-})
-
-test('colour changes need Apply; Cancel discards a draft and invalid input is rejected', async () => {
-  const onChange = vi.fn()
-  render(<AccentPicker value="#0a4173" onChange={onChange}/>)
-  fireEvent.click(screen.getByRole('button', { name: 'Accent colour' }))
-  fireEvent.change(screen.getByLabelText('Hex colour'), { target: { value: '#ffffff' } })
-  expect(onChange).not.toHaveBeenCalled()
-  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-  fireEvent.click(screen.getByRole('button', { name: 'Accent colour' }))
-  expect(screen.getByLabelText('Hex colour')).toHaveValue('#0a4173')
-  fireEvent.change(screen.getByLabelText('Hex colour'), { target: { value: '#nope' } })
-  expect(screen.getByRole('button', { name: 'Apply' })).toBeDisabled()
-  fireEvent.change(screen.getByLabelText('Hex colour'), { target: { value: '#45aa88' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
-  expect(onChange).toHaveBeenCalledExactlyOnceWith('#45aa88')
 })
 
 test('new accounts can skip; completed accounts can replay the tutorial', async () => {

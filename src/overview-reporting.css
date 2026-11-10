@@ -28,19 +28,7 @@
   overflow-wrap: anywhere;
 }
 .budgetly-v2 .overview-metrics .overview-month-net small { color: var(--muted); }
-.budgetly-v2 .overview-balance-details {
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-}
-.budgetly-v2 .overview-balance-details > summary {
-  min-height: 44px;
-  padding: 13px var(--overview-inset, 24px);
-  font-weight: 600;
-  cursor: pointer;
-}
 .budgetly-v2 .overview-balance-details-content {
-  padding: 0 var(--overview-inset, 24px) 20px;
-  font-size: 13px;
   line-height: 1.6;
 }
 .budgetly-v2 .overview-balance-details-content p { margin: 12px 0 8px; }
@@ -51,6 +39,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 7px 0;
+  overflow-wrap: anywhere;
 }
 .budgetly-v2 .overview-balance-details-content dl { max-width: 460px; margin: 0; }
 .budgetly-v2 .overview-balance-details-content dt,

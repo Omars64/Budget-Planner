@@ -15,7 +15,6 @@ import SettingsWorkspace from '../components/SettingsWorkspace'
 import CurrencyConfiguration from '../components/CurrencyConfiguration'
 import ComfortSettings from '../components/ComfortSettings'
 import WorkspacePreferences from '../components/WorkspacePreferences'
-import AccentPicker from '../components/AccentPicker'
 import UpdateNotificationPreference from '../components/UpdateNotificationPreference'
 import { mergeSettingsDraft } from '../lib/settingsDraft'
 
@@ -26,7 +25,7 @@ export default function GuestSettings() {
   useEffect(()=>{const previous=previousSettings.current;previousSettings.current=settings;setForm(current=>mergeSettingsDraft(current,previous,settings))},[settings])
   const save = async event => {
     event.preventDefault()
-    try { const fields = {...form}; delete fields.color_palette; delete fields.theme; const result = await api('/api/settings', { method: 'PUT', ...jsonBody(fields) }); setSettings(result); refresh(); notify('Preferences saved on this device') }
+    try { const fields = {...form}; delete fields.color_palette; delete fields.theme; delete fields.accent_color; const result = await api('/api/settings', { method: 'PUT', ...jsonBody(fields) }); setSettings(result); refresh(); notify('Preferences saved on this device') }
     catch (error) { notify(error.message, 'error') }
   }
   const exportData = async format => {
@@ -42,7 +41,6 @@ export default function GuestSettings() {
     <LogoSettings settingsId="appearance"/>
     <SettingsSection title="Guest workspace"><p>Stored only on this device. Clearing browser storage or uninstalling can remove these records.</p><button className="button primary" onClick={() => requestSignIn('cloud storage and account features')}><LogIn size={18}/>Sign in or create an account</button></SettingsSection>
     <SeasonalSettings settingsId="appearance"/><SettingsSection title="Personal preferences"><h4>Motion & feedback</h4><ComfortSettings/><form className="stack gap-16" onSubmit={save}>
-      <AccentPicker value={form.accent_color || '#0a4173'} onChange={value => setForm({ ...form, accent_color: value })}/>
       <label className="field"><span>Wallpaper</span><AppSelect aria-label="Wallpaper" value={form.wallpaper_style} onChange={event => setForm({ ...form, wallpaper_style: event.target.value, wallpaper_enabled: event.target.value !== 'none' })}><option value="none">None</option><option value="budgetly">Budgetly</option></AppSelect></label>
       <label className="check-row"><input type="checkbox" checked={form.compact_numbers} onChange={event => setForm({ ...form, compact_numbers: event.target.checked })}/><span>Compact numbers</span></label>
       <button className="button primary"><Save size={17}/>Save preferences</button>

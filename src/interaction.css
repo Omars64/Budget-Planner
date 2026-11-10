@@ -13,23 +13,6 @@
 .modal .modal-actions .button.ghost:hover,
 .confirmation-dialog .button.ghost:hover { background: var(--surface-hover); }
 .modal .modal-actions .button.ghost:disabled { opacity: .6; }
-.accent-picker-trigger {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  min-height: 48px;
-  padding: 10px 14px;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--text);
-}
-.accent-picker-trigger i { width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 50%; flex-shrink: 0; }
-.accent-picker-trigger svg { margin-left: auto; }
-.accent-picker-layer .modal-backdrop { display: grid; place-items: center; padding: 16px; }
-.accent-picker-layer .modal { width: min(360px, 100%); border-radius: 8px; }
-.accent-picker-layer .react-colorful { width: 100%; height: 210px; flex: none; }
 .tutorial-welcome p { margin: 0; font-size: 15px; line-height: 1.65; color: var(--text); }
 .tutorial-welcome > svg { color: var(--accent-text); }
 .driver-popover.budgetly-tour {

@@ -14,7 +14,8 @@ it('retains visual preferences after logout/unmount and restores them on a fresh
   const {unmount}=renderHook(()=>useAppearance({theme:'dark',accent_color:'#123456',email:'not-stored@example.com'}))
   unmount()
   expect(document.documentElement.dataset.theme).toBe('dark')
-  expect(readDeviceAppearance()).toEqual({theme:'dark',color_palette:'navy',accent_color:'#123456',font_family:'system',text_color:'ink'})
+  expect(readDeviceAppearance()).toEqual({theme:'dark',color_palette:'navy',font_family:'system',text_color:'ink'})
+  expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#8fd8f5')
   document.documentElement.dataset.theme='light'
   applyAppearance(readDeviceAppearance())
   expect(document.documentElement.dataset.theme).toBe('dark')
@@ -34,12 +35,12 @@ it('falls back safely if cached appearance is malformed',()=>{
   localStorage.setItem('budgetly_device_appearance','invalid json')
   expect(readDeviceAppearance().theme).toBe('light')
   localStorage.setItem('budgetly_device_appearance',JSON.stringify({theme:'bad',accent_color:'bad'}))
-  expect(readDeviceAppearance().accent_color).toBe('#0a4173')
+  expect(readDeviceAppearance().theme).toBe('light')
   expect(readDeviceAppearance().color_palette).toBe('navy')
 })
 
 it('keeps the selected palette on the welcome screen and honors the Space accent in the workspace',()=>{
-  const {unmount}=renderHook(()=>useAppearance({theme:'dark',color_palette:'burgundy'},'#267d75'))
+  const {unmount}=renderHook(()=>useAppearance({theme:'dark',color_palette:'burgundy',accent_color:'#123456'},'#267d75'))
   expect(document.documentElement.style.getPropertyValue('--palette-bright')).toBe('#e7be79')
   expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#267d75')
   unmount()

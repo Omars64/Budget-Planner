@@ -1,6 +1,6 @@
 import AppSelect from '../components/AppSelect'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { Bell, CalendarClock, CalendarPlus, Pencil, Trash2 } from 'lucide-react'
+import { Bell, CalendarClock, Pencil, Plus, Trash2 } from 'lucide-react'
 import { api, jsonBody, money } from '../lib/api'
 import { syncPlannedNotifications } from '../lib/plannedNotifications'
 import { categoryChoices } from '../lib/categoryChoices'
@@ -26,6 +26,7 @@ export default function Upcoming() {
   const [scope, setScope] = useState('all')
   const [filter, setFilter] = useState('upcoming')
   const [status, setStatus] = useState('')
+  const [detailsOpen, setDetailsOpen] = useState(false)
   const [selectedId, setSelectedId] = useState(null)
   const [draft, setDraft] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -104,8 +105,11 @@ export default function Upcoming() {
   }
 
   return <section className="upcoming-page everyday-page">
-    <PageActions><button type="button" className="button primary palette-header-action" data-tour="new-plan" disabled={!canAdd} onClick={() => start(null)}><CalendarPlus size={17}/>Schedule an entry</button></PageActions>
-    <div className="poc-pills" role="group" aria-label="Upcoming entries">{tabs.map(([key,label]) => <button type="button" key={key} aria-pressed={filter === key} onClick={() => { setFilter(key); setStatus('') }}>{label}</button>)}</div>
+    {canAdd && <PageActions floating><button type="button" className="transaction-fab" data-tour="new-plan" aria-label="Schedule an entry" title="Schedule an entry" onClick={() => start(null)}><Plus size={26} aria-hidden="true"/></button></PageActions>}
+    <div className="poc-pills upcoming-controls" role="group" aria-label="Upcoming entries">
+      {tabs.map(([key,label]) => <button type="button" key={key} aria-pressed={filter === key} onClick={() => { setFilter(key); setStatus('') }}>{label}</button>)}
+      <button type="button" className="upcoming-details-button" aria-haspopup="dialog" onClick={() => setDetailsOpen(true)}>Details{(scope !== 'all' || status) && <span aria-label="Filters active"> •</span>}</button>
+    </div>
     {error && !draft && <p className="form-error" role="alert">{error}</p>}
     <Modal layerClass="everyday-page" open={Boolean(draft)} onClose={closeEditor} title={draft?.id ? 'Edit upcoming entry' : 'Add upcoming entry'} subtitle="Plan ahead without changing your balance." protectChanges isDirty={Boolean(draft && JSON.stringify(draft) !== baseline.current)} footer={close => <div className="modal-actions"><button type="button" className="button ghost" disabled={busy} onClick={close}>Cancel</button><button type="submit" form={formId} className="button primary" disabled={busy || conflict}>{busy ? 'Saving...' : 'Save entry'}</button></div>}>
     {draft && <form id={formId} className="upcoming-editor stack gap-18 transaction-form" onSubmit={save}>
@@ -138,14 +142,14 @@ export default function Upcoming() {
         <strong className={`upcoming-amount ${row.type}`}>{amountLabel(row)}</strong>
       </button>)}
     </div>
-    <details className="poc-disclosure"><summary>More filters &amp; details</summary>
-      <div className="form-grid two">
+    <Modal open={detailsOpen} onClose={() => setDetailsOpen(false)} title="Upcoming details" size="small">
+      <div className="stack gap-16">
         <label className="field"><span>Wallet context</span><AppSelect value={scope} onChange={event => setScope(event.target.value)}><option value="all">All wallets</option><option value="personal">Personal</option><option value="shared">Shared</option></AppSelect></label>
         {filter !== 'posted' && <label className="field"><span>Plan status</span><AppSelect value={status} onChange={event => setStatus(event.target.value)}><option value="">Any status</option><option value="planned">Manual / reminder only</option><option value="scheduled">Automatic</option><option value="failed">Needs attention</option></AppSelect></label>}
+        <p><strong>Net planned</strong> {money(total, settings.currency)}</p>
+        <p className="muted">Automatic entries record after their due time when processing runs. Plans stay unrecorded until you add the transaction yourself.</p>
       </div>
-      <p><strong>Net planned</strong> {money(total, settings.currency)}</p>
-      <p className="muted">Automatic entries record after the due time when processing runs. Plans stay unrecorded until you add the transaction yourself.</p>
-    </details>
+    </Modal>
     <Modal open={Boolean(selected)} onClose={() => setSelectedId(null)} title={selected?.description || 'Upcoming entry'}>
       {selected && <div className="stack gap-12">
         <strong className={`upcoming-amount ${selected.type}`}>{amountLabel(selected)}</strong>

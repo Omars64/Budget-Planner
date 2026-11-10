@@ -2,6 +2,7 @@ import AppSelect from '../components/AppSelect'
 import AppMonthField from '../components/AppMonthField'
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { ArrowRightLeft, Check, ClipboardPaste, RefreshCw, RotateCcw, X } from 'lucide-react'
+import InfoButton from '../components/InfoButton'
 import { useApp } from '../App'
 import { api, jsonBody } from '../lib/api'
 import { categoryChoices } from '../lib/categoryChoices'
@@ -27,7 +28,11 @@ export default function BankMessages() {
   const [paste, setPaste] = useState(false), [text, setText] = useState(''), [bank, setBank] = useState('nbk')
   const [selected, setSelected] = useState(null), [form, setForm] = useState({})
   const [route, setRoute] = useState(null), [target, setTarget] = useState('personal'), [targetWallets, setTargetWallets] = useState([]), [routeWallet, setRouteWallet] = useState('')
-  const [legacy, setLegacy] = useState(false)
+  const [inboxInfo, setInboxInfo] = useState(null)
+  const switchInboxInfo = (event, view) => {
+    event.currentTarget.closest('[role="dialog"]')?.focus({ preventScroll: true })
+    setInboxInfo(view)
+  }
   const load = useCallback(async () => {
     const result = await api(`/api/bank-inbox?status=${status}&page=${page}`)
     setRows(result.items); setTotal(result.total)
@@ -90,8 +95,14 @@ export default function BankMessages() {
   }
   const duplicateWarning = selected && (selected.duplicates.length > 0 || error.toLowerCase().includes('similar transaction'))
   return <div className="stack gap-18 bank-inbox everyday-page">
-    <div className="section-row"><div><h3>Bank Inbox</h3><small className="muted">{activeSpace?.name || 'Personal'} · {total} {statusLabels[status].toLowerCase()}</small></div><div className="button-row everyday-actions"><button type="button" className="button ghost" aria-label="Refresh bank inbox" disabled={busy} onClick={() => act(async () => { await syncBankNotifications(user.id); await load(); announceInboxChange() })}><RefreshCw size={19}/>Refresh</button><button type="button" className="button primary" data-tour="paste-bank-message" disabled={!canAdd} onClick={() => setPaste(true)}><ClipboardPaste size={18}/>Paste message</button></div></div>
-    <div className="everyday-guidance"><strong>Nothing is recorded without approval</strong><p className="muted">Check each alert and its destination, then review and approve it. Ignore alerts you do not want to record, or change their destination before review.</p><a href="#/settings">Bank notification settings</a></div>
+    <div className="section-row">
+      <small className="muted">{activeSpace?.name || 'Personal'} · {total} {statusLabels[status].toLowerCase()}</small>
+      <div className="button-row everyday-actions bank-inbox-actions">
+        <button type="button" className="button ghost bank-refresh-button" aria-label="Refresh bank inbox" title="Refresh bank inbox" disabled={busy} onClick={() => act(async () => { await syncBankNotifications(user.id); await load(); announceInboxChange() })}><RefreshCw size={19}/><span>Refresh</span></button>
+        <button type="button" className="button primary" data-tour="paste-bank-message" disabled={!canAdd} onClick={() => setPaste(true)}><ClipboardPaste size={18}/>Paste message</button>
+        <InfoButton label="About Bank Inbox" onClick={() => setInboxInfo('help')}/>
+      </div>
+    </div>
     <div className="tabs" role="tablist" aria-label="Bank inbox status">{['pending', 'approved', 'ignored'].map(value => <button key={value} type="button" role="tab" aria-selected={status === value} className={status === value ? 'active' : ''} onClick={() => { setStatus(value); setPage(1); setError('') }}>{statusLabels[value]}</button>)}</div>
     {error && !selected && !paste && !route && <p className="form-error" role="alert">{error}</p>}
     {loading ? <p role="status">Loading bank alerts...</p> : error && !rows.length ? <div className="empty-state"><h3>Bank alerts unavailable</h3><p>Reconnect to load alerts that have not been saved on this device.</p><button type="button" className="button ghost" onClick={() => void load().catch(failure => setError(failure.message))}>Retry</button></div> : !rows.length ? <div className="empty-state"><h3>No bank transactions {status === 'pending' ? 'waiting for review' : `marked ${status}`}</h3><a className="button ghost" href="#/settings">Open Settings</a></div> : <div className="bank-inbox-list">{rows.map(row => <article className="bank-inbox-item" key={row.id}>
@@ -104,7 +115,19 @@ export default function BankMessages() {
       {status === 'approved' && <small>Recorded transaction #{row.transaction_id || 'removed'}</small>}
     </article>)}</div>}
     {total > 100 && <div className="button-row"><button className="button ghost" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</button><span>Page {page}</span><button className="button ghost" disabled={page * 100 >= total} onClick={() => setPage(page + 1)}>Next</button></div>}
-    {!activeSpace && <details className="bank-settings-disclosure" onToggle={event => setLegacy(event.currentTarget.open)}><summary>Previously saved bank messages</summary>{legacy && <Suspense fallback={<p>Loading saved messages...</p>}><LegacyBankMessages/></Suspense>}</details>}
+    <Modal open={Boolean(inboxInfo)} onClose={() => setInboxInfo(null)} title={inboxInfo === 'saved' ? 'Previously saved bank messages' : 'About Bank Inbox'} size="small">
+      <div className="stack gap-16">
+        {inboxInfo === 'saved' ? <>
+          <button type="button" className="button ghost small" onClick={event => switchInboxInfo(event, 'help')}>Back to Bank Inbox help</button>
+          <Suspense fallback={<p role="status">Loading saved messages...</p>}><LegacyBankMessages/></Suspense>
+        </> : <>
+          <strong>Alerts need your approval before they’re recorded</strong>
+          <p className="muted">Check the destination and details before approving an alert. You can change the destination or ignore the alert.</p>
+          <a className="button ghost" href="#/settings" onClick={() => setInboxInfo(null)}>Bank notification settings</a>
+          {!activeSpace && <button type="button" className="button ghost" onClick={event => switchInboxInfo(event, 'saved')}>Previously saved bank messages</button>}
+        </>}
+      </div>
+    </Modal>
     <Modal open={paste} onClose={() => { if (!busy) setPaste(false) }} title="Paste bank message"><form onSubmit={pasteMessage} className="stack gap-16"><label className="field"><span>Bank/source</span><input required value={bank} maxLength={80} pattern="[a-zA-Z0-9_.-]+" onChange={event => setBank(event.target.value.toLowerCase())}/></label><label className="field"><span>Transaction alert</span><textarea required maxLength={4000} rows={5} value={text} onChange={event => setText(event.target.value)} placeholder="Paste a purchase, income, refund or transfer alert"/></label><small className="muted">Only parsed transaction details are saved. Unmapped alerts go to Personal.</small>{error && <p role="alert" className="form-error">{error}</p>}<button disabled={busy} className="button primary">Add to inbox</button></form></Modal>
     <Modal open={!!selected} onClose={() => { if (!busy) setSelected(null) }} title={selected ? `Review ${kinds[selected.transaction_type].toLowerCase()}` : 'Review bank alert'}><form onSubmit={approve} onInvalid={event => setError(`Check ${event.target.closest('label')?.querySelector('span')?.textContent || 'the highlighted field'} before approving.`)} className="stack gap-16">
       <small className="muted">{selected?.source_app} · {selected?.currency} · Requires approval</small>

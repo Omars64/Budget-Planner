@@ -78,9 +78,27 @@
 
 .budgetly-v2 .compact-transactions .compact-ledger-filter { padding:0 0 9px; }
 .budgetly-v2 .compact-transactions :is(.compact-ledger-filter,.ledger-list) { order:0; }
-.compact-ledger-filter .ledger-search-row {
-  display:grid;grid-template-columns:minmax(0,1fr) minmax(0,auto);align-items:center;gap:8px;
+.compact-ledger-filter .ledger-context-row {
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:stretch;gap:8px;margin-top:8px;
 }
+.compact-ledger-filter .ledger-balance-trigger {
+  min-height:44px;min-width:0;justify-content:center;padding:7px 9px;text-align:center;overflow-wrap:anywhere;
+}
+.compact-ledger-filter .ledger-balance-trigger svg { flex:none; }
+.wallet-balance-row {
+  display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--line);
+}
+.wallet-balance-row > span { display:inline-flex;align-items:center;gap:8px;min-width:0;overflow-wrap:anywhere; }
+.wallet-balance-row > span svg { flex:none; }
+.wallet-balance-row strong { text-align:end;overflow-wrap:anywhere; }
+.wallet-balance-row:last-child { border-bottom:0; }
+.budgetly-v2 .compact-info-button {
+  flex:none;display:inline-grid;place-items:center;width:44px;min-width:44px;height:44px;min-height:44px;padding:0;
+}
+.overview-month-title { display:flex;align-items:center;gap:4px;min-width:0; }
+.overview-month-title h2 { overflow-wrap:anywhere; }
+.upcoming-controls .upcoming-details-button { color:var(--accent-text,var(--accent));border:1px solid var(--line); }
+.floating-page-actions { display:contents; }
 .budgetly-v2 .compact-ledger-filter .everyday-ledger-search {
   display:grid;grid-template-columns:36px minmax(0,1fr);gap:0;min-height:44px;padding:0;
   border:1px solid var(--line);border-radius:12px;background:var(--surface-soft);
@@ -103,7 +121,6 @@
   min-width:36px;width:36px;min-height:40px;height:40px;padding:0;justify-content:center;border-radius:10px;
 }
 .budgetly-v2 .compact-transactions .ledger-list { border:0;background:transparent; }
-.budgetly-v2 .compact-transactions .transaction-balances { padding-inline:0; }
 .poc-date-label {
   margin:15px 0 0;padding:0;color:var(--muted);font-size:12px;letter-spacing:.05em;text-transform:uppercase;
 }
@@ -113,12 +130,14 @@
   .budgetly-v2.everyday-shell .topbar .mobile-space {
     grid-column:1 / -1;grid-row:1;justify-self:start;width:min(148px,calc(100% - 98px));padding-inline:0;
   }
-  .budgetly-v2.everyday-shell.has-ledger .transaction-fab { bottom:calc(116px + env(safe-area-inset-bottom)); }
+  .budgetly-v2.everyday-shell.has-floating-entry .transaction-fab { bottom:calc(116px + env(safe-area-inset-bottom)); }
+  .poc-pills.upcoming-controls { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px; }
+  .poc-pills.upcoming-controls button { font-size:.78rem;padding-inline:3px;overflow-wrap:anywhere; }
   .compact-ledger-filter .ledger-type-row { display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px; }
   .compact-ledger-filter .poc-pills { display:grid;grid-template-columns:repeat(4,minmax(0,auto));gap:0; }
   .compact-ledger-filter .poc-pills button { font-size:.75rem;padding-inline:2px;overflow-wrap:anywhere; }
   .compact-ledger-filter .everyday-search-field input { font-size:.86rem; }
-  .compact-ledger-filter .app-select-trigger { font-size:.8rem; }
+  .compact-ledger-filter :is(.app-select-trigger,.ledger-balance-trigger) { font-size:.8rem; }
   .compact-ledger-filter .app-select-trigger svg { width:14px;flex-shrink:0; }
   .budgetly-v2 .top-actions .palette-header-action { min-height:40px;padding:7px 9px;font-size:12px; }
 }

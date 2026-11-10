@@ -11,7 +11,6 @@ function preferences(value = {}) {
     color_palette:paletteKey(value?.color_palette),
     font_family:Object.hasOwn(fonts,value?.font_family) ? value.font_family : 'system',
     text_color:Object.hasOwn(colours,value?.text_color) ? value.text_color : 'ink',
-    accent_color:/^#[0-9a-f]{6}$/i.test(value?.accent_color || '') ? value.accent_color : '#0a4173',
   }
 }
 
@@ -35,7 +34,7 @@ export function applyAppearance(value, systemDark = window.matchMedia?.('(prefer
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', palette.deep)
   root.style.setProperty('--app-font',fonts[prefs.font_family])
   root.style.setProperty('--text',dark ? palette.light : prefs.text_color === 'ink' ? palette.deep : colours[prefs.text_color])
-  const accent = spaceAccent || (prefs.accent_color === '#0a4173' ? dark ? palette.bright : palette.action : prefs.accent_color)
+  const accent = spaceAccent || (dark ? palette.bright : palette.action)
   const bytes = accent.match(/[0-9a-f]{2}/gi).map(value=>parseInt(value,16))
   const channels = bytes.map(value=>value/255).map(c=>c<=.04045?c/12.92:((c+.055)/1.055)**2.4)
   const luminance = channels[0]*.2126+channels[1]*.7152+channels[2]*.0722
@@ -56,5 +55,5 @@ export function useAppearance(settings, spaceAccent = null) {
     try { localStorage.setItem(storageKey,JSON.stringify(prefs)) } catch { /* Storage is optional. */ }
     media.addEventListener('change',update)
     return () => media.removeEventListener('change',update)
-  },[settings.theme,settings.font_family,settings.text_color,settings.accent_color,settings.color_palette,spaceAccent])
+  },[settings.theme,settings.font_family,settings.text_color,settings.color_palette,spaceAccent])
 }

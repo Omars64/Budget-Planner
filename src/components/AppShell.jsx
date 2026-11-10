@@ -28,6 +28,7 @@ import SupportPrompt from './SupportPrompt'
 import { SUPPORT_URL } from '../lib/support'
 import Modal from './Modal'
 import { PageActionsProvider } from './PageActions'
+import { api } from '../lib/api'
 
 const nav = workspaceNavigation
 const primaryRoutes = new Set(['/', '/transactions', '/wallets', '/upcoming'])
@@ -37,7 +38,9 @@ export default function AppShell({ children }) {
   const navigate = useNavigate()
   const nativeAndroid = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android'
   const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [attentionCount, setAttentionCount] = useState(null)
   const [pageActions, setPageActions] = useState(null)
+  const [floatingAction, setFloatingAction] = useState(null)
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem('budgetly-sidebar-collapsed') === 'true' } catch { return false }
   })
@@ -75,7 +78,7 @@ export default function AppShell({ children }) {
     return () => window.removeEventListener('keydown', quickFind)
   }, [navSearch, nativeAndroid, navigate])
   useContainedScroll(sidebar)
-  const { user, settings, appearance, refresh, notify, lock, isGuest, requestSignIn, activeSpace, spaceKey, canAdd, bankInboxCount } = useApp()
+  const { user, settings, appearance, refresh, refreshKey, notify, lock, isGuest, requestSignIn, activeSpace, spaceKey, canAdd, bankInboxCount = 0 } = useApp()
   const [preferences] = useWorkspacePreferences(user?.id)
   const keyboardOpen = useKeyboardViewport()
   const location = useLocation()
@@ -92,6 +95,22 @@ export default function AppShell({ children }) {
   const matchingNav = orderedNav.filter(([, label]) => label.toLowerCase().includes(navSearch.trim().toLowerCase()))
   const isOverview = location.pathname === '/'
   const isLedger = ['/transactions', '/shared-transactions'].includes(location.pathname)
+  const isUpcoming = location.pathname === '/upcoming'
+  const shouldLoadAttention = !isGuest && (isOverview || notificationsOpen)
+  useEffect(() => {
+    if (!shouldLoadAttention) return
+    const controller = new AbortController()
+    api('/api/attention', { signal:controller.signal })
+      .then(value => { if (!controller.signal.aborted) setAttentionCount(Number.isInteger(value?.count) ? value.count : null) })
+      .catch(() => { if (!controller.signal.aborted) setAttentionCount(null) })
+    return () => controller.abort()
+  }, [shouldLoadAttention, refreshKey])
+  const notificationCount = bankInboxCount + (attentionCount ?? 0)
+  const notificationLabel = [
+    'Notifications',
+    bankInboxCount > 0 && `${bankInboxCount} bank alerts pending`,
+    attentionCount > 0 && `${attentionCount} attention ${attentionCount === 1 ? 'item' : 'items'}`,
+  ].filter(Boolean).join(', ')
   const isWallets = location.pathname === '/wallets'
   const pageParams = new URLSearchParams(location.search)
   const walletDetail = isWallets && Boolean(pageParams.get('wallet') || location.state?.walletId)
@@ -108,7 +127,7 @@ export default function AppShell({ children }) {
     ? window.dispatchEvent(new window.Event('budgetly:add-shared-transaction'))
     : setTxModal(true)
 
-  return <div className={`app-shell budgetly-v2 everyday-shell ${collapsed ? 'sidebar-collapsed' : ''} ${nativeAndroid ? 'native-android' : 'browser-app'} ${isLedger ? 'has-ledger' : ''} ${walletDetail ? 'has-wallet-detail' : ''} ${keyboardOpen ? 'keyboard-open' : ''} ${location.pathname === '/ask-ai' ? 'has-ai' : ''}`}>
+  return <div className={`app-shell budgetly-v2 everyday-shell ${collapsed ? 'sidebar-collapsed' : ''} ${nativeAndroid ? 'native-android' : 'browser-app'} ${isLedger ? 'has-ledger' : ''} ${(isLedger || isUpcoming) && canAdd !== false ? 'has-floating-entry' : ''} ${walletDetail ? 'has-wallet-detail' : ''} ${keyboardOpen ? 'keyboard-open' : ''} ${location.pathname === '/ask-ai' ? 'has-ai' : ''}`}>
     <ScrollMemory userId={`${user?.id}:${spaceKey}`}/>
     {!nativeAndroid && <aside ref={sidebar} className="sidebar glass">
       <div className="sidebar-head">
@@ -136,7 +155,7 @@ export default function AppShell({ children }) {
       <header className="topbar" role="banner">
         <div className="mobile-space"><SpaceSwitcher/></div>
         <div className="header-controls">
-          {!isGuest && <button type="button" className="icon-button notification-trigger" aria-label={bankInboxCount ? `Notifications, ${bankInboxCount} bank alerts pending` : 'Notifications'} aria-haspopup="dialog" onClick={() => setNotificationsOpen(true)}><Bell size={20} aria-hidden="true"/><BankInboxBadge/></button>}
+          {!isGuest && <button type="button" className="icon-button notification-trigger" aria-label={notificationLabel} aria-haspopup="dialog" onClick={() => setNotificationsOpen(true)}><Bell size={20} aria-hidden="true"/>{notificationCount > 0 && <small className="bank-inbox-badge" aria-hidden="true">{notificationCount}</small>}</button>}
           <Link to="/settings" className="header-user-tag" aria-label="Account and preferences" title={isGuest ? 'Guest' : user?.username}>
             {appearance.profile_image ? <img className="header-user-avatar" src={appearance.profile_image} alt=""/> : <span className="header-user-avatar" aria-hidden="true">{(isGuest ? 'Guest' : user?.username || 'Budgetly').slice(0,1).toUpperCase()}</span>}
           </Link>
@@ -154,10 +173,11 @@ export default function AppShell({ children }) {
       <WindowsUpdate/>
       {isGuest && <div className="guest-banner"><span>Guest mode · Saved on this device</span><button className="button ghost small" onClick={() => requestSignIn('cloud storage and more features')}>Sign in</button></div>}
       <motion.div className={`page-wrap${isOverview || walletDetail || goalDetail || spending || isSettings ? ' palette-page-split' : ' palette-sheet'}`} data-tour-page={location.pathname} key={location.pathname} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .18, ease: 'easeOut' }}>
-        <PageActionsProvider target={pageActions}>{children}</PageActionsProvider>
+        <PageActionsProvider target={pageActions} floatingTarget={floatingAction}>{children}</PageActionsProvider>
       </motion.div>
       <BrandFooter className="app-footer"/>
     </main>
+    <div ref={setFloatingAction} className="floating-page-actions"/>
     {isLedger && canAdd !== false && <button data-tour="add-transaction" className="transaction-fab" aria-label="Add transaction" title="Add transaction" onClick={addTransaction}><Plus size={26} aria-hidden="true"/></button>}
 
     <nav className="mobile-nav glass">
@@ -169,6 +189,9 @@ export default function AppShell({ children }) {
       <div className="notification-inbox">
         <Link className="notification-inbox-link" to="/bank-messages" onClick={() => setNotificationsOpen(false)}>
           <span><strong>Bank Inbox</strong><small>{bankInboxCount ? 'Review captured alerts before recording them' : 'No bank alerts waiting for review'}</small></span><BankInboxBadge/><ChevronRight size={17} aria-hidden="true"/>
+        </Link>
+        <Link className="notification-inbox-link" to="/attention" onClick={() => setNotificationsOpen(false)}>
+          <span><strong>Needs your attention</strong><small>{attentionCount === null ? 'View items to review' : attentionCount === 0 ? 'No items to review' : `${attentionCount} ${attentionCount === 1 ? 'item' : 'items'} to review`}</small></span><ChevronRight size={17} aria-hidden="true"/>
         </Link>
         <Link className="notification-inbox-link" to="/upcoming" onClick={() => setNotificationsOpen(false)}><strong>Upcoming reminders</strong><ChevronRight size={17} aria-hidden="true"/></Link>
       </div>
