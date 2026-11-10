@@ -8,7 +8,7 @@ import { phraseSearch, savedSearches, saveSearch, removeSearch } from '../lib/ph
 
 import { defaultLedgerFilters } from '../lib/ledgerDefaults'
 
-export default function LedgerFilters({ value, onChange, wallets, categories = [], shared = false, userId, children }) {
+export default function LedgerFilters({ value, onChange, wallets, categories = [], shared = false, compact = false, userId, children }) {
   const scope=shared?'shared':'personal'
   const [phrase,setPhrase]=useState('')
   const [searchText,setSearchText]=useState(value.search || '')
@@ -29,17 +29,22 @@ export default function LedgerFilters({ value, onChange, wallets, categories = [
     onChange({ ...value, month: date.toISOString().slice(0, 7), date_from:'', date_to:'', reporting_from:'', reporting_to:'' })
   }
   const label = key => key === 'exclude_opening' ? 'Starting balances excluded' : key === 'date_from' ? `From ${value.date_from.slice(0,10)}` : key === 'date_to' ? `To ${value.date_to.slice(0,10)}` : key === 'reporting_from' ? `Reporting from ${value.reporting_from}` : key === 'reporting_to' ? `Reporting through ${value.reporting_to}` : key === 'category' ? (value.category === '0' ? 'Uncategorized' : categories.find(c => String(c.id) === value.category)?.name || 'Category') : key === 'wallet' ? wallets.find(w => String(w.wallet_id ?? w.id) === value.wallet)?.name || 'Wallet' : key === 'month' ? monthLabel : key === 'search' ? 'Search: ' + value.search : key === 'sort' ? 'Oldest first' : value.type
-  return <section className="ledger-filter-bar" aria-label="Transaction filters">
+  const shownFilters = compact ? active.filter(key => !['month','type'].includes(key)) : active
+  const extra = <div className="button-row ledger-extra-actions">{children}<button type="button" className="button ghost small filter-trigger" title="Filter transactions" aria-label="Filter transactions" onClick={() => { setDraft(value); setOpen(true) }}><ListFilter size={18}/>{!compact && <span>Filters</span>}{shownFilters.length > 0 && <i aria-label={shownFilters.length + ' active filters'}/>}</button></div>
+  return <section className={`ledger-filter-bar${compact ? ' compact-ledger-filter' : ''}`} aria-label="Transaction filters">
+    <div className="ledger-search-row">
     <form className="everyday-ledger-search" role="search" aria-label="Search recorded transactions" onSubmit={event => { event.preventDefault(); onChange({...value,search:searchText.trim()}) }}>
-      <label className="everyday-search-field"><Search size={18}/><input type="search" aria-label="Search transactions" placeholder="Search descriptions or notes" maxLength={160} value={searchText} onChange={event => setSearchText(event.target.value)}/></label>
-      <button type="submit" className="button ghost small">Search</button>
+      <label className="everyday-search-field">{!compact && <Search size={18}/>}<input type="search" aria-label="Search transactions" placeholder={compact ? 'Search entries' : 'Search descriptions or notes'} maxLength={160} value={searchText} onChange={event => setSearchText(event.target.value)}/></label>
+      <button type="submit" className={compact ? 'ledger-search-submit' : 'button ghost small'} aria-label="Search">{compact ? <Search size={18}/> : 'Search'}</button>
     </form>
-    <div className="ledger-toolbar">
-      <div className="ledger-month"><button className="icon-button" aria-label="Previous month" onClick={() => shiftMonth(-1)}><ChevronLeft size={18}/></button><strong>{monthLabel}</strong><button className="icon-button" aria-label="Next month" onClick={() => shiftMonth(1)}><ChevronRight size={18}/></button></div>
-      <div className="button-row">{children}<button className="button ghost small filter-trigger" title="Filter transactions" aria-label="Filter transactions" onClick={() => { setDraft(value); setOpen(true) }}><ListFilter size={18}/><span>Filters</span>{active.length > 0 && <i aria-label={active.length + ' active filters'}/>}</button></div>
+    {compact && <AppMonthField aria-label="Reporting month" emptyLabel="All months" min="1000-01" max="9999-12" value={value.month} onChange={event => onChange({...value, month:event.target.value, date_from:'', date_to:'', reporting_from:'', reporting_to:''})}/>}
     </div>
-    <div className="ledger-quick-types" role="group" aria-label="Transaction type">{[['all','All'],['expense','Expenses'],['income','Income'],['transfer','Transfers']].map(([type, title]) => <button key={type} aria-pressed={value.type === type} onClick={() => onChange({ ...value, type, category: '' })}>{title}</button>)}</div>
-    {active.length > 0 && <div className="active-filters">{active.map(key => <button key={key} onClick={() => onChange({ ...value, [key]: defaultLedgerFilters[key] })} aria-label={'Remove ' + key + ' filter'}><span>{label(key)}</span><X size={13}/></button>)}</div>}
+    {!compact && <div className="ledger-toolbar">
+      <div className="ledger-month"><button className="icon-button" aria-label="Previous month" onClick={() => shiftMonth(-1)}><ChevronLeft size={18}/></button><strong>{monthLabel}</strong><button className="icon-button" aria-label="Next month" onClick={() => shiftMonth(1)}><ChevronRight size={18}/></button></div>
+      {extra}
+    </div>}
+    <div className="ledger-type-row"><div className={compact ? 'poc-pills' : 'ledger-quick-types'} role="group" aria-label="Transaction type">{[['all','All'],['expense','Expenses'],['income','Income'],['transfer','Transfers']].map(([type, title]) => <button type="button" key={type} aria-pressed={value.type === type} onClick={() => onChange({ ...value, type, category: '' })}>{title}</button>)}</div>{compact && extra}</div>
+    {shownFilters.length > 0 && <div className="active-filters">{shownFilters.map(key => <button key={key} onClick={() => onChange({ ...value, [key]: defaultLedgerFilters[key] })} aria-label={'Remove ' + key + ' filter'}><span>{label(key)}</span><X size={13}/></button>)}</div>}
     <Modal open={open} onClose={() => setOpen(false)} title="Filter transactions">
       <form className="stack gap-16" onSubmit={e => { e.preventDefault(); onChange(draft); setOpen(false) }}>
         <label className="field"><span>Find transactions</span><input value={phrase} onChange={event=>setPhrase(event.target.value)} placeholder="Groceries last month" maxLength={160}/></label>

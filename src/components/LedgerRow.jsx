@@ -8,20 +8,27 @@ import { useNavigate } from 'react-router-dom'
 import { useSavedTransaction } from '../lib/savedFeedback'
 import { useState } from 'react'
 
-export function LedgerDateHeader({ day }) {
+export function LedgerDateHeader({ day, compact = false }) {
   const today = dateInput().slice(0, 10)
   const yesterday = new Date(`${today}T12:00:00`)
   yesterday.setDate(yesterday.getDate() - 1)
   const relative = day === today ? 'Today' : day === format(yesterday, 'yyyy-MM-dd') ? 'Yesterday' : ''
+  if (compact) return <h3 className="poc-date-label">{format(new Date(`${day}T12:00:00`), 'dd MMM yyyy')}</h3>
   return <div className="date-label"><strong className="ledger-date-title">{relative ? `${relative} · ` : ''}{format(new Date(`${day}T12:00:00`), 'EEEE, dd MMM yyyy')}</strong></div>
 }
 
-export default function LedgerRow({ tx, fmt, shared = false, showDate = false, onOpen }) {
+export default function LedgerRow({ tx, fmt, shared = false, showDate = false, compact = false, onOpen }) {
   const saved = useSavedTransaction()
   const name = (tx.category_name || '').toLowerCase()
   const Icon = tx.type === 'income' ? ArrowDownLeft : tx.type === 'transfer' ? ArrowRightLeft : name.includes('food') ? Utensils : name.includes('shop') ? ShoppingBasket : name.includes('transport') ? Bus : ArrowUpRight
   const title = tx.description?.trim() || tx.category_name || 'Unnamed transaction'
   const walletLabel = tx.type === 'transfer' ? `${tx.wallet_name || 'Wallet'} → ${tx.transfer_wallet_name || 'Wallet'}` : tx.wallet_name || tx.shared_wallet_names?.join(' / ')
+  const category = tx.is_opening_balance ? (tx.type === 'income' ? 'Starting funds' : 'Starting debt') : tx.category_name || (tx.type === 'transfer' ? 'Wallet transfer' : 'Uncategorized')
+  if (compact) return <button type="button" className={`poc-line compact-ledger-entry${saved === tx.id ? ' just-saved' : ''}`} onClick={onOpen} aria-label={`View ${title}`}>
+    <span className={`poc-marker tx-symbol ${tx.type}`}><Icon size={18} aria-hidden="true"/></span>
+    <span><strong>{title}</strong><small>{[category,walletLabel].filter(Boolean).join(' · ')}</small></span>
+    <strong className={`tx-amount ${tx.type}`}>{tx.type === 'income' ? '+' : tx.type === 'expense' ? '−' : ''}{fmt(tx.amount)}</strong>
+  </button>
   return <button className={`ledger-entry${saved === tx.id ? ' just-saved' : ''}`} onClick={onOpen} aria-label={`View ${title}`}>
     <span className={`tx-symbol ${tx.type} ${Icon === Utensils ? 'food' : Icon === ShoppingBasket ? 'shopping' : ''}`}><Icon size={20}/></span>
     <span className="tx-main"><strong>{title}</strong><span className="tx-category">{tx.is_opening_balance ? (tx.type === 'income' ? 'Starting funds' : 'Starting debt') : tx.category_name || (tx.type === 'transfer' ? 'Wallet transfer' : 'Uncategorized')}</span><span className="wallet-label"><Wallet size={14} aria-hidden="true"/>{walletLabel}{tx.recurring_frequency && tx.recurring_frequency !== 'none' && <Repeat2 size={13} aria-label="Recurring transaction"/>}</span>{shared && <span className="tx-contributor">{tx.recorded_by_name ? `Added by ${tx.recorded_by_name}` : `Wallet owner: ${tx.owner_name || tx.owner_email || 'Unknown'}`}</span>}</span>

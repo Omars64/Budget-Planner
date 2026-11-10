@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Boolean, CheckConstraint, Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, Column, Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 from .database import Base
 
@@ -147,6 +147,7 @@ class Goal(Base):
     name = Column(String(120), nullable=False)
     target_amount = Column(Numeric(16, 3), nullable=False)
     current_amount = Column(Numeric(16, 3), default=0)
+    contribution_history = Column(JSON(none_as_null=True), nullable=True)
     deadline = Column(Date, nullable=True)
     icon = Column(String(40), default="target")
     color = Column(String(20), default="#0a4173")

@@ -216,9 +216,9 @@ body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2 .palette-hero {
 }
 body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2 .palette-hero :is(.muted,.eyebrow,h1) { color:inherit; }
 .overview-wallet-shortcuts { display:grid;gap:7px; }
-.overview-wallet-shortcuts>div { display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,92px),1fr));gap:8px; }
-.overview-wallet-shortcuts>div>a { display:grid;justify-items:center;gap:4px;padding:10px 6px;border-radius:13px;background:var(--palette-header-panel);color:var(--palette-light);text-decoration:none;text-align:center;overflow-wrap:anywhere; }
-.overview-wallet-shortcuts>div>a:hover { background:var(--palette-header-hover); }
+.overview-wallet-shortcuts>.overview-wallet-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,92px),1fr));gap:8px; }
+.overview-wallet-shortcuts>.overview-wallet-grid>a { display:grid;justify-items:center;gap:4px;padding:10px 6px;border-radius:13px;background:var(--palette-header-panel);color:var(--palette-light);text-decoration:none;text-align:center;overflow-wrap:anywhere; }
+.overview-wallet-shortcuts>.overview-wallet-grid>a:hover { background:var(--palette-header-hover); }
 .overview-all-wallets { display:inline-flex;justify-self:center;align-items:center;gap:6px;padding:8px;color:var(--accent-text);font-weight:650;text-decoration:none; }
 body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2 .overview-activity-sheet {
   background:var(--surface);border:1px solid var(--line);border-radius:22px;gap:0;overflow:hidden;
@@ -229,8 +229,8 @@ body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2 .overview-activity-sh
 body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2 .overview-activity-sheet .overview-balance-details > summary { border:0;border-radius:0; }
 .budget-headline { font-size:clamp(20px,4vw,27px);overflow-wrap:anywhere; }
 @media(max-width:520px) {
-  .overview-wallet-shortcuts>div { grid-template-columns:repeat(2,minmax(0,1fr)); }
-  .overview-wallet-shortcuts>div>a:nth-child(n+3) { display:none; }
+  .overview-wallet-shortcuts>.overview-wallet-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .overview-wallet-shortcuts>.overview-wallet-grid:not(.custom)>a:nth-child(n+3) { display:none; }
 }
 
 /* The app frame and the paper surface are shared across phone and desktop. */
@@ -296,9 +296,9 @@ body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2 .palette-dark-section
 .budgetly-v2 .overview-focus .overview-balance { display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:14px 16px; }
 .budgetly-v2 .overview-focus .overview-balance h1 { margin-top:4px;font-size:clamp(23px,5.9vw,38px); }
 .overview-balance .budgetly-card-art.mini { width:clamp(52px,16vw,72px); }
-.overview-wallet-shortcuts>div { grid-template-columns:repeat(auto-fit,minmax(min(100%,120px),1fr)); }
-.overview-wallet-shortcuts>div>a { border:1px solid var(--palette-header-hover); }
-.overview-wallet-shortcuts>div>a>strong { font-size:12px; }
+.overview-wallet-shortcuts>.overview-wallet-grid { grid-template-columns:repeat(auto-fit,minmax(min(100%,120px),1fr)); }
+.overview-wallet-shortcuts>.overview-wallet-grid>a { border:1px solid var(--palette-header-hover); }
+.overview-wallet-shortcuts>.overview-wallet-grid>a>strong { font-size:12px; }
 .overview-all-wallets { margin-top:3px; }
 .budgetly-v2 .overview-focus .overview-activity-sheet { display:block;flex:1;padding:34px var(--layout-gutter) 10px; }
 .budgetly-v2 .overview-focus .overview-activity-sheet :is(.overview-focus-month,.overview-recent,.overview-focus-action) { padding-inline:0; }
@@ -354,7 +354,7 @@ body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2 .wallet-detail-action
   .budgetly-v2.everyday-shell .topbar .mobile-space { display:block; }
   .budgetly-v2.everyday-shell .topbar .top-actions { display:flex; }
   .budgetly-v2.everyday-shell .topbar .top-actions:empty { display:none; }
-  .budgetly-v2 .overview-wallet-shortcuts>div { grid-template-columns:repeat(2,minmax(0,1fr)); }
-  .budgetly-v2 .overview-wallet-shortcuts>div>a:nth-child(n+3) { display:none; }
+  .budgetly-v2 .overview-wallet-shortcuts>.overview-wallet-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .budgetly-v2 .overview-wallet-shortcuts>.overview-wallet-grid:not(.custom)>a:nth-child(n+3) { display:none; }
   .budgetly-v2 .overview-focus-month-head { align-items:center; }
 }

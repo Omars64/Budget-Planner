@@ -11,6 +11,7 @@ pytest-cache-files-*/
 .env.*
 !.env.example
 .verification/
+/.codex-remote-attachments/
 .DS_Store
 .vercel/
 .android-signing/

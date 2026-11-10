@@ -17,6 +17,7 @@ const Overview = lazy(() => import('./pages/Overview'))
 const AskAI = lazy(() => import('./pages/AskAI'))
 const Transactions = lazy(() => import('./pages/Transactions'))
 const CalendarPage = lazy(() => import('./pages/CalendarPage'))
+const Spending = lazy(() => import('./pages/Spending'))
 const Analytics = lazy(() => import('./pages/Analytics'))
 const Budgets = lazy(() => import('./pages/Budgets'))
 const GoalsDebts = lazy(() => import('./pages/GoalsDebts'))
@@ -444,6 +445,7 @@ export default function App() {
         <Route path="/shared-transactions" element={<Navigate to="/" replace />} />
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/analytics" element={<Analytics />} />
+        <Route path="/spending" element={<Spending />} />
         <Route path="/budgets" element={<Budgets />} />
         <Route path="/goals" element={<GoalsDebts />} />
         <Route path="/more" element={<More />} />

@@ -1,6 +1,6 @@
 import AppSelect from '../components/AppSelect'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { Bell, CalendarClock, Check, ChevronDown, ListFilter, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Bell, CalendarClock, CalendarPlus, Pencil, Trash2 } from 'lucide-react'
 import { api, jsonBody, money } from '../lib/api'
 import { syncPlannedNotifications } from '../lib/plannedNotifications'
 import { categoryChoices } from '../lib/categoryChoices'
@@ -8,39 +8,15 @@ import { dateInput, saveDate, showTime } from '../lib/time'
 import DateTimeField from '../components/DateTimeField'
 import ReportingMonthField from '../components/ReportingMonthField'
 import Modal from '../components/Modal'
+import PageActions from '../components/PageActions'
 import { useApp } from '../App'
 import '../upcoming.css'
 import '../everyday-planning.css'
 
-const statuses = [['upcoming', 'Upcoming'], ['all', 'All records'], ['planned', 'Manual / reminder only'], ['scheduled', 'Automatic'], ['failed', 'Needs attention'], ['posted', 'Recorded']]
+const tabs = [['upcoming', 'Coming up'], ['posted', 'Recorded'], ['all', 'All entries']]
 const planLabel = row => row.status === 'posted' ? 'Recorded' : row.status === 'failed' ? 'Needs attention' : row.status === 'scheduled' ? 'Records automatically' : row.reminder_enabled && row.type === 'expense' ? 'Reminder only' : 'Plan only'
 const empty = () => ({ type: 'expense', amount: '', description: '', notes: '', date: dateInput(new Date(Date.now() + 86400000)), reporting_month: '', wallet_id: '', transfer_wallet_id: '', category_id: '', status: 'planned', reminder_enabled: true })
 const reportingMonthLabel = month => new Intl.DateTimeFormat('en', { month: 'short', year: 'numeric' }).format(new Date(`${month}-01T12:00:00`))
-
-function StatusFilter({ value, onChange }) {
-  const [open, setOpen] = useState(false)
-  const root = useRef(null)
-  useEffect(() => {
-    if (!open) return
-    const close = event => { if (!root.current?.contains(event.target)) setOpen(false) }
-    document.addEventListener('pointerdown', close)
-    return () => document.removeEventListener('pointerdown', close)
-  }, [open])
-  const label = statuses.find(([key]) => key === value)?.[1]
-  return <div className="upcoming-filter" ref={root} onKeyDown={event => {
-    if (event.key === 'Escape') { setOpen(false); root.current?.querySelector('.upcoming-filter-button')?.focus() }
-    if (open && ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
-      event.preventDefault()
-      const items = [...root.current.querySelectorAll('[role="menuitemradio"]')]
-      const index = items.indexOf(document.activeElement)
-      const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : event.key === 'ArrowDown' ? (index + 1) % items.length : (index + items.length - 1) % items.length
-      items[next]?.focus()
-    }
-  }}>
-    <button type="button" className="upcoming-filter-button" aria-label={`Plan status: ${label}`} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(current => !current)}><ListFilter size={17}/><span>{label}</span><ChevronDown size={16}/></button>
-    {open && <div className="upcoming-filter-menu" role="menu" aria-label="Plan status">{statuses.map(([key, name]) => <button key={key} type="button" role="menuitemradio" aria-checked={value === key} onClick={() => { onChange(key); setOpen(false); root.current?.querySelector('.upcoming-filter-button')?.focus() }}><span>{name}</span>{value === key && <Check size={16}/>}</button>)}</div>}
-  </div>
-}
 
 export default function Upcoming() {
   const { user, settings, notify, confirm, activeSpace, canAdd = true } = useApp()
@@ -49,6 +25,8 @@ export default function Upcoming() {
   const [categories, setCategories] = useState([])
   const [scope, setScope] = useState('all')
   const [filter, setFilter] = useState('upcoming')
+  const [status, setStatus] = useState('')
+  const [selectedId, setSelectedId] = useState(null)
   const [draft, setDraft] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -68,6 +46,7 @@ export default function Upcoming() {
   useEffect(() => { let active = true; load().catch(err => { if (active) { setError(err.message); setLoading(false) } }); return () => { active = false } }, [user.id])
 
   const start = row => {
+    setSelectedId(null)
     setError('')
     setConflict(false)
     const next = row ? { ...row, status: row.status === 'failed' ? 'planned' : row.status, amount: String(row.amount), date: dateInput(row.date), reporting_month: row.reporting_month || String(row.date || '').slice(0, 7), wallet_id: String(row.wallet_id), transfer_wallet_id: row.transfer_wallet_id ? String(row.transfer_wallet_id) : '', category_id: row.category_id ? String(row.category_id) : '' } : { ...empty(), wallet_id: String(wallets.find(w => w.editable)?.id || '') }
@@ -86,8 +65,14 @@ export default function Upcoming() {
     return () => { active = false }
   }, [draft?.wallet_id, wallet?.owner_id, user.id])
   const choices = categoryChoices(categories.filter(c => c.kind === draft?.type && (wallet?.owner_id === user.id || c.wallet_id === Number(draft?.wallet_id))), activeSpace?.id, draft?.category_id)
-  const displayed = useMemo(() => rows.filter(row => (scope === 'all' || (scope === 'shared') === row.shared) && (filter === 'all' || (filter === 'upcoming' ? ['planned', 'scheduled', 'failed'].includes(row.status) : row.status === filter))), [rows, scope, filter])
+  const selected = rows.find(row => row.id === selectedId)
+  const displayed = useMemo(() => rows.filter(row =>
+    (scope === 'all' || (scope === 'shared') === row.shared) &&
+    (filter === 'all' || (filter === 'posted') === (row.status === 'posted')) &&
+    (!status || row.status === status)
+  ).sort((a, b) => new Date(a.date) - new Date(b.date)), [rows, scope, filter, status])
   const total = displayed.filter(row => row.status !== 'posted').reduce((value, row) => value + (row.type === 'income' ? row.amount : row.type === 'expense' ? -row.amount : 0), 0)
+  const amountLabel = row => (row.type === 'expense' ? '−' : row.type === 'income' ? '+' : '') + money(row.amount, settings.currency)
   const categoryLabel = row => row.type === 'transfer' ? wallets.find(item => item.id === row.transfer_wallet_id)?.name || 'Destination wallet' : row.category_name || 'Uncategorized'
 
   const save = async event => {
@@ -115,17 +100,12 @@ export default function Upcoming() {
   }
   const remove = async row => {
     if (!await confirm(`Delete "${row.description}" from upcoming entries?`)) return
-    try { await api(`/api/planned-transactions/${row.id}`, { method: 'DELETE', ...(row.revision ? { headers: { 'If-Match': row.revision } } : {}) }); await load(); void syncPlannedNotifications(user.id).catch(() => {}); notify('Upcoming entry deleted') } catch (err) { notify(err.message, 'error') }
+    try { await api(`/api/planned-transactions/${row.id}`, { method: 'DELETE', ...(row.revision ? { headers: { 'If-Match': row.revision } } : {}) }); setSelectedId(null); await load(); void syncPlannedNotifications(user.id).catch(() => {}); notify('Upcoming entry deleted') } catch (err) { notify(err.message, 'error') }
   }
 
   return <section className="upcoming-page everyday-page">
-    <header className="upcoming-toolbar"><div><h3>Upcoming</h3><p className="muted">Know what happens next. Plans affect your balance only once recorded.</p></div><button type="button" className="button primary" data-tour="new-plan" disabled={!canAdd} onClick={() => start(null)}><Plus size={17}/>Add plan</button></header>
-    <div className="everyday-guidance"><strong>Automatic or reminder only?</strong><p className="muted">Automatic entries record after their due time when processing runs. Plans stay unrecorded until you add a transaction yourself. Expense reminders follow your notification settings.</p></div>
-    <div className="upcoming-controls">
-      <div className="segment-control three" role="group" aria-label="Wallet context">{[['all', 'All'], ['personal', 'Personal'], ['shared', 'Shared']].map(([value, label]) => <button key={value} type="button" className={scope === value ? 'active' : ''} aria-pressed={scope === value} onClick={() => setScope(value)}>{label}</button>)}</div>
-      <StatusFilter value={filter} onChange={setFilter}/>
-      <span className="upcoming-total">Net planned: {money(total, settings.currency)}</span>
-    </div>
+    <PageActions><button type="button" className="button primary palette-header-action" data-tour="new-plan" disabled={!canAdd} onClick={() => start(null)}><CalendarPlus size={17}/>Schedule an entry</button></PageActions>
+    <div className="poc-pills" role="group" aria-label="Upcoming entries">{tabs.map(([key,label]) => <button type="button" key={key} aria-pressed={filter === key} onClick={() => { setFilter(key); setStatus('') }}>{label}</button>)}</div>
     {error && !draft && <p className="form-error" role="alert">{error}</p>}
     <Modal layerClass="everyday-page" open={Boolean(draft)} onClose={closeEditor} title={draft?.id ? 'Edit upcoming entry' : 'Add upcoming entry'} subtitle="Plan ahead without changing your balance." protectChanges isDirty={Boolean(draft && JSON.stringify(draft) !== baseline.current)} footer={close => <div className="modal-actions"><button type="button" className="button ghost" disabled={busy} onClick={close}>Cancel</button><button type="submit" form={formId} className="button primary" disabled={busy || conflict}>{busy ? 'Saving...' : 'Save entry'}</button></div>}>
     {draft && <form id={formId} className="upcoming-editor stack gap-18 transaction-form" onSubmit={save}>
@@ -151,18 +131,32 @@ export default function Upcoming() {
       {conflict && <button type="button" className="button ghost" disabled={busy} onClick={() => void reloadConflict()}>Reload latest entry</button>}
     </form>}
     </Modal>
-    <h4 className="everyday-section-title">{filter === 'posted' ? 'Recorded entries' : filter === 'failed' ? 'Needs attention' : filter === 'all' ? 'Upcoming & recorded entries' : 'Coming up'}</h4>
-    <div className="upcoming-records" aria-live="polite">
-      {loading ? <p className="upcoming-empty">Loading upcoming records...</p> : displayed.length === 0 ? <p className="upcoming-empty">No entries in this view.</p> : displayed.map(row => <article className="upcoming-record" key={row.id}>
-        <div className="upcoming-record-main">
-          <div className="upcoming-record-title"><strong>{row.description}</strong><span className={`upcoming-status ${row.status}`}>{planLabel(row)}</span></div>
-          <div className="upcoming-record-details"><span><CalendarClock size={15}/>{showTime(row.date)}</span><span className="upcoming-type">{row.type}</span>{row.reporting_month && row.reporting_month !== String(row.date || '').slice(0, 7) && <span>For {reportingMonthLabel(row.reporting_month)}</span>}<span>{row.wallet_name}{row.shared ? ` · Shared with ${row.owner_name}` : ''}</span><span>{categoryLabel(row)}</span>{row.reminder_enabled && row.type === 'expense' && ['planned', 'scheduled'].includes(row.status) && <span><Bell size={15}/>Reminder on</span>}</div>
-          {row.error && <p className="upcoming-error" role="status">{row.error}</p>}
-          <p className="muted everyday-help">{row.status === 'posted' ? 'Already recorded in your transactions.' : row.status === 'failed' ? 'Not recorded. Review this entry and choose how to record it again.' : row.status === 'scheduled' ? 'Records automatically after the due time when processing runs.' : 'Will not record automatically. Add the transaction yourself when it happens.'}</p>
-        </div>
-        <div className="upcoming-record-end"><strong className={`upcoming-amount ${row.type}`}>{row.type === 'expense' ? '-' : row.type === 'income' ? '+' : ''}{money(row.amount, settings.currency)}</strong>{row.can_edit && row.status !== 'posted' && <div className="button-row"><button type="button" className="icon-button" title="Edit entry" aria-label={`Edit ${row.description}`} onClick={() => start(row)}><Pencil size={17}/></button><button type="button" className="icon-button" title="Delete entry" aria-label={`Delete ${row.description}`} onClick={() => remove(row)}><Trash2 size={17}/></button></div>}</div>
-      </article>)}
+    <div className="poc-list" aria-live="polite">
+      {loading ? <p className="muted">Loading upcoming records…</p> : displayed.length === 0 ? <p className="muted">No entries in this view.</p> : displayed.map(row => <button type="button" className="poc-line plan-row" key={row.id} onClick={() => setSelectedId(row.id)}>
+        <span className="poc-marker"><CalendarClock size={18} aria-hidden="true"/></span>
+        <span><strong>{row.description}</strong><small>{showTime(row.date)} · {row.wallet_name}</small><span className={`upcoming-status ${row.status}`}>{planLabel(row)}</span></span>
+        <strong className={`upcoming-amount ${row.type}`}>{amountLabel(row)}</strong>
+      </button>)}
     </div>
-    <p className="muted upcoming-footnote"><CalendarClock size={15}/> Auto record runs at the next automatic server check after the due time. The administrator can pause processing or change its interval. Planned rows remain estimates until recorded.</p>
+    <details className="poc-disclosure"><summary>More filters &amp; details</summary>
+      <div className="form-grid two">
+        <label className="field"><span>Wallet context</span><AppSelect value={scope} onChange={event => setScope(event.target.value)}><option value="all">All wallets</option><option value="personal">Personal</option><option value="shared">Shared</option></AppSelect></label>
+        {filter !== 'posted' && <label className="field"><span>Plan status</span><AppSelect value={status} onChange={event => setStatus(event.target.value)}><option value="">Any status</option><option value="planned">Manual / reminder only</option><option value="scheduled">Automatic</option><option value="failed">Needs attention</option></AppSelect></label>}
+      </div>
+      <p><strong>Net planned</strong> {money(total, settings.currency)}</p>
+      <p className="muted">Automatic entries record after the due time when processing runs. Plans stay unrecorded until you add the transaction yourself.</p>
+    </details>
+    <Modal open={Boolean(selected)} onClose={() => setSelectedId(null)} title={selected?.description || 'Upcoming entry'}>
+      {selected && <div className="stack gap-12">
+        <strong className={`upcoming-amount ${selected.type}`}>{amountLabel(selected)}</strong>
+        <span className={`upcoming-status ${selected.status}`}>{planLabel(selected)}</span>
+        <dl className="transaction-details"><div><dt>Date</dt><dd>{showTime(selected.date)}</dd></div><div><dt>Wallet</dt><dd>{selected.wallet_name}{selected.shared ? ` · Shared with ${selected.owner_name}` : ''}</dd></div><div><dt>{selected.type === 'transfer' ? 'Destination' : 'Category'}</dt><dd>{categoryLabel(selected)}</dd></div>
+          {selected.reporting_month && <div><dt>For month</dt><dd>{reportingMonthLabel(selected.reporting_month)}</dd></div>}</dl>
+        {selected.reminder_enabled && selected.type === 'expense' && ['planned', 'scheduled'].includes(selected.status) && <p><Bell size={15}/> Reminder on</p>}
+        {selected.error && <p className="form-error" role="status">{selected.error}</p>}
+        {selected.notes && <p className="transaction-note">{selected.notes}</p>}
+        {selected.can_edit && selected.status !== 'posted' && <div className="modal-actions"><button type="button" className="button ghost" onClick={() => remove(selected)}><Trash2 size={17}/>Delete {selected.description}</button><button type="button" className="button primary" onClick={() => start(selected)}><Pencil size={17}/>Edit {selected.description}</button></div>}
+      </div>}
+    </Modal>
   </section>
 }

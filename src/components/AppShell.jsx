@@ -27,6 +27,7 @@ import { Coffee, ExternalLink } from 'lucide-react'
 import SupportPrompt from './SupportPrompt'
 import { SUPPORT_URL } from '../lib/support'
 import Modal from './Modal'
+import { PageActionsProvider } from './PageActions'
 
 const nav = workspaceNavigation
 const primaryRoutes = new Set(['/', '/transactions', '/wallets', '/upcoming'])
@@ -36,6 +37,7 @@ export default function AppShell({ children }) {
   const navigate = useNavigate()
   const nativeAndroid = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android'
   const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [pageActions, setPageActions] = useState(null)
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem('budgetly-sidebar-collapsed') === 'true' } catch { return false }
   })
@@ -91,12 +93,15 @@ export default function AppShell({ children }) {
   const isOverview = location.pathname === '/'
   const isLedger = ['/transactions', '/shared-transactions'].includes(location.pathname)
   const isWallets = location.pathname === '/wallets'
-  const walletDetail = isWallets && Boolean(new URLSearchParams(location.search).get('wallet') || location.state?.walletId)
+  const pageParams = new URLSearchParams(location.search)
+  const walletDetail = isWallets && Boolean(pageParams.get('wallet') || location.state?.walletId)
+  const goalDetail = location.pathname === '/goals' && (pageParams.has('goal') || pageParams.has('debt'))
+  const spending = location.pathname === '/spending'
   const isSettings = location.pathname === '/settings'
   const selectedPage = visibleNav.find(([path]) => path === location.pathname)
   const subtitle = isOverview
     ? isGuest ? 'Saved on this device' : activeSpace ? 'Shared money at a glance' : 'Your money at a glance'
-    : isWallets || isLedger ? activeSpace?.name || 'Personal' : selectedPage?.[4]
+    : isWallets || isLedger || spending ? activeSpace?.name || 'Personal' : location.pathname === '/upcoming' ? 'See what happens next' : selectedPage?.[4]
   const greeting = new Intl.DateTimeFormat('en-GB', { timeZone:'Asia/Kuwait', hour:'numeric', hourCycle:'h23' }).format(new Date())
   const overviewTitle = isGuest ? 'Guest workspace' : activeSpace?.name || `Good ${Number(greeting) < 12 ? 'morning' : Number(greeting) < 18 ? 'afternoon' : 'evening'}, ${user?.username || 'there'}`
   const addTransaction = () => location.pathname === '/shared-transactions'
@@ -136,11 +141,11 @@ export default function AppShell({ children }) {
             {appearance.profile_image ? <img className="header-user-avatar" src={appearance.profile_image} alt=""/> : <span className="header-user-avatar" aria-hidden="true">{(isGuest ? 'Guest' : user?.username || 'Budgetly').slice(0,1).toUpperCase()}</span>}
           </Link>
         </div>
-        {!walletDetail && !isSettings && <div className="topbar-left">
+        {!walletDetail && !goalDetail && !isSettings && <div className="topbar-left">
           {location.pathname === '/ask-ai' && <button className="icon-button mobile-only" title="Open conversations" aria-label="Open conversations" onClick={() => window.dispatchEvent(new window.Event('budgetly:toggle-ai-history'))}><PanelLeftOpen size={20}/></button>}
           <div><h2>{isOverview ? overviewTitle : selectedPage?.[1] || 'Budgetly'}</h2>{subtitle && <p className="eyebrow">{subtitle}</p>}</div>
         </div>}
-        <div className="button-row top-actions">
+        <div className="button-row top-actions" ref={setPageActions}>
           {isOverview && !isGuest && <button className="button ghost tutorial-button" data-tour="tutorial" title="Tutorial" aria-label="Tutorial" onClick={() => setTutorialRequest(value => value + 1)}><Compass size={18}/><span>Tutorial</span></button>}
           {isWallets && !walletDetail && canAdd !== false && <button type="button" className="button primary palette-header-action" data-tour="add-wallet" onClick={() => window.dispatchEvent(new Event('budgetly:add-wallet'))}><Plus size={17}/>Add wallet</button>}
         </div>
@@ -148,7 +153,9 @@ export default function AppShell({ children }) {
       <AndroidUpdate userId={user?.id} role={user?.role} guest={isGuest}/>
       <WindowsUpdate/>
       {isGuest && <div className="guest-banner"><span>Guest mode · Saved on this device</span><button className="button ghost small" onClick={() => requestSignIn('cloud storage and more features')}>Sign in</button></div>}
-      <motion.div className={`page-wrap${isOverview || walletDetail || isSettings ? ' palette-page-split' : ' palette-sheet'}`} data-tour-page={location.pathname} key={location.pathname} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .18, ease: 'easeOut' }}>{children}</motion.div>
+      <motion.div className={`page-wrap${isOverview || walletDetail || goalDetail || spending || isSettings ? ' palette-page-split' : ' palette-sheet'}`} data-tour-page={location.pathname} key={location.pathname} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .18, ease: 'easeOut' }}>
+        <PageActionsProvider target={pageActions}>{children}</PageActionsProvider>
+      </motion.div>
       <BrandFooter className="app-footer"/>
     </main>
     {isLedger && canAdd !== false && <button data-tour="add-transaction" className="transaction-fab" aria-label="Add transaction" title="Add transaction" onClick={addTransaction}><Plus size={26} aria-hidden="true"/></button>}

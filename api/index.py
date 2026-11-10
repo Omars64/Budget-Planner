@@ -13,6 +13,7 @@ import re
 import threading
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
@@ -82,7 +83,7 @@ def ensure_note_columns(connection):
         "planned_transactions": {"reporting_month": "VARCHAR(7)"},
         "budgets": {"reporting_month": "VARCHAR(7)", "space_id": "INTEGER"},
         "categories": {"space_id": "INTEGER"},
-        "goals": {"space_id": "INTEGER"},
+        "goals": {"space_id": "INTEGER", "contribution_history": "JSON"},
         "debts": {"space_id": "INTEGER"},
         "note_folders": {
             "space_id": "INTEGER",
@@ -1103,13 +1104,26 @@ def create_goal(payload: GoalIn, request: Request, user: User = Depends(workspac
     return create_once(db, user, request, 'goal', payload, Goal)
 
 
+@app.get("/api/goals/{item_id}/contributions")
+def goal_contributions(item_id: int, user: User = Depends(workspace_user), db: Session = Depends(get_db)):
+    row = db.query(Goal).filter(Goal.id == item_id, Goal.user_id == user.id).first()
+    if not row: raise HTTPException(404, "Goal not found")
+    return list(reversed(row.contribution_history or []))
+
+
 @app.post("/api/goals/{item_id}/contribute")
 def contribute_goal(item_id: int, payload: ContributionIn, request: Request, user: User = Depends(workspace_user), db: Session = Depends(get_db)):
     receipt, previous = reserve(db, user.id, f'contribute_goal:{item_id}', request.headers.get('Idempotency-Key'), payload)
     if previous is not None: return previous
     row = db.query(Goal).filter(Goal.id == item_id, Goal.user_id == user.id).with_for_update().first()
     if not row: raise HTTPException(404, "Goal not found")
-    row.current_amount = min(row.target_amount, row.current_amount + payload.amount)
+    previous_amount = row.current_amount
+    row.current_amount = min(row.target_amount, previous_amount + payload.amount).quantize(Decimal('0.001'), rounding=ROUND_HALF_UP)
+    credited = row.current_amount - previous_amount
+    if credited > 0:
+        row.contribution_history = [*(row.contribution_history or []), {
+            "amount": str(credited), "recorded_at": utc_now().isoformat() + "Z",
+        }]
     result = {"current_amount": float(row.current_amount)}
     if receipt: receipt.response = json.dumps(result)
     db.commit(); return result

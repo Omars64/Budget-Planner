@@ -170,6 +170,11 @@ class ContributionIn(BaseModel):
     amount: Decimal = Field(gt=0)
 
 
+class GoalContribution(BaseModel):
+    amount: Decimal = Field(gt=0, max_digits=16, decimal_places=3)
+    recorded_at: datetime
+
+
 class DebtIn(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     kind: Literal["owed", "receivable"] = "owed"

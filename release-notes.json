@@ -1,4 +1,8 @@
 {
+  "6.21.0": [
+    {"title":"Choose your Overview cards","detail":"Open Manage cards next to All wallets. Add, hide, or drag cards into order for this workspace on this device."},
+    {"title":"Simpler money screens","detail":"Transactions and Upcoming use compact lists. Goals and debts have separate tabs and detail pages. Analytics shows monthly summaries and links to the new Spending tracker."}
+  ],
   "6.20.0": [
     {"title":"A simpler Budgetly","detail":"A balance-first Overview, bank-style wallet cards, and a centered transaction shortcut. Android uses the bottom tabs and the More directory for navigation."},
     {"title":"Five color palettes","detail":"Midnight Navy & Glacier Blue is the default. Choose another palette in Look & feel and use it in light, dark, or device appearance, including on the welcome screen."},

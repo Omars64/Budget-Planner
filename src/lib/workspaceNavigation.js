@@ -13,6 +13,7 @@ export const workspaceNavigation = [
   ['/calendar', 'Calendar', CalendarDays, 'Planning & insights', 'See activity and payments by date'],
   ['/goals', 'Goals & debts', Target, 'Planning & insights', 'Savings goals and debt repayments'],
   ['/analytics', 'Analytics', BarChart3, 'Planning & insights', 'Understand spending and income trends'],
+  ['/spending', 'Spending tracker', BarChart3, 'Planning & insights', 'See where your money goes'],
   ['/ask-ai', 'Ask Budgetly', CircleHelp, 'Tools & support', 'Guidance and conversations'],
   ['/notes', 'Notes', NotebookPen, 'Tools & support', 'Personal and shared notes'],
   ['/feedback', 'Feedback', MessageSquare, 'Tools & support', 'Send suggestions or report a problem'],

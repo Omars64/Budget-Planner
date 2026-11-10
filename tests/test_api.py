@@ -184,7 +184,12 @@ def test_budget_goal_debt_backup_and_restore():
 
         goal = {'name':'Regression goal','target_amount':500,'current_amount':50,'deadline':'2026-12-01','icon':'target','color':'#0a4173'}
         gid = client.post('/api/goals', json=goal, headers=headers).json()['id']
-        assert client.post(f'/api/goals/{gid}/contribute', json={'amount':25}, headers=headers).json()['current_amount'] == 75
+        assert client.get(f'/api/goals/{gid}/contributions', headers=headers).json() == []
+        contribution_headers = {**headers, 'Idempotency-Key': 'goal-history-regression'}
+        for _ in range(2):
+            assert client.post(f'/api/goals/{gid}/contribute', json={'amount':25}, headers=contribution_headers).json()['current_amount'] == 75
+        history = client.get(f'/api/goals/{gid}/contributions', headers=headers).json()
+        assert [row['amount'] for row in history] == ['25.000']
 
         debt = {'name':'Regression debt','kind':'owed','principal':200,'remaining':200,'interest_rate':0,'due_date':'2026-12-01','minimum_payment':20,'notes':''}
         did = client.post('/api/debts', json=debt, headers=headers).json()['id']
@@ -195,6 +200,9 @@ def test_budget_goal_debt_backup_and_restore():
         assert backup.json()['version'] == 1
         restore = client.post('/api/backup/restore', json=backup.json(), headers=headers)
         assert restore.status_code == 200, restore.text
+        restored_goal = next(row for row in client.get('/api/goals', headers=headers).json() if row['name'] == goal['name'])
+        assert restored_goal['current_amount'] == 75
+        assert client.get(f"/api/goals/{restored_goal['id']}/contributions", headers=headers).json() == history
         assert client.get('/api/dashboard', headers=headers).status_code == 200
         assert client.get('/api/calendar?year=2026&month=9', headers=headers).status_code == 200
 

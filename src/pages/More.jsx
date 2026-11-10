@@ -10,7 +10,7 @@ import BankInboxBadge from '../components/BankInboxBadge'
 
 const directory = [
   ['Plan ahead', ['/planner', '/upcoming', '/calendar', '/attention']],
-  ['Understand your money', ['/budgets', '/goals', '/analytics']],
+  ['Understand your money', ['/budgets', '/goals', '/analytics', '/spending']],
   ['Your workspace', ['/bank-messages', '/spaces', '/notes']],
   ['Help and account', ['/ask-ai', '/feedback', '/settings']],
 ]

@@ -53,21 +53,19 @@ export default function Transactions() {
     notify(isGuest ? 'Transaction deleted from this device' : 'Transaction moved to Trash', 'success', result?.trash_id && (!activeSpace || activeSpace.role === 'owner') ? {label:'Undo',run:async()=>{await api(`/api/trash/${result.trash_id}/restore`,{method:'POST'});refresh();notify('Transaction restored')}} : null)
   } catch (err) { notify(err.message, 'error') } }
 
-  return <div className="ledger-page everyday-page transactions-page stack">
-    <div className="transaction-context"><strong>{activeSpace?.name || 'Personal'} records</strong><span>{activeSpace ? 'Shared with this Space’s members' : 'Only you can see these entries'}</span></div>
+  return <div className="everyday-page transactions-page compact-transactions stack">
     <TransactionSaveState userId={user?.id} spaceId={activeSpace?.id} result={saveResult} onResume={() => {setEditing(null);setModal(true)}}/>
     {!isGuest && <OfflinePending scope={spaceKey}/>}
-    <LedgerFilters userId={`${user?.id}:${spaceKey}`} value={filters} onChange={setFilters} wallets={wallets} categories={categories}>{!isGuest && !activeSpace && <StatementImport wallets={wallets} compact/>}</LedgerFilters>
+    <LedgerFilters compact userId={`${user?.id}:${spaceKey}`} value={filters} onChange={setFilters} wallets={wallets} categories={categories}>{!isGuest && !activeSpace && <StatementImport wallets={wallets} compact/>}</LedgerFilters>
     {ledger.error && <div className="transaction-read-error" role="alert"><strong>Transactions could not be refreshed</strong><span>{ledger.error}</span><span>{ledger.updatedAt ? 'Showing the last loaded records. New saves may not appear until refresh succeeds.' : 'No current records are available. Your entry draft stays on this device.'}</span><button type="button" className="button ghost small" onClick={ledger.retry}>Retry loading</button></div>}
     {ledger.error && ledger.updatedAt && <small className="muted">Showing records last updated at {new Date(ledger.updatedAt).toLocaleTimeString()}.</small>}
 
 
     <section className="ledger-list" aria-label="Recorded transactions">
-      <div className="ledger-count">{ledger.error && !ledger.updatedAt ? 'Records unavailable' : `${rows.length}${ledger.hasMore ? '+' : ''} transaction${rows.length === 1 ? '' : 's'}`}</div>
       {ledger.error && !ledger.updatedAt ? <EmptyState title="Saved records unavailable" text="Reconnect to load this view. Any entries waiting to sync are shown above." action={<button className="button ghost" onClick={ledger.retry}>Retry loading</button>}/> : loading && !rows.length ? <div className="list-skeleton"><i/><i/><i/><i/></div> : !rows.length ? <EmptyState title="No matching transactions" text="Try another filter or add a transaction." action={<div className="button-row"><button className="button ghost" onClick={() => setFilters({...defaultLedgerFilters})}>Clear filters</button><button className="button primary" disabled={!canAdd} onClick={() => {setEditing(null);setModal(true)}}>Add transaction</button></div>}/> : <div className="date-groups">
         {Object.entries(grouped).map(([day, txs]) => <div className="date-group" key={day}>
-          <LedgerDateHeader day={day}/>
-          {txs.map(tx => <LedgerRow key={tx.id} tx={tx} fmt={fmt} onOpen={() => setSelected(tx)}/> )}
+          <LedgerDateHeader day={day} compact/>
+          {txs.map(tx => <LedgerRow key={tx.id} tx={tx} fmt={fmt} compact onOpen={() => setSelected(tx)}/> )}
         </div>)}
       </div>}
       <LedgerPagination ledger={ledger}/>

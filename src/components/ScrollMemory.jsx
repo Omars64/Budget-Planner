@@ -5,7 +5,8 @@ import { readView, writeView } from '../lib/viewState'
 export default function ScrollMemory({ userId }) {
   const location = useLocation()
   useLayoutEffect(() => {
-    const key = `scroll:${userId}:${location.pathname}`
+    const detail = /^(\/wallets|\/goals)$/.test(location.pathname) ? location.search : ''
+    const key = `scroll:${userId}:${location.pathname}${detail}`
     const target = location.state?.aiFilters ? 0 : Number(readView(key, 0))
     let restoring = true
     let position = target
@@ -29,6 +30,6 @@ export default function ScrollMemory({ userId }) {
       window.removeEventListener('touchstart', interrupt)
       writeView(key, position)
     }
-  }, [userId, location.pathname, location.key])
+  }, [userId, location.pathname, location.search, location.key])
   return null
 }

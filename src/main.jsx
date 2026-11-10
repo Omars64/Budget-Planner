@@ -46,6 +46,7 @@ import './switches.css'
 import './overview-reporting.css'
 import './transaction-experience.css'
 import './palette-layout.css'
+import './poc-followup.css'
 import AppErrorBoundary from './components/AppErrorBoundary'
 import { installClientDiagnostics } from './lib/diagnostics'
 

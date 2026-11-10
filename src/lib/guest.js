@@ -9,7 +9,7 @@ let active = false
 export const guestActive = () => active
 export const guestRemembered = () => localStorage.getItem(ACTIVE_KEY) === 'true'
 export const guestUser = { id: 'guest', username: 'Guest', role: 'guest', email: '', active: true }
-export const guestRoutes = new Set(['/', '/more', '/transactions', '/wallets', '/budgets', '/analytics', '/settings'])
+export const guestRoutes = new Set(['/', '/more', '/transactions', '/wallets', '/budgets', '/analytics', '/spending', '/settings'])
 export function setGuestActive(value) {
   localStorage.setItem(ACTIVE_KEY, String(Boolean(value)))
   active = Boolean(value)

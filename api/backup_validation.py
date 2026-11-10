@@ -2,7 +2,7 @@
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
-from .schemas import CategoryIn, DebtIn, GoalIn, TransactionIn, WalletIn
+from .schemas import CategoryIn, DebtIn, GoalContribution, GoalIn, TransactionIn, WalletIn
 
 
 def validate_archive_records(data, collections):
@@ -51,6 +51,13 @@ def validate_archive_records(data, collections):
                          ('goals', GoalIn), ('debts', DebtIn)):
         for row in data.get(name, []):
             schema.model_validate(row)
+    for row in data.get('goals', []):
+        history = row.get('contribution_history')
+        if history is None:
+            continue
+        if not isinstance(history, list):
+            raise ValueError('Invalid goal contribution history')
+        row['contribution_history'] = [GoalContribution.model_validate(entry).model_dump(mode='json') for entry in history]
     wallets = {row['id']: row for row in data.get('wallets', [])}
     categories = {row['id']: row for row in data.get('categories', [])}
     for name in ('transactions', 'planned_transactions'):

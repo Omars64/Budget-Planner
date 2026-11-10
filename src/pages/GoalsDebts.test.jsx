@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { MemoryRouter } from 'react-router-dom'
 import GoalsDebts from './GoalsDebts'
 import { api } from '../lib/api'
 
@@ -9,7 +10,8 @@ afterEach(cleanup)
 
 it('preserves a fully paid debt when editing its original amount', async () => {
   api.mockImplementation(path => Promise.resolve(path === '/api/debts' ? [{ id: 17, name: 'Paid loan', kind: 'owed', principal: 100, remaining: 0, progress: 100 }] : []))
-  render(<GoalsDebts />)
+  render(<MemoryRouter initialEntries={['/goals?debt=17']}><GoalsDebts /></MemoryRouter>)
+  fireEvent.click(await screen.findByText('About this debt'))
   fireEvent.click(await screen.findByRole('button', { name: 'Edit Paid loan' }))
   expect(screen.getByLabelText('Remaining')).toHaveValue(0)
   fireEvent.change(screen.getByLabelText('Original amount'), { target: { value: '150' } })
