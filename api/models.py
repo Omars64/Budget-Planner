@@ -29,6 +29,7 @@ class Wallet(Base):
     icon = Column(String(40), default="wallet")
     color = Column(String(20), default="#0a4173")
     card_network = Column(String(12), nullable=True)
+    card_finish = Column(String(12), nullable=True)
     archived = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.now)
 

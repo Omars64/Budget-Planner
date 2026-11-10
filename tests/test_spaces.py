@@ -137,12 +137,17 @@ def test_new_space_starts_empty_and_new_wallet_copies_members(spaces):
     new_id = response.json()['id']
     assert client.get(f'/api/wallets?space_id={new_id}').json() == []
     assert client.put(f'/api/spaces/{new_id}/members',json={'email':'omarsolanki35@gmail.com','role':'edit'}).status_code == 200
-    wallet = client.post(f'/api/wallets?space_id={new_id}',json={'name':'Trip card','type':'bank','initial_balance':25,'color':'#3158aa','card_network':'mastercard'})
+    payload = {'name':'Trip card','type':'bank','initial_balance':25,'color':'#3158aa','card_network':'mastercard'}
+    wallet = client.post(f'/api/wallets?space_id={new_id}',json={**payload,'card_finish':'gold'})
     assert wallet.status_code == 201, wallet.text
+    # A previous app version can still save the wallet without clearing its finish.
+    old_client = client.put(f'/api/wallets/{wallet.json()["id"]}?space_id={new_id}',json=payload)
+    assert old_client.status_code == 200, old_client.text
     actor['id'] = ids['member']
     response = client.get(f'/api/wallets?space_id={new_id}')
     assert response.status_code == 200, response.text
     assert response.json()[0]['card_network'] == 'mastercard'
+    assert response.json()[0]['card_finish'] == 'gold'
     assert response.json()[0]['balance'] == 25
     assert client.get(f'/api/transactions?space_id={ids["space"]}').json()[0]['id'] == ids['tx']
 

@@ -23,6 +23,12 @@ async function mount() {
   render(<TransactionModal open onClose={vi.fn()} onSaved={vi.fn()}/> )
   await waitFor(() => expect(screen.getByRole('button',{name:'Add transaction'})).toBeEnabled())
 }
+it('prefills the wallet and transfer type from wallet details without overriding an edit', async () => {
+  api.mockImplementation(path => Promise.resolve(path === '/api/wallets' ? [{id:1,name:'Main Wallet',balance:50},{id:2,name:'Savings',balance:10}] : []))
+  render(<TransactionModal open entryWallet={2} entryType="transfer" onClose={vi.fn()} onSaved={vi.fn()}/>)
+  await waitFor(() => expect(screen.getByLabelText('From wallet')).toHaveValue('2'))
+  expect(screen.getByLabelText('To wallet').querySelector('option[value="2"]')).toBeNull()
+})
 it('shows migrated Space categories once and uses the Space category for new entries', async () => {
   context.activeSpace = { id: 7 }
   api.mockImplementation(path => Promise.resolve(path === '/api/wallets' ? [{id:1,name:'Main Wallet',balance:50}] : path === '/api/categories' ? [

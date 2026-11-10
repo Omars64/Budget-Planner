@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, Check, ClipboardCheck, RefreshCw } from 'lucide-react'
+import { ArrowDownLeft, ArrowLeft, ArrowRightLeft, ArrowUpRight, Check, ClipboardCheck, Plus, RefreshCw } from 'lucide-react'
 import { api, jsonBody, money } from '../lib/api'
 import { useApp } from '../App'
 import Modal from './Modal'
+import WalletCardArt from './WalletCardArt'
 
 const inKuwait = value => new Date(value).toLocaleString(undefined, {
   timeZone: 'Asia/Kuwait', dateStyle: 'medium', timeStyle: 'short',
 })
 
-export default function WalletLedger({ wallet, shared = false, onClose }) {
-  const { refreshKey } = useApp()
+export default function WalletLedger({ wallet, shared = false, embedded = false, onClose, onAdd, onTransfer, management }) {
+  const { refreshKey, isGuest, settings, activeSpace } = useApp()
   const navigate = useNavigate()
   const walletId = wallet?.wallet_id || wallet?.id
   const [tab, setTab] = useState('activity')
@@ -26,7 +27,7 @@ export default function WalletLedger({ wallet, shared = false, onClose }) {
   const [note, setNote] = useState('')
 
   useEffect(() => {
-    if (!walletId) return
+    if (!walletId || isGuest) return
     const controller = new AbortController()
     setLoading(true)
     setError('')
@@ -47,9 +48,9 @@ export default function WalletLedger({ wallet, shared = false, onClose }) {
     }).catch(err => { if (!controller.signal.aborted) setError(err.message) })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [walletId, refreshKey, reloadKey])
+  }, [walletId, refreshKey, reloadKey, isGuest])
 
-  const currency = ledger?.currency || 'KWD'
+  const currency = ledger?.currency || settings?.currency || 'KWD'
   const fmt = value => money(value, currency)
   const signed = value => `${value > 0 ? '+' : value < 0 ? '-' : ''}${fmt(Math.abs(value))}`
 
@@ -98,10 +99,17 @@ export default function WalletLedger({ wallet, shared = false, onClose }) {
   }
 
   const latest = checks[0]
-  return <Modal open={Boolean(wallet)} onClose={onClose} title={`${wallet?.name || 'Wallet'} ledger`} size="large" layerClass="wallet-ledger-layer">
-    <div className="wallet-ledger">
+  const card = wallet && <section className={`wallet-detail-card${embedded ? ' palette-dark-section' : ''}`}>
+        {embedded && <button type="button" className="wallet-page-back" onClick={onClose}><ArrowLeft size={16}/> Wallets</button>}
+        {embedded && <h2>{wallet.name}</h2>}
+        <div className="wallet-ledger-total"><span>{embedded && `${activeSpace?.name || 'Personal'} · `}{wallet.archived ? 'Archived wallet balance' : 'Available balance'}</span><strong>{fmt(ledger?.balance ?? wallet.balance ?? 0)}</strong></div>
+        <WalletCardArt wallet={wallet} variant="portrait"/>
+        <div className="wallet-detail-actions">{onTransfer && <button type="button" className="button ghost" onClick={onTransfer}><ArrowRightLeft size={18}/>Transfer</button>}{management}</div>
+      </section>
+  const activity = <div className={`wallet-ledger${embedded ? ' palette-sheet wallet-activity-sheet' : ''}`}>
+      {!embedded && card}
+      {isGuest && <p className="muted">Your wallet activity is available in Transactions.</p>}
       {loading && !ledger ? <div className="list-skeleton"><i/><i/><i/></div> : ledger && <>
-        <div className="wallet-ledger-total"><span>Recorded balance</span><strong>{fmt(ledger.balance)}</strong></div>
         <div className="wallet-ledger-tabs" role="tablist" aria-label="Ledger views">
           <button type="button" role="tab" aria-selected={tab === 'activity'} className={tab === 'activity' ? 'active' : ''} onClick={() => setTab('activity')}>Activity</button>
           <button type="button" role="tab" aria-selected={tab === 'checks'} className={tab === 'checks' ? 'active' : ''} onClick={() => setTab('checks')}>Balance checks{latest && !latest.matches ? <span className="wallet-ledger-dot" aria-label="Difference recorded"/> : null}</button>
@@ -135,5 +143,8 @@ export default function WalletLedger({ wallet, shared = false, onClose }) {
       </>}
       {error && <div className="form-error" role="alert">{error}<button type="button" className="button ghost small" onClick={() => setReloadKey(value => value + 1)}>Retry</button></div>}
     </div>
-  </Modal>
+  const addButton = onAdd && <button type="button" className={embedded ? 'transaction-fab' : 'wallet-entry-plus'} aria-label="Add transaction" onClick={onAdd}><Plus size={26} aria-hidden="true"/></button>
+  if (embedded) return wallet && <>{card}{activity}{addButton}</>
+  return <Modal open={Boolean(wallet)} onClose={onClose} title={wallet?.name || 'Wallet'} size="large" layerClass="wallet-ledger-layer"
+    footer={addButton ? <div className="wallet-entry-footer">{addButton}</div> : undefined}>{activity}</Modal>
 }

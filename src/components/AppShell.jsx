@@ -1,7 +1,7 @@
-import { workspaceNavigation, everydayRoutes } from '../lib/workspaceNavigation'
-import { Link, NavLink, useLocation } from 'react-router-dom'
+import { workspaceNavigation } from '../lib/workspaceNavigation'
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ChevronLeft, ChevronRight, LogOut, Menu, Mountain, PanelLeftOpen, Plus, Search, ShieldCheck, X } from 'lucide-react'
+import { Bell, ChevronLeft, ChevronRight, LogOut, Menu, PanelLeftOpen, Plus, Search, ShieldCheck } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useApp } from '../App'
 import TransactionModal from './TransactionModal'
@@ -15,7 +15,7 @@ import Milestone from './Milestone'
 import ConnectionStatus from './ConnectionStatus'
 import AndroidUpdate from './AndroidUpdate'
 import WindowsUpdate from './WindowsUpdate'
-import { useContainedScroll, useScrollLock } from '../lib/scrollLock'
+import { useContainedScroll } from '../lib/scrollLock'
 import BrandFooter from './BrandFooter'
 import { useWorkspacePreferences } from '../lib/workspacePreferences'
 import BankInboxBadge from './BankInboxBadge'
@@ -26,13 +26,16 @@ import { recordPageVisit } from '../lib/pageUsage'
 import { Coffee, ExternalLink } from 'lucide-react'
 import SupportPrompt from './SupportPrompt'
 import { SUPPORT_URL } from '../lib/support'
+import Modal from './Modal'
 
 const nav = workspaceNavigation
 const primaryRoutes = new Set(['/', '/transactions', '/wallets', '/upcoming'])
 const groups = ['Every day', 'Your workspace', 'Planning & insights', 'Tools & support', 'Account']
 
 export default function AppShell({ children }) {
-  const [menu, setMenu] = useState(false)
+  const navigate = useNavigate()
+  const nativeAndroid = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android'
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem('budgetly-sidebar-collapsed') === 'true' } catch { return false }
   })
@@ -44,7 +47,7 @@ export default function AppShell({ children }) {
   const [txModal, setTxModal] = useState(false)
   const [tutorialRequest, setTutorialRequest] = useState(0)
   useEffect(() => {
-    const open = () => { setMenu(false); setTutorialRequest(value => value + 1) }
+    const open = () => setTutorialRequest(value => value + 1)
     window.addEventListener('budgetly:open-tutorial', open)
     return () => window.removeEventListener('budgetly:open-tutorial', open)
   }, [])
@@ -55,30 +58,22 @@ export default function AppShell({ children }) {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
         if (document.querySelector('[aria-modal="true"], dialog[open]')) return
         event.preventDefault()
+        if (nativeAndroid || window.matchMedia('(max-width: 820px)').matches) {
+          navigate('/more', { state:{ focusSearch:true } })
+          return
+        }
         setCollapsed(false)
-        if (window.matchMedia('(max-width: 820px)').matches) setMenu(true)
         window.requestAnimationFrame(() => navSearchInput.current?.focus())
       } else if (event.key === 'Escape' && document.activeElement === navSearchInput.current) {
         if (navSearch) setNavSearch('')
-        else setMenu(false)
         navSearchInput.current?.blur()
       }
     }
     window.addEventListener('keydown', quickFind)
     return () => window.removeEventListener('keydown', quickFind)
-  }, [navSearch])
-  useEffect(() => {
-    if (!menu) return
-    const back = event => {
-      if (document.querySelector('[aria-modal="true"], dialog[open]')) return
-      event.preventDefault(); setMenu(false)
-    }
-    window.addEventListener('budgetly:back', back)
-    return () => window.removeEventListener('budgetly:back', back)
-  }, [menu])
-  useScrollLock(menu)
+  }, [navSearch, nativeAndroid, navigate])
   useContainedScroll(sidebar)
-  const { user, settings, appearance, refresh, notify, lock, isGuest, requestSignIn, activeSpace, spaceKey, canAdd } = useApp()
+  const { user, settings, appearance, refresh, notify, lock, isGuest, requestSignIn, activeSpace, spaceKey, canAdd, bankInboxCount } = useApp()
   const [preferences] = useWorkspacePreferences(user?.id)
   const keyboardOpen = useKeyboardViewport()
   const location = useLocation()
@@ -92,24 +87,30 @@ export default function AppShell({ children }) {
   const pages = activeSpace ? nav.filter(([path]) => path !== '/ask-ai') : nav
   const visibleNav = user?.role === 'admin' ? [...pages, ['/admin', 'Admin', ShieldCheck, 'Account']] : pages
   const orderedNav = [...visibleNav].sort((a,b) => { const ia=preferences.navOrder.indexOf(a[0]), ib=preferences.navOrder.indexOf(b[0]); return ia < 0 || ib < 0 ? 0 : ia-ib })
-  const matchingNav = orderedNav.filter(([path, label]) => navSearch.trim() ? label.toLowerCase().includes(navSearch.trim().toLowerCase()) : everydayRoutes.has(path) || path === location.pathname)
-  const title = visibleNav.find(([path]) => path === location.pathname)?.[1] || 'Budgetly'
+  const matchingNav = orderedNav.filter(([, label]) => label.toLowerCase().includes(navSearch.trim().toLowerCase()))
   const isOverview = location.pathname === '/'
   const isLedger = ['/transactions', '/shared-transactions'].includes(location.pathname)
-  const nativeAndroid = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android'
+  const isWallets = location.pathname === '/wallets'
+  const walletDetail = isWallets && Boolean(new URLSearchParams(location.search).get('wallet') || location.state?.walletId)
+  const isSettings = location.pathname === '/settings'
+  const selectedPage = visibleNav.find(([path]) => path === location.pathname)
+  const subtitle = isOverview
+    ? isGuest ? 'Saved on this device' : activeSpace ? 'Shared money at a glance' : 'Your money at a glance'
+    : isWallets || isLedger ? activeSpace?.name || 'Personal' : selectedPage?.[4]
+  const greeting = new Intl.DateTimeFormat('en-GB', { timeZone:'Asia/Kuwait', hour:'numeric', hourCycle:'h23' }).format(new Date())
+  const overviewTitle = isGuest ? 'Guest workspace' : activeSpace?.name || `Good ${Number(greeting) < 12 ? 'morning' : Number(greeting) < 18 ? 'afternoon' : 'evening'}, ${user?.username || 'there'}`
   const addTransaction = () => location.pathname === '/shared-transactions'
     ? window.dispatchEvent(new window.Event('budgetly:add-shared-transaction'))
     : setTxModal(true)
 
-  return <div className={`app-shell budgetly-v2 everyday-shell ${collapsed ? 'sidebar-collapsed' : ''} ${nativeAndroid ? 'native-android' : 'browser-app'} ${isLedger ? 'has-ledger' : ''} ${keyboardOpen ? 'keyboard-open' : ''} ${location.pathname === '/ask-ai' ? 'has-ai' : ''}`}>
+  return <div className={`app-shell budgetly-v2 everyday-shell ${collapsed ? 'sidebar-collapsed' : ''} ${nativeAndroid ? 'native-android' : 'browser-app'} ${isLedger ? 'has-ledger' : ''} ${walletDetail ? 'has-wallet-detail' : ''} ${keyboardOpen ? 'keyboard-open' : ''} ${location.pathname === '/ask-ai' ? 'has-ai' : ''}`}>
     <ScrollMemory userId={`${user?.id}:${spaceKey}`}/>
-    <aside ref={sidebar} className={`sidebar glass ${menu ? 'open' : ''}`}>
+    {!nativeAndroid && <aside ref={sidebar} className="sidebar glass">
       <div className="sidebar-head">
         <div className="brand">
           <BrandLogo style={settings.logo_style} />
           <div><strong>Budgetly</strong><small>Personal finance</small></div>
         </div>
-        <button className="icon-button mobile-only" onClick={() => setMenu(false)} aria-label="Close menu"><X size={19}/></button>
         <button className="icon-button sidebar-toggle" onClick={toggleSidebar} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed}>{collapsed ? <ChevronRight size={22}/> : <ChevronLeft size={22}/>}</button>
       </div>
       <label className="nav-finder"><Search size={17}/><input ref={navSearchInput} type="search" aria-label="Find a page" placeholder="Find a page" value={navSearch} onChange={event => setNavSearch(event.target.value)}/><kbd>Ctrl K</kbd></label>
@@ -117,45 +118,56 @@ export default function AppShell({ children }) {
       <nav className="nav-list">
         {groups.map(group => {
           const pages = matchingNav.filter(([, , , section]) => section === group)
-          return pages.length ? <div className="nav-group" key={group}><span className="nav-group-label">{group}</span>{pages.map(([to, label, Icon]) => <NavLink key={to} to={to} aria-label={label} title={label} end={to === '/'} onClick={event => {setMenu(false);setNavSearch('');if(isGuest && !guestRoutes.has(to)){event.preventDefault();requestSignIn(label)}}} className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}><Icon size={19}/><span>{label}</span>{to === '/bank-messages' && <BankInboxBadge/>}{isGuest && !guestRoutes.has(to) ? <LockKeyhole className="guest-lock" size={14}/> : label === 'Budgets' && <i className="nav-pulse"/>}</NavLink>)}</div> : null
+          return pages.length ? <div className="nav-group" key={group}><span className="nav-group-label">{group}</span>{pages.map(([to, label, Icon]) => <NavLink key={to} to={to} aria-label={label} title={label} end={to === '/'} onClick={event => {setNavSearch('');if(isGuest && !guestRoutes.has(to)){event.preventDefault();requestSignIn(label)}}} className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}><Icon size={19}/><span>{label}</span>{to === '/bank-messages' && <BankInboxBadge/>}{isGuest && !guestRoutes.has(to) ? <LockKeyhole className="guest-lock" size={14}/> : label === 'Budgets' && <i className="nav-pulse"/>}</NavLink>)}</div> : null
         })}
         {!matchingNav.length && <p className="nav-no-results">No matching page</p>}
       </nav>
       {(user?.role !== 'admin' || settings.support_sidebar_enabled !== false) && <a className="sidebar-support-link" aria-label="Buy me a coffee" title="Buy me a coffee - support Budgetly" href={SUPPORT_URL} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer"><Coffee size={21}/><span>Buy me a coffee<small>Support Budgetly</small></span><ExternalLink size={14}/></a>}
       <button className="button ghost sidebar-signout" onClick={lock}><LogOut size={17}/><span>{isGuest ? 'Sign in' : 'Sign out'}</span></button>
-    </aside>
-    {menu && <div className="sidebar-scrim" onClick={() => setMenu(false)} />}
+    </aside>}
 
     <main className="main-area">
       {!isGuest && <ConnectionStatus/>}
       <header className="topbar" role="banner">
-        <div className="topbar-left">
-          <button className="icon-button mobile-only" onClick={() => setMenu(true)} aria-label="Open menu"><Menu size={20}/></button>
+        <div className="mobile-space"><SpaceSwitcher/></div>
+        <div className="header-controls">
+          {!isGuest && <button type="button" className="icon-button notification-trigger" aria-label={bankInboxCount ? `Notifications, ${bankInboxCount} bank alerts pending` : 'Notifications'} aria-haspopup="dialog" onClick={() => setNotificationsOpen(true)}><Bell size={20} aria-hidden="true"/><BankInboxBadge/></button>}
+          <Link to="/settings" className="header-user-tag" aria-label="Account and preferences" title={isGuest ? 'Guest' : user?.username}>
+            {appearance.profile_image ? <img className="header-user-avatar" src={appearance.profile_image} alt=""/> : <span className="header-user-avatar" aria-hidden="true">{(isGuest ? 'Guest' : user?.username || 'Budgetly').slice(0,1).toUpperCase()}</span>}
+          </Link>
+        </div>
+        {!walletDetail && !isSettings && <div className="topbar-left">
           {location.pathname === '/ask-ai' && <button className="icon-button mobile-only" title="Open conversations" aria-label="Open conversations" onClick={() => window.dispatchEvent(new window.Event('budgetly:toggle-ai-history'))}><PanelLeftOpen size={20}/></button>}
-          <div><p className="eyebrow">{activeSpace?.name || settings.display_name}</p><h2>{title}</h2></div>
+          <div><h2>{isOverview ? overviewTitle : selectedPage?.[1] || 'Budgetly'}</h2>{subtitle && <p className="eyebrow">{subtitle}</p>}</div>
+        </div>}
+        <div className="button-row top-actions">
+          {isOverview && !isGuest && <button className="button ghost tutorial-button" data-tour="tutorial" title="Tutorial" aria-label="Tutorial" onClick={() => setTutorialRequest(value => value + 1)}><Compass size={18}/><span>Tutorial</span></button>}
+          {isWallets && !walletDetail && canAdd !== false && <button type="button" className="button primary palette-header-action" data-tour="add-wallet" onClick={() => window.dispatchEvent(new Event('budgetly:add-wallet'))}><Plus size={17}/>Add wallet</button>}
         </div>
-        <div className="header-user-tag glass-subtle" aria-label="Current account">
-          {appearance.profile_image ? <img className="header-user-avatar" src={appearance.profile_image} alt=""/> : <span className="header-user-avatar"><Mountain size={21}/></span>}
-          <div><strong>{isGuest ? 'Guest' : user?.username || 'Budgetly'}</strong><small>{isGuest ? 'On this device' : user?.role === 'admin' ? 'Admin account' : 'Personal account'}</small></div>
-        </div>
-        <div className="button-row top-actions">{location.pathname === '/' && !isGuest && <button className="button ghost tutorial-button" data-tour="tutorial" title="Tutorial" aria-label="Tutorial" onClick={() => { setMenu(false); setTutorialRequest(value => value + 1) }}><Compass size={18}/><span>Tutorial</span></button>}{(isLedger || isOverview) && canAdd !== false && (!nativeAndroid || isOverview) && <button data-tour="add-transaction" className="button primary add-button" onClick={addTransaction}><Plus size={18}/><span>Add transaction</span></button>}</div>
       </header>
-      <div className="mobile-space"><SpaceSwitcher/></div>
       <AndroidUpdate userId={user?.id} role={user?.role} guest={isGuest}/>
       <WindowsUpdate/>
       {isGuest && <div className="guest-banner"><span>Guest mode · Saved on this device</span><button className="button ghost small" onClick={() => requestSignIn('cloud storage and more features')}>Sign in</button></div>}
-      <motion.div className="page-wrap" data-tour-page={location.pathname} key={location.pathname} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .18, ease: 'easeOut' }}>{children}</motion.div>
+      <motion.div className={`page-wrap${isOverview || walletDetail || isSettings ? ' palette-page-split' : ' palette-sheet'}`} data-tour-page={location.pathname} key={location.pathname} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .18, ease: 'easeOut' }}>{children}</motion.div>
       <BrandFooter className="app-footer"/>
     </main>
-    {isLedger && canAdd !== false && nativeAndroid && <button data-tour="add-transaction" className="transaction-fab" aria-label="Add transaction" title="Add transaction" onClick={addTransaction}><Plus size={28}/></button>}
+    {isLedger && canAdd !== false && <button data-tour="add-transaction" className="transaction-fab" aria-label="Add transaction" title="Add transaction" onClick={addTransaction}><Plus size={26} aria-hidden="true"/></button>}
 
     <nav className="mobile-nav glass">
       {visibleNav.filter(([to]) => primaryRoutes.has(to)).map(([to, label, Icon]) => <NavLink key={to} to={to} end={to === '/'} onClick={event => {if(isGuest && !guestRoutes.has(to)){event.preventDefault();requestSignIn(label)}}} className={({isActive}) => isActive ? 'active' : ''}><Icon size={19}/><span>{label === 'Shared Transactions' ? 'Shared' : label}</span></NavLink>)}
       <Link to="/more" aria-label="More tools" className={!primaryRoutes.has(location.pathname) ? 'active' : ''} aria-current={!primaryRoutes.has(location.pathname) ? 'page' : undefined}><Menu size={19}/><span>More</span></Link>
     </nav>
 
+    <Modal open={notificationsOpen} onClose={() => setNotificationsOpen(false)} title="Notifications" size="small">
+      <div className="notification-inbox">
+        <Link className="notification-inbox-link" to="/bank-messages" onClick={() => setNotificationsOpen(false)}>
+          <span><strong>Bank Inbox</strong><small>{bankInboxCount ? 'Review captured alerts before recording them' : 'No bank alerts waiting for review'}</small></span><BankInboxBadge/><ChevronRight size={17} aria-hidden="true"/>
+        </Link>
+        <Link className="notification-inbox-link" to="/upcoming" onClick={() => setNotificationsOpen(false)}><strong>Upcoming reminders</strong><ChevronRight size={17} aria-hidden="true"/></Link>
+      </div>
+    </Modal>
     <TransactionModal open={txModal} onClose={() => setTxModal(false)} onSaved={(saved, scheduled) => { setTxModal(false); refresh(); notify(saved.queued ? 'Saved on this device. Will sync when connected.' : scheduled ? 'Transaction scheduled' : 'Transaction saved') }} />
-    <SupportPrompt userId={user?.id} guest={isGuest} popupEnabled={settings.support_popup_enabled !== false} suppressed={menu || keyboardOpen || txModal}/>
+    <SupportPrompt userId={user?.id} guest={isGuest} popupEnabled={settings.support_popup_enabled !== false} suppressed={notificationsOpen || keyboardOpen || txModal}/>
     {!isGuest && <><AppTutorial request={tutorialRequest}/><Milestone/></>}
   </div>
 }

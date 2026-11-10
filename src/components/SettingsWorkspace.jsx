@@ -37,7 +37,6 @@ export default function SettingsWorkspace({ children, guest = false }) {
   const available = groups.filter(group => parts.some(part => part.group === group.id))
   const visible = available.filter(group => `${group.title} ${group.description} ${group.terms}`.toLowerCase().includes(query.trim().toLowerCase()))
   const current = groups.find(group => group.id === displayed)
-  const Icon = current.icon
 
   const show = useCallback(async (id, immediate = false) => {
     const token = ++sequence.current
@@ -52,10 +51,8 @@ export default function SettingsWorkspace({ children, guest = false }) {
     if (token !== sequence.current) return
     setDisplayed(id); setMobileDetail(true)
     window.requestAnimationFrame(() => {
-      if (window.matchMedia?.('(max-width: 760px)').matches) {
-        body.current?.scrollIntoView?.({ block: 'start', behavior: 'instant' })
-        heading.current?.focus({ preventScroll: true })
-      }
+      heading.current?.scrollIntoView?.({ block: 'nearest', behavior: 'instant' })
+      heading.current?.focus({ preventScroll: true })
     })
   }, [mode, selected])
 
@@ -94,9 +91,11 @@ export default function SettingsWorkspace({ children, guest = false }) {
     return () => window.removeEventListener('budgetly:back', handleBack)
   }, [back, mobileDetail])
 
-  return <div className="settings-workspace" data-mobile-detail={mobileDetail}>
-    <aside className="settings-menu" aria-label="Settings categories">
-      <h2 ref={menuHeading} tabIndex={-1}>Settings</h2>
+  return <div className="settings-workspace palette-settings-workspace" data-mobile-detail={mobileDetail}>
+    <div className="palette-dark-section palette-settings-heading">
+      {mobileDetail ? <><button type="button" className="settings-back" onClick={back}><ArrowLeft size={18}/>All settings</button><h2 ref={heading} tabIndex={-1}>{current.title}</h2><p>{current.description}</p></> : <><h2 ref={menuHeading} tabIndex={-1}>Settings</h2><p>Make Budgetly work the way you like</p></>}
+    </div>
+    <aside className="settings-menu palette-sheet" aria-label="Settings categories" hidden={mobileDetail}>
       <label className="settings-search"><Search size={18} aria-hidden="true"/><input type="search" value={query} placeholder="Search settings" aria-label="Search settings" onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && visible[0]) { event.preventDefault(); void show(visible[0].id) } }}/></label>
       <nav aria-label="Choose a settings category">
         {visible.map(group => <div key={group.id}>
@@ -109,15 +108,11 @@ export default function SettingsWorkspace({ children, guest = false }) {
         {!visible.length && <p className="muted" role="status">No matching settings.</p>}
       </nav>
     </aside>
-    <div className="settings-detail" ref={body}>
-      <button type="button" className="settings-back" onClick={back}><ArrowLeft size={18}/>All settings</button>
-      <p className="settings-breadcrumb">Settings / {current.title}</p>
-      <div className="settings-page-heading"><span className="settings-page-icon"><Icon size={25} aria-hidden="true"/></span><h2 ref={heading} tabIndex={-1}>{current.title}</h2></div>
-      <p className="settings-description">{current.description}</p>
+    <div className="settings-detail palette-sheet" ref={body} hidden={!mobileDetail}>
       <p className="settings-scope">{guest || ['bank', 'notifications', 'android'].includes(displayed) ? <Smartphone size={17} aria-hidden="true"/> : <UserRound size={17} aria-hidden="true"/>}{displayed === 'android' ? 'Official Android download' : guest ? 'Guest workspace · this device' : ['bank', 'notifications'].includes(displayed) ? 'This device only' : 'Your account and selected workspace'}</p>
       <SettingsInlineContext.Provider value={true}>
         {available.map(group => <div key={group.id} data-settings-group={group.id} hidden={displayed !== group.id} aria-label={group.title}>
-          <SettingsVisibleContext.Provider value={displayed === group.id}>{parts.filter(part => part.group === group.id).sort((a, b) =>
+          <SettingsVisibleContext.Provider value={mobileDetail && displayed === group.id}>{parts.filter(part => part.group === group.id).sort((a, b) =>
             (a.child.props.settingsOrder ?? a.child.props['data-settings-order'] ?? sectionOrder[a.child.props.title] ?? 10) -
             (b.child.props.settingsOrder ?? b.child.props['data-settings-order'] ?? sectionOrder[b.child.props.title] ?? 10)).map(part => part.child)}</SettingsVisibleContext.Provider>
         </div>)}

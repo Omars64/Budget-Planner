@@ -22,7 +22,7 @@ import { recentEntries, rememberEntry, useWorkspacePreferences } from '../lib/wo
 
 const blank = () => ({ type: 'expense', amount: '', description: '', notes: '', date: dateInput(), reporting_month: '', wallet_id: '', transfer_wallet_id: '', category_id: '', recurring_frequency: 'none', recurring_until: '' })
 
-export default function TransactionModal({ open, onClose, onSaved, editing = null }) {
+export default function TransactionModal({ open, onClose, onSaved, editing = null, entryWallet, entryType }) {
   const {user, settings, notify, isGuest, requestSignIn, activeSpace, spaceKey = 'personal', canAdd = true} = useApp()
   const [helpers] = useWorkspacePreferences(user.id)
   const formId = useId()
@@ -56,7 +56,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
       if (controller.signal.aborted) return
       w = w.filter(x => activeSpace || !x.is_shared || x.id === editing?.wallet_id || x.id === editing?.transfer_wallet_id)
       setWallets(w.filter(x => !x.archived || x.id === editing?.wallet_id || x.id === editing?.transfer_wallet_id)); setCategories(c)
-      const base = editing ? {
+      let base = editing ? {
         ...editing,
         date: dateInput(editing.date),
         reporting_month: editing.reporting_month || String(editing.date || '').slice(0, 7),
@@ -65,13 +65,18 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
         const base = blank(), recent = recentEntries(user.id,spaceKey).find(item => item.type === base.type && w.some(wallet => !wallet.archived && String(wallet.id) === String(item.wallet_id)))
         return recent ? {...base,wallet_id:recent.wallet_id,category_id:c.some(category => category.id === Number(recent.category_id) && category.kind === base.type) ? recent.category_id : ''} : base
       })())
+      if (!editing && entryWallet != null && w.some(wallet => !wallet.archived && String(wallet.id) === String(entryWallet))) {
+        const type = entryType || base.type
+        base = { ...base, wallet_id:entryWallet, type, category_id:type === base.type ? base.category_id : '',
+          transfer_wallet_id:String(base.transfer_wallet_id) === String(entryWallet) ? '' : base.transfer_wallet_id }
+      }
       if (!base.wallet_id || !w.some(wallet => String(wallet.id) === String(base.wallet_id) && (!wallet.archived || editing))) base.wallet_id = w.find(wallet => !wallet.archived)?.id || ''
       baseline.current = JSON.stringify(base)
       setForm(base)
       if (resumeSchedule) sessionStorage.removeItem(`budgetly_schedule_resume_${user.id}`)
     }).catch(e=>{if (!controller.signal.aborted) setError(e.message)}).finally(() => {if (!controller.signal.aborted) setLoading(false)})
     return () => controller.abort()
-  }, [open, editing, draftKey])
+  }, [open, editing, draftKey, entryWallet, entryType])
 
   const visibleCategories = useMemo(() => categoryChoices(categories.filter(c => c.kind === form.type), activeSpace?.id, form.category_id), [categories, form.type, activeSpace?.id, form.category_id])
   const set = (k,v) => {

@@ -30,7 +30,7 @@ it('preserves guest restrictions while leaving the directory accessible', () => 
   render(<MemoryRouter><More/></MemoryRouter>)
   fireEvent.click(screen.getByRole('link', {name:/Calendar/}))
   expect(mocks.requestSignIn).toHaveBeenCalledWith('Calendar')
-  fireEvent.click(screen.getByRole('link', {name:/Transactions/}))
+  fireEvent.click(screen.getByRole('link', {name:/Budgets/}))
   expect(mocks.requestSignIn).toHaveBeenCalledTimes(1)
 })
 it('hides Personal-only AI in Spaces and exposes admin controls only to admins', () => {

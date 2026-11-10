@@ -1,4 +1,5 @@
 import AppSelect from '../components/AppSelect'
+import PaletteSettings from '../components/PaletteSettings'
 import SeasonalSettings from '../components/SeasonalSettings'
 import WelcomeAnimationSettings from '../components/WelcomeAnimationSettings'
 import LogoSettings from '../components/LogoSettings'
@@ -25,7 +26,7 @@ export default function GuestSettings() {
   useEffect(()=>{const previous=previousSettings.current;previousSettings.current=settings;setForm(current=>mergeSettingsDraft(current,previous,settings))},[settings])
   const save = async event => {
     event.preventDefault()
-    try { const result = await api('/api/settings', { method: 'PUT', ...jsonBody(form) }); setSettings(result); refresh(); notify('Preferences saved on this device') }
+    try { const fields = {...form}; delete fields.color_palette; delete fields.theme; const result = await api('/api/settings', { method: 'PUT', ...jsonBody(fields) }); setSettings(result); refresh(); notify('Preferences saved on this device') }
     catch (error) { notify(error.message, 'error') }
   }
   const exportData = async format => {
@@ -36,11 +37,11 @@ export default function GuestSettings() {
     } catch (error) { notify(error.message, 'error') }
   }
   return <SettingsWorkspace guest>
+    <PaletteSettings settingsId="appearance" settingsOrder={0}/>
     <WelcomeAnimationSettings settingsId="appearance"/>
     <LogoSettings settingsId="appearance"/>
     <SettingsSection title="Guest workspace"><p>Stored only on this device. Clearing browser storage or uninstalling can remove these records.</p><button className="button primary" onClick={() => requestSignIn('cloud storage and account features')}><LogIn size={18}/>Sign in or create an account</button></SettingsSection>
     <SeasonalSettings settingsId="appearance"/><SettingsSection title="Personal preferences"><h4>Motion & feedback</h4><ComfortSettings/><form className="stack gap-16" onSubmit={save}>
-      <label className="field"><span>Appearance</span><AppSelect aria-label="Appearance" value={form.theme} onChange={event => setForm({ ...form, theme: event.target.value })}><option value="system">Match device</option><option value="light">Light</option><option value="dark">Dark</option></AppSelect></label>
       <AccentPicker value={form.accent_color || '#0a4173'} onChange={value => setForm({ ...form, accent_color: value })}/>
       <label className="field"><span>Wallpaper</span><AppSelect aria-label="Wallpaper" value={form.wallpaper_style} onChange={event => setForm({ ...form, wallpaper_style: event.target.value, wallpaper_enabled: event.target.value !== 'none' })}><option value="none">None</option><option value="budgetly">Budgetly</option></AppSelect></label>
       <label className="check-row"><input type="checkbox" checked={form.compact_numbers} onChange={event => setForm({ ...form, compact_numbers: event.target.checked })}/><span>Compact numbers</span></label>

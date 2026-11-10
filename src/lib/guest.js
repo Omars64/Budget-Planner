@@ -24,9 +24,9 @@ const monthNow = () => dateInput().slice(0, 7)
 function emptyWorkspace() {
   const names = ['Food & Dining', 'Transport', 'Shopping', 'Home', 'Entertainment', 'Health', 'Bills', 'Travel', 'Salary', 'Freelance', 'Gift', 'Other Income']
   return { schema: 1, id: crypto.randomUUID(), revision: 0, nextId: 20,
-    wallets: [{ id: 1, name: 'Main', type: 'cash', initial_balance: 0, color: '#3158aa', icon: 'wallet', card_network: null, archived: false, opening_date: dateInput() }],
+    wallets: [{ id: 1, name: 'Main', type: 'cash', initial_balance: 0, color: '#3158aa', icon: 'wallet', card_network: null, card_finish: 'cream', archived: false, opening_date: dateInput() }],
     categories: names.map((name, index) => ({ id: index + 2, name, kind: index < 8 ? 'expense' : 'income', color: ['#3158aa', '#267d75', '#75465f', '#596575'][index % 4], icon: 'circle' })),
-    transactions: [], budgets: [], settings: { currency: 'KWD', display_name: 'Budgetly', theme: 'system', compact_numbers: false, week_starts_on: 'sunday', wallpaper_style: 'none', wallpaper_enabled: false } }
+    transactions: [], budgets: [], settings: { currency: 'KWD', display_name: 'Budgetly', theme: 'system', color_palette: 'navy', compact_numbers: false, week_starts_on: 'sunday', wallpaper_style: 'none', wallpaper_enabled: false } }
 }
 export function readGuest() {
   const raw = localStorage.getItem(GUEST_KEY)
@@ -102,7 +102,7 @@ function filterTransactions(rows, params) {
   const offset = Math.max(0, Number(params.get('offset') || 0)), limit = Math.min(1000, Number(params.get('limit') || 200))
   return result.slice(offset, offset + limit)
 }
-const allowedSettings = new Set(['logo_style','seasonal_tint','seasonal_speed','seasonal_mode','seasonal_theme','seasonal_hemisphere','seasonal_effects','currency', 'theme', 'compact_numbers', 'week_starts_on', 'font_family', 'text_color', 'accent_color', 'wallpaper_style', 'wallpaper_enabled'])
+const allowedSettings = new Set(['logo_style','seasonal_tint','seasonal_speed','seasonal_mode','seasonal_theme','seasonal_hemisphere','seasonal_effects','currency', 'theme', 'color_palette', 'compact_numbers', 'week_starts_on', 'font_family', 'text_color', 'accent_color', 'wallpaper_style', 'wallpaper_enabled'])
 async function handle(path, options) {
   options.signal?.throwIfAborted()
   const url = new URL(path, 'https://guest.invalid'), route = url.pathname, params = url.searchParams
@@ -146,7 +146,7 @@ async function handle(path, options) {
       if (collection === 'wallets') {
         if ((!row || row.archived) && !body.archived && data.wallets.filter(w => !w.archived).length >= 2) { requestGuestSignIn('more than two wallets'); fail('Sign in to add more wallets.', 403) }
         if (!String(body.name || '').trim() || body.name.length > 100 || !Number.isFinite(body.initial_balance) || Math.abs(body.initial_balance) >= 1e13) fail('Enter a wallet name and valid starting balance.')
-        next = { name: body.name.trim(), type: body.type, initial_balance: round(body.initial_balance), color: body.color, icon: body.icon, card_network: ['bank', 'card'].includes(body.type) ? body.card_network || 'visa' : null, archived: Boolean(body.archived), opening_date: row?.opening_date || dateInput() }
+        next = { name: body.name.trim(), type: body.type, initial_balance: round(body.initial_balance), color: body.color, icon: body.icon, card_network: ['bank', 'card'].includes(body.type) ? body.card_network || 'visa' : null, card_finish: Object.hasOwn(body, 'card_finish') ? ['cream','gold','charcoal'].includes(body.card_finish) ? body.card_finish : null : row?.card_finish ?? null, archived: Boolean(body.archived), opening_date: row?.opening_date || dateInput() }
       } else if (collection === 'transactions') {
         if ((body.recurring_frequency || 'none') !== 'none') { requestGuestSignIn('repeating transactions'); fail('Sign in to repeat transactions.', 403) }
         const source = data.wallets.find(w => w.id === body.wallet_id), category = data.categories.find(c => c.id === body.category_id)

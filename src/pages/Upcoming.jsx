@@ -13,7 +13,7 @@ import '../upcoming.css'
 import '../everyday-planning.css'
 
 const statuses = [['upcoming', 'Upcoming'], ['all', 'All records'], ['planned', 'Manual / reminder only'], ['scheduled', 'Automatic'], ['failed', 'Needs attention'], ['posted', 'Recorded']]
-const planLabel = row => row.status === 'posted' ? 'Recorded' : row.status === 'failed' ? 'Needs attention' : row.status === 'scheduled' ? 'Automatic' : row.reminder_enabled && row.type === 'expense' ? 'Reminder only' : 'Plan only'
+const planLabel = row => row.status === 'posted' ? 'Recorded' : row.status === 'failed' ? 'Needs attention' : row.status === 'scheduled' ? 'Records automatically' : row.reminder_enabled && row.type === 'expense' ? 'Reminder only' : 'Plan only'
 const empty = () => ({ type: 'expense', amount: '', description: '', notes: '', date: dateInput(new Date(Date.now() + 86400000)), reporting_month: '', wallet_id: '', transfer_wallet_id: '', category_id: '', status: 'planned', reminder_enabled: true })
 const reportingMonthLabel = month => new Intl.DateTimeFormat('en', { month: 'short', year: 'numeric' }).format(new Date(`${month}-01T12:00:00`))
 

@@ -26,7 +26,7 @@ function Demo() {
 
 it('uses clear category pages instead of nesting the primary settings in accordions', () => {
   render(<Demo/> )
-  expect(screen.getByText('Account content')).toBeVisible()
+  expect(screen.getByText('Account content')).not.toBeVisible()
   expect(screen.getByTestId('outside-dialog')).toBeVisible()
   expect(document.querySelector('details')).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: /Notifications Updates/ }))
@@ -38,7 +38,9 @@ it('keeps drafts and child components mounted while switching categories', () =>
   render(<Demo/> )
   fireEvent.click(screen.getByRole('button', { name: /Look & feel/ }))
   fireEvent.change(screen.getByLabelText('Saved draft'), { target: { value: 'Unsaved text' } })
+  fireEvent.click(screen.getByRole('button', { name: 'All settings' }))
   fireEvent.click(screen.getByRole('button', { name: /Notifications Updates/ }))
+  fireEvent.click(screen.getByRole('button', { name: 'All settings' }))
   fireEvent.click(screen.getByRole('button', { name: /Look & feel/ }))
   expect(screen.getByLabelText('Saved draft')).toHaveValue('Unsaved text')
 })

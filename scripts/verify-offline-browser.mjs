@@ -144,7 +144,7 @@ try {
   expect(shellCache.controller).toBe(`${origin}/budgetly-push-sw.js`)
   expect(shellCache.shellCaches.length).toBeGreaterThan(0)
   expect(shellCache.assets.every(asset => asset.cached)).toBe(true)
-  await page.locator('.add-button').click()
+  await page.locator('[data-tour="add-transaction"]').click()
   const dialog = page.getByRole('dialog', { name: 'Add transaction' })
   await expect(dialog.getByRole('button', { name: 'Add transaction', exact: true })).toBeEnabled()
   await dialog.getByLabel(/Amount/).fill('12.345')
@@ -248,7 +248,7 @@ try {
   // display or submit it, even though A's durable record remains on the device.
   stage = 'pending-entry account switch'
   const pendingMarker = 'CI pending A account isolation'
-  await page.locator('.add-button').click()
+  await page.locator('[data-tour="add-transaction"]').click()
   await expect(dialog.getByRole('button', { name: 'Add transaction', exact: true })).toBeEnabled()
   await dialog.getByLabel(/Amount/).fill('7.123')
   await dialog.getByLabel('Description', { exact: true }).fill(pendingMarker)
@@ -274,7 +274,9 @@ try {
     for (const [route, title] of [['','Overview'],['transactions','Transactions'],['wallets','Wallets'],['upcoming','Upcoming'],['budgets','Budgets'],['bank-messages','Bank Inbox'],['spaces','Spaces'],['calendar','Calendar'],['attention','Attention'],['feedback','Feedback'],['settings','Settings'],['more','More']]) {
       const started = performance.now()
       await page.goto(`${origin}/#/${route}`)
-      await expect(page.locator('.topbar h2')).toHaveText(title)
+      if (!route) await expect(page.locator('.topbar h2')).toHaveText(/^Good (morning|afternoon|evening), /)
+      else if (route === 'settings') await expect(page.locator('.palette-settings-heading h2')).toHaveText(title)
+      else await expect(page.locator('.topbar h2')).toHaveText(title)
       await page.waitForTimeout(350)
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
       if (overflow > 1) {

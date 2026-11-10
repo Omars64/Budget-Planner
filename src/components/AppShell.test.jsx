@@ -25,7 +25,7 @@ beforeEach(() => {
 
 test('current account appears in the shared header, while sidebar sign-out stays separate', () => {
   render(<MemoryRouter><AppShell/></MemoryRouter>)
-  expect(within(screen.getByRole('banner')).getByLabelText('Current account')).toHaveTextContent('Omar')
+  expect(within(screen.getByRole('banner')).getByRole('link', {name:'Account and preferences'})).toHaveAttribute('title', 'Omar')
   expect(within(screen.getByRole('banner')).queryByRole('button', {name:'Sign out'})).not.toBeInTheDocument()
   expect(within(document.querySelector('.sidebar')).getByRole('button', {name:'Sign out'})).toBeInTheDocument()
   expect(document.querySelector('.sidebar-foot')).toBeNull()
@@ -45,7 +45,7 @@ test('desktop sidebar collapse is saved and page finder expands it', () => {
   fireEvent.click(screen.getByRole('button', {name:'Collapse sidebar'}))
   expect(document.querySelector('.app-shell')).toHaveClass('sidebar-collapsed')
   expect(localStorage.getItem('budgetly-sidebar-collapsed')).toBe('true')
-  expect(screen.queryByRole('link', {name:'Calendar'})).not.toBeInTheDocument()
+  expect(screen.getByRole('link', {name:'Calendar'})).toBeInTheDocument()
   expect(screen.getByRole('link', {name:'Spaces'})).toBeInTheDocument()
   fireEvent.keyDown(window, {key:'k',ctrlKey:true})
   expect(document.querySelector('.app-shell')).not.toHaveClass('sidebar-collapsed')

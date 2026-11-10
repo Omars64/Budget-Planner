@@ -29,7 +29,7 @@
 .settings-description { color:var(--muted);font-size:15px;margin:0 0 22px; }
 .settings-scope { display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px;padding-bottom:20px;border-bottom:2px solid var(--settings-divider);margin-bottom:4px; }
 .settings-scope svg { flex-shrink:0; }
-.settings-back { display:none;align-items:center;gap:8px;background:transparent;border:0;padding:8px 0;color:var(--accent-text,var(--accent));min-height:44px;margin-bottom:18px; }
+.settings-back { display:inline-flex;align-items:center;gap:8px;background:transparent;border:0;padding:8px 0;color:var(--accent-text,var(--accent));min-height:44px;margin-bottom:18px; }
 .settings-workspace .settings-subsection { padding:26px 0;border:0;border-bottom:2px solid var(--settings-divider);background:transparent;box-shadow:none;border-radius:0; }
 .settings-workspace .settings-subsection:last-child { border-bottom:0; }
 .settings-workspace .settings-subsection>h3 { display:flex;align-items:center;gap:10px;font-size:18px;line-height:1.4;margin:0 0 18px;font-weight:700; }

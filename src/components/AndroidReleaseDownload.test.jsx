@@ -52,7 +52,7 @@ test('only checks on opening its own Settings category and refreshes on reopenin
   fireEvent.click(screen.getByRole('button',{name:/Android app Download/}))
   expect(await screen.findByRole('link',{name:'Download Budgetly APK'})).toBeVisible()
   expect(screen.getByText('Official Android download')).toBeVisible()
-  fireEvent.click(screen.getByRole('button',{name:/Account & security/}))
+  fireEvent.click(screen.getByRole('button',{name:'All settings'}))
   const firstSignal=fetchRelease.mock.calls[0][0]
   expect(firstSignal.aborted).toBe(true)
   fetchRelease.mockResolvedValue(release('6.14.0'))

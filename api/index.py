@@ -78,7 +78,7 @@ def ensure_note_columns(connection):
             "recorded_by_id": "INTEGER",
             "reporting_month": "VARCHAR(7)",
         },
-        "wallets": {"card_network": "VARCHAR(12)", "space_id": "INTEGER"},
+        "wallets": {"card_network": "VARCHAR(12)", "card_finish": "VARCHAR(12)", "space_id": "INTEGER"},
         "planned_transactions": {"reporting_month": "VARCHAR(7)"},
         "budgets": {"reporting_month": "VARCHAR(7)", "space_id": "INTEGER"},
         "categories": {"space_id": "INTEGER"},
@@ -555,7 +555,7 @@ def seed_user_workspace(db: Session, user_id: int, commit: bool = True):
     }.items():
         set_setting(db, user_id, key, value)
     if not db.query(Wallet).filter(Wallet.user_id == user_id, Wallet.name.ilike("main wallet")).first():
-        db.add(Wallet(user_id=user_id, name="Main Wallet", type="cash", initial_balance=0, icon="wallet", color="#0a4173"))
+        db.add(Wallet(user_id=user_id, name="Main Wallet", type="cash", initial_balance=0, icon="wallet", color="#0a4173", card_finish="cream"))
     ensure_default_categories(db, user_id)
     if commit:
         db.commit()
@@ -830,6 +830,7 @@ def get_settings(user: User = Depends(current_user), db: Session = Depends(get_d
         'font_family': setting(db, user.id, 'font_family', 'system'),
         'text_color': setting(db, user.id, 'text_color', 'ink'),
         'theme': setting(db, user.id, 'theme', 'light'),
+        'color_palette': setting(db, user.id, 'color_palette', 'navy'),
         'seasonal_mode': setting(db, user.id, 'seasonal_mode', 'off'),
         'seasonal_theme': setting(db, user.id, 'seasonal_theme', 'winter'),
         'seasonal_hemisphere': setting(db, user.id, 'seasonal_hemisphere', 'north'),
@@ -868,7 +869,7 @@ def wallets(user: User = Depends(workspace_user), db: Session = Depends(get_db))
     materialize_recurring_for_user(db, user.id)
     rows = db.query(Wallet).filter(Wallet.user_id == user.id).order_by(Wallet.archived, Wallet.created_at).all()
     shared = {r[0] for r in db.query(WalletShare.wallet_id).filter_by(owner_id=user.id).all()}
-    return [{"id": w.id, "name": w.name, "type": w.type, "initial_balance": float(opening_amount(db, w)), "icon": w.icon, "color": w.color, "card_network": w.card_network or ("visa" if w.type in {"bank", "card"} else None), "archived": w.archived, "balance": wallet_balance(db, w), "is_shared": w.id in shared, "space_id": w.space_id} for w in rows]
+    return [{"id": w.id, "name": w.name, "type": w.type, "initial_balance": float(opening_amount(db, w)), "icon": w.icon, "color": w.color, "card_network": w.card_network or ("visa" if w.type in {"bank", "card"} else None), "card_finish": w.card_finish, "archived": w.archived, "balance": wallet_balance(db, w), "is_shared": w.id in shared, "space_id": w.space_id} for w in rows]
 
 
 @app.post("/api/wallets", status_code=201)
@@ -891,12 +892,15 @@ def create_wallet(payload: WalletIn, request: Request, user: User = Depends(work
 def update_wallet(item_id: int, payload: WalletIn, user: User = Depends(workspace_user), db: Session = Depends(get_db)):
     row = db.query(Wallet).filter(Wallet.id == item_id, Wallet.user_id == user.id).with_for_update().first()
     if not row: raise HTTPException(404, "Wallet not found")
-    for k, v in payload.model_dump(exclude={'initial_balance'}).items(): setattr(row, k, v)
+    excluded = {'initial_balance'}
+    if 'card_finish' not in payload.model_fields_set:
+        excluded.add('card_finish')
+    for k, v in payload.model_dump(exclude=excluded).items(): setattr(row, k, v)
     set_opening_balance(db, row, payload.initial_balance, user.id)
     from .account_security import audit
     audit(db, user.id, user.id, 'Edited wallet', f'wallet:{row.id}')
     db.commit(); db.refresh(row)
-    return {**payload.model_dump(), "id": row.id, "balance": wallet_balance(db, row)}
+    return {**payload.model_dump(), "card_finish": row.card_finish, "id": row.id, "balance": wallet_balance(db, row)}
 
 
 @app.delete("/api/wallets/{item_id}", status_code=204)
@@ -1232,7 +1236,7 @@ def dashboard(month: Optional[str] = None, user: User = Depends(workspace_user),
         "weekly": weekly,
         "month": current.strftime("%Y-%m"), "total_balance": round(total_balance, 3), "income": round(income, 3), "expense": round(expense, 3), "net": round(income - expense - opening_debt, 3),
         "opening_funds": round(opening, 3), "opening_debt": round(opening_debt, 3), "earned_income": round(income - opening, 3),
-        "wallets": [{"id": w.id, "name": w.name, "balance": wallet_balance(db, w)} for w in wallets_rows],
+        "wallets": [{"id": w.id, "name": w.name, "type": w.type, "color": w.color, "card_network": w.card_network, "card_finish": w.card_finish, "balance": wallet_balance(db, w)} for w in wallets_rows],
         "shared": {"balance": shared_balance, "wallet_count": len(shared_rows)},
         "cashflow": days, "category_spending": sorted(category_map.values(), key=lambda x: x["value"], reverse=True),
         "recent_transactions": [tx_payload(t) for t in recent], "budgets": bdata,

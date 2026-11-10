@@ -5,6 +5,7 @@ import AppMonthField from '../components/AppMonthField'
 import AnimatedMoney from '../components/AnimatedMoney'
 import EmptyState from '../components/EmptyState'
 import LedgerRow, { TransactionDetails } from '../components/LedgerRow'
+import WalletCardArt from '../components/WalletCardArt'
 import { api, money } from '../lib/api'
 import { dateInput } from '../lib/time'
 import { useViewState } from '../lib/viewState'
@@ -42,18 +43,27 @@ export default function Overview() {
     ? { to: '/attention', title: 'Needs your attention', detail: `${attention} ${attention === 1 ? 'item' : 'items'} to review`, icon: Bell }
     : nextUpcoming ? { to: '/upcoming', title: 'Upcoming payment', detail: nextUpcoming.description, icon: CalendarClock } : null)
   const ActionIcon = action?.icon
+  const wallets = data?.wallets || []
 
   if (!data && !error) return <div className="skeleton-page"><div/><div/><div/></div>
 
   return <div className="overview-page overview-focus">
-    <section className="overview-balance" aria-label="Available wallet balance">
+    <div className="overview-top palette-dark-section">
+    <section className="overview-balance palette-hero" aria-label="Available wallet balance">
       <div><p className="muted">Available now · {activeSpace ? 'Space wallets' : 'Personal wallets'}</p><h1>{data ? <AnimatedMoney value={data.total_balance} currency={settings.currency} compact={settings.compact_numbers}/> : '-'}</h1></div>
-      <Link to="/wallets" className="overview-focus-wallet-link">Wallets <ArrowRight size={16} aria-hidden="true"/></Link>
+      {wallets[0] && <Link to={`/wallets?wallet=${wallets[0].id}`} aria-label={`Open ${wallets[0].name} wallet from balance`}><WalletCardArt wallet={wallets[0]} variant="mini"/></Link>}
     </section>
+    {wallets.length > 0 && <div className="overview-wallet-shortcuts">
+      <div>{wallets.slice(0,3).map(wallet => <Link to={`/wallets?wallet=${wallet.id}`} key={wallet.id} aria-label={`Open ${wallet.name} wallet`}>
+        <WalletCardArt wallet={wallet} variant="mini"/><strong>{wallet.name}</strong><small>{fmt(wallet.balance)}</small>
+      </Link>)}</div>
+      <Link to="/wallets" className="overview-all-wallets">All wallets <ArrowRight size={16} aria-hidden="true"/></Link>
+    </div>}
+    </div>
     {error && <div className="form-error" role="alert">{error}<button className="button ghost small" onClick={() => setRetry(value => value + 1)}>Retry</button>{data && <small>Showing the last loaded summary for {data.month}.</small>}</div>}
-    {data && <div className={data.month !== month ? 'overview-loading' : ''} aria-busy={data.month !== month}>
+    {data && <div className={`palette-sheet overview-activity-sheet ${data.month !== month ? 'overview-loading' : ''}`} aria-busy={data.month !== month}>
       <section className="overview-focus-month" aria-label="Selected month summary">
-        <div className="overview-focus-month-head"><h2>{displayedMonthLabel} activity</h2><label className="field"><span>Month</span><AppMonthField min="1000-01" max="9999-12" value={month} onChange={event => event.target.value && setMonth(event.target.value)}/></label></div>
+        <div className="overview-focus-month-head"><h2>Monthly activity</h2><label className="field"><span className="sr-only">Month</span><AppMonthField min="1000-01" max="9999-12" value={month} onChange={event => event.target.value && setMonth(event.target.value)}/></label></div>
         <div className="overview-focus-metrics">
           <Link to="/transactions" state={{ aiFilters: { month: displayedMonth, type: 'income' } }}><span>Money in</span><strong className="tx-amount income">{fmt(data.income)}</strong></Link>
           <Link to="/transactions" state={{ aiFilters: { month: displayedMonth, type: 'expense', exclude_opening: true } }}><span>Spent</span><strong className="tx-amount expense">{fmt(data.expense)}</strong></Link>

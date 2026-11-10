@@ -62,11 +62,6 @@ export default function Transactions() {
     {ledger.error && ledger.updatedAt && <small className="muted">Showing records last updated at {new Date(ledger.updatedAt).toLocaleTimeString()}.</small>}
 
 
-    <details className="everyday-disclosure transaction-balances" open={walletBalancesOpen}><summary data-tour="wallet-balances">Current wallet balances<small>View available money without changing your filters</small></summary>
-    <section className="transaction-wallets" aria-label="Current wallet balances">
-      {wallets.filter(wallet => filters.wallet ? String(wallet.id) === filters.wallet : !wallet.archived).map(wallet => <div className="transaction-wallet-balance glass" key={wallet.id}><span><Wallet size={15}/>{wallet.name}</span><strong><AnimatedMoney value={wallet.balance} currency={settings.currency} compact={settings.compact_numbers}/></strong></div>)}
-    </section></details>
-
     <section className="ledger-list" aria-label="Recorded transactions">
       <div className="ledger-count">{ledger.error && !ledger.updatedAt ? 'Records unavailable' : `${rows.length}${ledger.hasMore ? '+' : ''} transaction${rows.length === 1 ? '' : 's'}`}</div>
       {ledger.error && !ledger.updatedAt ? <EmptyState title="Saved records unavailable" text="Reconnect to load this view. Any entries waiting to sync are shown above." action={<button className="button ghost" onClick={ledger.retry}>Retry loading</button>}/> : loading && !rows.length ? <div className="list-skeleton"><i/><i/><i/><i/></div> : !rows.length ? <EmptyState title="No matching transactions" text="Try another filter or add a transaction." action={<div className="button-row"><button className="button ghost" onClick={() => setFilters({...defaultLedgerFilters})}>Clear filters</button><button className="button primary" disabled={!canAdd} onClick={() => {setEditing(null);setModal(true)}}>Add transaction</button></div>}/> : <div className="date-groups">
@@ -77,6 +72,10 @@ export default function Transactions() {
       </div>}
       <LedgerPagination ledger={ledger}/>
     </section>
+    <details className="everyday-disclosure transaction-balances" open={walletBalancesOpen}><summary data-tour="wallet-balances">Current wallet balances<small>View available money without changing your filters</small></summary>
+    <section className="transaction-wallets" aria-label="Current wallet balances">
+      {wallets.filter(wallet => filters.wallet ? String(wallet.id) === filters.wallet : !wallet.archived).map(wallet => <div className="transaction-wallet-balance glass" key={wallet.id}><span><Wallet size={15}/>{wallet.name}</span><strong><AnimatedMoney value={wallet.balance} currency={settings.currency} compact={settings.compact_numbers}/></strong></div>)}
+    </section></details>
     <TransactionDetails tx={selected} fmt={fmt} shared={Boolean(activeSpace)} permission={activeSpace?.role === 'owner' ? 'edit' : activeSpace?.role || 'edit'} onClose={() => setSelected(null)} onEdit={canManage ? () => {setEditing(selected);setSelected(null);setModal(true)} : null} onDelete={canManage ? () => remove(selected) : null} onDuplicate={canAdd ? () => {writeDraft(`flowbudget_tx_draft_${user.id}${activeSpace ? `_space_${activeSpace.id}` : ''}`,duplicateDraft(selected,dateInput()));setSelected(null);setEditing(null);setModal(true)} : null}/>
     <TransactionModal open={modal} editing={editing} onClose={() => setModal(false)} onSaved={saved => {setModal(false);setSaveResult({queued:Boolean(saved.queued)});refresh();notify(saved.queued ? 'Saved on this device. Will sync when connected.' : editing?'Transaction updated':'Transaction added')}} />
   </div>

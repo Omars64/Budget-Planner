@@ -1,0 +1,360 @@
+:root {
+  --palette-deep:#101e33;
+  --palette-light:#f1f8fc;
+  --palette-action:#195c7a;
+  --palette-bright:#8fd8f5;
+  --page:color-mix(in srgb,var(--palette-light) 95%,var(--palette-deep));
+  --surface:var(--palette-light);
+  --surface-soft:color-mix(in srgb,var(--surface) 93%,var(--palette-action));
+  --surface-hover:color-mix(in srgb,var(--surface) 86%,var(--palette-action));
+  --muted:color-mix(in srgb,var(--palette-deep) 69%,var(--palette-light));
+  --line:color-mix(in srgb,var(--palette-deep) 17%,var(--surface));
+  --glass:var(--surface);
+  --glass-strong:var(--surface);
+  --palette-header:var(--palette-deep);
+  --palette-header-panel:color-mix(in srgb,var(--palette-deep) 89%,var(--palette-light));
+  --palette-header-hover:color-mix(in srgb,var(--palette-deep) 78%,var(--palette-light));
+  --palette-header-muted:color-mix(in srgb,var(--palette-light) 78%,var(--palette-deep));
+}
+:root[data-theme=dark] {
+  --page:var(--palette-header);
+  --surface:color-mix(in srgb,var(--palette-deep) 90%,var(--palette-light));
+  --surface-soft:color-mix(in srgb,var(--palette-deep) 83%,var(--palette-light));
+  --surface-hover:color-mix(in srgb,var(--palette-deep) 76%,var(--palette-light));
+  --muted:var(--palette-header-muted);
+  --line:color-mix(in srgb,var(--palette-deep) 70%,var(--palette-light));
+}
+body:not([data-seasonal]):not(.has-wallpaper):has(.budgetly-v2) { background:var(--page); }
+
+/* The welcome screen uses the account palette in both appearances. */
+:root .welcome-screen {
+  --welcome-bg:var(--palette-light);
+  --welcome-card:var(--surface);
+  --welcome-ink:var(--palette-deep);
+  --welcome-muted:var(--muted);
+  --welcome-line:var(--line);
+  --welcome-blue:var(--palette-action);
+  --welcome-button:var(--palette-action);
+  --welcome-button-ink:#fff;
+  --welcome-glow-one:color-mix(in srgb,var(--palette-bright) 26%,var(--palette-light));
+  --welcome-glow-two:color-mix(in srgb,var(--palette-action) 9%,var(--palette-light));
+  --welcome-glow-three:color-mix(in srgb,var(--palette-bright) 18%,var(--palette-light));
+  --welcome-script-one:var(--palette-deep);
+  --welcome-script-two:var(--palette-action);
+  --welcome-script-three:var(--palette-action);
+}
+:root[data-theme=dark] .welcome-screen {
+  --welcome-bg:var(--palette-deep);
+  --welcome-ink:var(--palette-light);
+  --welcome-blue:var(--palette-bright);
+  --welcome-button:var(--palette-bright);
+  --welcome-button-ink:var(--palette-deep);
+  --welcome-glow-one:color-mix(in srgb,var(--palette-deep) 70%,var(--palette-action));
+  --welcome-glow-two:var(--palette-deep);
+  --welcome-glow-three:color-mix(in srgb,var(--palette-deep) 84%,var(--palette-bright));
+  --welcome-script-one:var(--palette-light);
+  --welcome-script-two:color-mix(in srgb,var(--palette-light) 55%,var(--palette-bright));
+  --welcome-script-three:var(--palette-bright);
+}
+:root .welcome-animation-preview { --welcome-script-one:var(--accent-text);--welcome-script-two:var(--accent-text);--welcome-script-three:var(--accent-text); }
+:root[data-theme=dark] .welcome-animation-preview { --welcome-script-one:var(--palette-light);--welcome-script-two:var(--accent-text);--welcome-script-three:var(--palette-bright); }
+
+.palette-picker { display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:8px; }
+.palette-choice {
+  display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:9px;min-height:49px;
+  padding:9px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--text);text-align:left;
+}
+.palette-choice[aria-pressed=true] { border-color:var(--accent-text);background:var(--surface-soft); }
+.palette-choice:hover:not(:disabled) { background:var(--surface-hover); }
+.palette-choice>strong { font-size:13px;overflow-wrap:anywhere; }
+.palette-samples { display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden; }
+.palette-samples i { width:12px;height:24px; }
+
+/* Keep the same navigation and contrast across the app's pages. */
+.budgetly-v2.everyday-shell .sidebar {
+  --line:color-mix(in srgb,var(--palette-light) 18%,var(--palette-header));
+  --muted:var(--palette-header-muted);
+  background:var(--palette-header);color:var(--palette-light);
+}
+.budgetly-v2.everyday-shell .sidebar .nav-item { color:var(--palette-header-muted); }
+.budgetly-v2.everyday-shell .sidebar .nav-item:hover { background:var(--palette-header-panel); }
+.budgetly-v2.everyday-shell .sidebar .nav-item.active { background:var(--palette-header-hover);color:var(--palette-bright); }
+.budgetly-v2.everyday-shell .sidebar :is(.nav-finder,.space-selector,.sidebar-toggle,.sidebar-signout) {
+  background:var(--palette-header-panel);color:var(--palette-light);border-color:var(--line);
+}
+.budgetly-v2.everyday-shell .sidebar :is(.nav-finder input,.space-selector-label,.space-symbol) { color:var(--palette-light); }
+.budgetly-v2.everyday-shell .sidebar .nav-finder input { background:transparent; }
+.budgetly-v2.everyday-shell .sidebar .nav-finder input::placeholder { color:var(--palette-header-muted); }
+.budgetly-v2.everyday-shell .sidebar .brand strong { font-family:BudgetlyWelcome,'Segoe Script',cursive;font-size:23px;font-weight:400;line-height:1; }
+body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2.everyday-shell .topbar {
+  background:var(--palette-header);color:var(--palette-light);border:1px solid var(--palette-header-panel);border-radius:20px;
+}
+body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2.everyday-shell .topbar h2 { color:var(--palette-light); }
+body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2.everyday-shell .topbar .eyebrow { color:var(--palette-header-muted); }
+body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2.everyday-shell .topbar :is(.header-user-tag,.icon-button,.tutorial-button) {
+  background:var(--palette-header-panel);color:var(--palette-light);border-color:var(--palette-header-hover);
+}
+body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2.everyday-shell .topbar .header-user-tag small { color:var(--palette-header-muted); }
+body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2.everyday-shell .topbar .header-user-avatar { color:var(--palette-bright); }
+.budgetly-v2.everyday-shell .topbar .header-controls { display:flex;align-items:center;gap:7px;grid-column:3;grid-row:1;justify-self:end; }
+.notification-trigger { position:relative;flex:none; }
+.notification-trigger .bank-inbox-badge { position:absolute;top:-5px;right:-5px; }
+.budgetly-v2 .bank-inbox-badge,.modal .bank-inbox-badge {
+  display:inline-flex;align-items:center;justify-content:center;flex:none;min-width:22px;min-height:22px;margin:0;
+  padding:1px 6px;border-radius:99px;background:var(--palette-bright);color:var(--palette-deep);font-size:11px;font-weight:750;
+}
+.notification-inbox-link { display:flex;align-items:center;justify-content:space-between;gap:9px;padding:11px;min-height:48px;border:1px solid var(--line);border-radius:12px;color:var(--text);text-decoration:none; }
+.notification-inbox-link small { display:block;color:var(--muted); }
+.notification-inbox-link:hover { background:var(--surface-hover); }
+.notification-inbox { display:grid;gap:8px; }
+.more-finder { display:flex;align-items:center;gap:8px;padding:0 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface); }
+.more-finder input { flex:1;min-width:0;border:0;background:transparent; }
+.budgetly-v2 .more-directory { display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:8px; }
+.budgetly-v2 .more-tool { min-height:61px;gap:10px;padding:9px 12px;border-radius:13px; }
+.budgetly-v2 .more-tool small { margin-top:2px; }
+.budgetly-v2 .more-tool-icon { background:var(--surface-soft);border-radius:11px; }
+
+.budgetly-v2.everyday-shell .transaction-fab,.wallet-entry-plus {
+  display:grid;place-items:center;width:56px;height:56px;padding:0;border:1px solid color-mix(in srgb,var(--palette-bright) 58%,white);
+  border-radius:50%;background:var(--palette-bright);color:var(--palette-deep);box-shadow:0 6px 18px #0b12244a;
+}
+.budgetly-v2.sidebar-collapsed .transaction-fab { left:calc(50% + 38px); }
+@media(min-width:821px) {
+  .budgetly-v2.browser-app .transaction-fab { bottom:58px; }
+}
+.budgetly-v2.has-ledger .page-wrap { padding-bottom:90px; }
+.wallet-entry-footer { display:grid;justify-content:center; }
+.budgetly-v2.keyboard-open > .transaction-fab { display:none; }
+@media(max-width:1100px) {
+  .budgetly-v2.everyday-shell .topbar .header-controls { grid-column:2; }
+}
+.budgetly-v2.native-android .main-area { margin-left:0; }
+.budgetly-v2.native-android .mobile-space { display:block; }
+.budgetly-v2.native-android .mobile-nav { display:grid; }
+.budgetly-v2.native-android .transaction-fab { left:50%;bottom:calc(88px + env(safe-area-inset-bottom)); }
+.budgetly-v2.native-android .main-area { padding-bottom:calc(92px + env(safe-area-inset-bottom)); }
+.budgetly-v2.native-android.has-ledger .main-area { padding-bottom:calc(153px + env(safe-area-inset-bottom)); }
+.budgetly-v2.native-android.has-ai .main-area { padding-bottom:0; }
+.budgetly-v2.everyday-shell .mobile-nav { grid-template-columns:repeat(5,minmax(0,1fr));background:var(--palette-header);border-color:var(--palette-header-hover); }
+.budgetly-v2.everyday-shell .mobile-nav :is(a,button) { color:var(--palette-header-muted);font-size:clamp(9px,2.9vw,11px); }
+.budgetly-v2.everyday-shell .mobile-nav a.active { color:var(--palette-bright);background:var(--palette-header-panel); }
+@media(max-width:820px) {
+  .budgetly-v2.everyday-shell .sidebar { display:none; }
+  .budgetly-v2.everyday-shell .transaction-fab { left:50%;bottom:calc(88px + env(safe-area-inset-bottom)); }
+  .budgetly-v2.everyday-shell .topbar .header-controls { gap:5px; }
+}
+@media(min-width:821px) {
+  .budgetly-v2.native-android .mobile-nav { position:fixed;inset:auto 0 0;z-index:50;padding:8px 8px calc(8px + env(safe-area-inset-bottom)); }
+  .budgetly-v2.native-android .mobile-nav a { display:grid;place-items:center;min-height:48px;text-decoration:none; }
+  .budgetly-v2.native-android .mobile-only { display:grid; }
+}
+.budgetly-v2.native-android.keyboard-open > .mobile-nav { display:none; }
+
+/* One card scales from an Overview thumbnail to the wallet's portrait view. */
+.budgetly-card-art {
+  --card-light:color-mix(in srgb,var(--palette-deep) 58%,var(--palette-action));
+  --card-dark:var(--palette-deep);
+  --card-ink:#fff2d8;
+  --card-line:var(--palette-bright);
+  position:relative;display:block;container-type:inline-size;isolation:isolate;overflow:hidden;width:100%;aspect-ratio:1.586;
+  border-radius:10% / 16%;color:var(--card-ink);background:linear-gradient(145deg,var(--card-light),var(--card-dark) 90%);
+  box-shadow:0 8px 18px #0b142b38,inset 0 0 0 1px #ffffff22;
+}
+.budgetly-card-art.gold { --card-light:var(--palette-action);--card-ink:#ffe4ae; }
+.budgetly-card-art.charcoal {
+  --card-light:var(--palette-light);--card-dark:color-mix(in srgb,var(--palette-light) 69%,var(--palette-bright));
+  --card-ink:#292336;--card-line:var(--palette-action);
+}
+.budgetly-card-art.fixed {
+  --card-light:var(--wallet-card-color);--card-dark:color-mix(in srgb,var(--wallet-card-color) 80%,var(--wallet-card-tint));
+  --card-ink:var(--wallet-card-ink);--card-line:var(--wallet-card-ink);
+}
+.budgetly-card-art::before,.budgetly-card-art::after {
+  content:'';position:absolute;z-index:-1;left:-18%;top:45%;width:122%;height:72%;border-radius:50%;
+  border:1px solid color-mix(in srgb,var(--card-line) 38%,transparent);transform:rotate(-32deg);
+}
+.budgetly-card-art::after { top:53%;left:-10%;opacity:.55; }
+.budgetly-card-wordmark {
+  position:absolute;left:10%;bottom:12%;font-family:BudgetlyWelcome,'Segoe Script',cursive;
+  font-size:12.5cqw;font-weight:400;line-height:1;white-space:nowrap;
+}
+.budgetly-card-chip {
+  position:absolute;left:10%;top:18%;width:14%;aspect-ratio:1.24;border-radius:19%;
+  background:linear-gradient(145deg,#fbefc4,#d7be8a 70%,#b39b75);box-shadow:inset 0 0 0 1px #0002;
+}
+.budgetly-card-chip::before,.budgetly-card-chip::after { content:'';position:absolute;inset:27% 0;border-block:1px solid #77591d55; }
+.budgetly-card-chip::after { inset:10% 29%;border-block:0;border-inline:1px solid #77591d55;border-radius:28%; }
+.budgetly-card-art .card-network-mark.wallet-network-mark { position:absolute;right:9%;bottom:12%;width:auto;height:auto;color:inherit;line-height:1; }
+.budgetly-card-art .card-network-mark.wallet-network-mark.visa { font-size:10cqw; }
+.budgetly-card-art .card-network-mark.wallet-network-mark.mastercard i { flex:0 0 12.5cqw;width:12.5cqw;height:12.5cqw; }
+.budgetly-card-art .card-network-mark.wallet-network-mark.mastercard i:first-child { margin-right:-4.5cqw; }
+.budgetly-card-art.mini { width:72px;max-width:100%;border-radius:7px; }
+.budgetly-card-art.portrait { width:126px;aspect-ratio:.64;border-radius:9% / 6%; }
+.budgetly-card-art.portrait .budgetly-card-chip { left:auto;right:18%;top:12%;width:21%;aspect-ratio:.82; }
+.budgetly-card-art.portrait .budgetly-card-wordmark { bottom:15%;font-size:14cqw; }
+.budgetly-card-art.portrait .card-network-mark.wallet-network-mark { bottom:10%; }
+.budgetly-card-art.portrait .card-network-mark.wallet-network-mark.mastercard i { flex-basis:18cqw;width:18cqw;height:18cqw; }
+.budgetly-card-art.portrait .card-network-mark.wallet-network-mark.mastercard i:first-child { margin-right:-6.5cqw; }
+.budgetly-wallet-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,210px),1fr));gap:20px; }
+.budgetly-wallet-tile { display:grid;align-content:start;gap:8px;width:min(100%,245px);min-width:0;padding:0;border:0;background:none;color:var(--text);text-align:left; }
+.budgetly-wallet-caption { display:flex;align-items:center;justify-content:space-between;gap:6px;padding-inline:2px;overflow-wrap:anywhere; }
+.budgetly-wallet-caption small { display:block;color:var(--muted);text-transform:capitalize; }
+.wallet-card-editor>.budgetly-card-art { width:min(100%,245px);justify-self:center; }
+.wallet-detail-card { display:grid;justify-items:center;gap:13px;padding:10px 0 16px; }
+.wallet-detail-card .wallet-ledger-total { width:100%;text-align:center; }
+.wallet-detail-actions { display:flex;justify-content:center;align-items:start;flex-wrap:wrap;gap:8px; }
+.wallet-management summary { display:flex;justify-content:center;align-items:center;gap:6px;min-height:44px;padding:7px;cursor:pointer; }
+.wallet-management summary::marker { content:''; }
+.wallet-management .button-row { justify-content:center; }
+@media(max-width:560px) {
+  .budgetly-wallet-grid { grid-template-columns:minmax(0,1fr); }
+  .everyday-wallets { padding-inline:16px; }
+}
+
+body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2 .palette-hero {
+  background:var(--palette-header-panel);color:var(--palette-light);border:1px solid var(--palette-header-hover);border-radius:18px;
+}
+body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2 .palette-hero :is(.muted,.eyebrow,h1) { color:inherit; }
+.overview-wallet-shortcuts { display:grid;gap:7px; }
+.overview-wallet-shortcuts>div { display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,92px),1fr));gap:8px; }
+.overview-wallet-shortcuts>div>a { display:grid;justify-items:center;gap:4px;padding:10px 6px;border-radius:13px;background:var(--palette-header-panel);color:var(--palette-light);text-decoration:none;text-align:center;overflow-wrap:anywhere; }
+.overview-wallet-shortcuts>div>a:hover { background:var(--palette-header-hover); }
+.overview-all-wallets { display:inline-flex;justify-self:center;align-items:center;gap:6px;padding:8px;color:var(--accent-text);font-weight:650;text-decoration:none; }
+body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2 .overview-activity-sheet {
+  background:var(--surface);border:1px solid var(--line);border-radius:22px;gap:0;overflow:hidden;
+}
+body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2 .overview-activity-sheet :is(.overview-focus-month,.overview-focus-action,.overview-recent,.overview-balance-details) {
+  border:0;border-bottom:1px solid var(--line);border-radius:0;
+}
+body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2 .overview-activity-sheet .overview-balance-details > summary { border:0;border-radius:0; }
+.budget-headline { font-size:clamp(20px,4vw,27px);overflow-wrap:anywhere; }
+@media(max-width:520px) {
+  .overview-wallet-shortcuts>div { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .overview-wallet-shortcuts>div>a:nth-child(n+3) { display:none; }
+}
+
+/* The app frame and the paper surface are shared across phone and desktop. */
+.budgetly-v2.everyday-shell {
+  --layout-rail:190px;
+  --layout-gutter:clamp(16px,3vw,32px);
+}
+.budgetly-v2.everyday-shell.sidebar-collapsed { --layout-rail:76px; }
+@media(min-width:821px) {
+  .budgetly-v2.everyday-shell.browser-app .sidebar { width:var(--layout-rail); }
+  .budgetly-v2.everyday-shell.browser-app .main-area { margin-left:var(--layout-rail); }
+  .budgetly-v2.everyday-shell.browser-app .app-footer { left:var(--layout-rail); }
+  .budgetly-v2.everyday-shell.browser-app .transaction-fab { left:calc(50% + var(--layout-rail) / 2); }
+}
+.budgetly-v2.everyday-shell:not(.has-ai) .main-area { display:flex;flex-direction:column;min-height:100dvh;padding-inline:0;padding-top:0; }
+body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2.everyday-shell .main-area { background:var(--palette-header); }
+.budgetly-v2.everyday-shell:is(.browser-app,.native-android) .topbar {
+  width:100%;min-height:0;margin:0 auto;padding:18px var(--layout-gutter) 20px;
+  grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto;gap:14px 10px;
+  border:0;border-radius:0;box-shadow:none;
+}
+body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2.everyday-shell .topbar { border:0;border-radius:0; }
+.budgetly-v2.everyday-shell .topbar .header-controls { grid-column:2;grid-row:1; }
+.budgetly-v2.everyday-shell .topbar-left { grid-column:1;grid-row:2; }
+.budgetly-v2.everyday-shell .topbar-left h2,
+.palette-settings-heading h2,.wallet-detail-card h2 { font-size:clamp(26px,4vw,38px);font-weight:750;line-height:1.15;margin:0;overflow-wrap:anywhere; }
+.budgetly-v2.everyday-shell .topbar .eyebrow { margin:6px 0 0;font-size:14px;font-weight:400; }
+.budgetly-v2.everyday-shell .topbar .top-actions { grid-column:2;grid-row:2;width:auto;justify-content:flex-end; }
+.budgetly-v2.everyday-shell .topbar .header-user-tag {
+  display:grid;place-items:center;width:36px;height:36px;padding:0;border:0;border-radius:50%;overflow:hidden;
+  background:var(--palette-light);color:var(--palette-deep);text-decoration:none;
+}
+body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2.everyday-shell .topbar .header-user-tag { background:var(--palette-light);color:var(--palette-deep); }
+.budgetly-v2.everyday-shell .topbar .header-user-avatar { width:100%;height:100%;background:none;color:inherit;font-size:14px;font-weight:750; }
+.budgetly-v2.everyday-shell .topbar .notification-trigger { width:42px;height:42px;border-radius:50%; }
+.budgetly-v2.everyday-shell .topbar .palette-header-action { background:var(--palette-bright);color:var(--palette-deep);border-color:transparent;white-space:nowrap; }
+.budgetly-v2.everyday-shell .topbar .mobile-space { margin:0;min-width:0;max-width:min(100%,180px); }
+.budgetly-v2.everyday-shell .topbar .mobile-space .space-selector {
+  display:flex;min-height:42px;gap:7px;padding:6px 9px;border-radius:12px;
+  background:var(--palette-header-panel);color:var(--palette-light);border:1px solid var(--palette-header-hover);
+}
+.budgetly-v2.everyday-shell .topbar .mobile-space .space-selector :is(small,.space-symbol) { display:none; }
+.budgetly-v2.everyday-shell .topbar .mobile-space .space-selector-label { flex:1;min-width:0;color:inherit; }
+.budgetly-v2.everyday-shell .topbar .mobile-space .space-selector>svg { flex:none; }
+.budgetly-v2.everyday-shell.browser-app.sidebar-collapsed .topbar .mobile-space { display:block; }
+.budgetly-v2.everyday-shell:not(.has-ai) .page-wrap {
+  flex:1;width:100%;min-width:0;margin:0 auto;max-width:1420px;padding-top:0;
+}
+.budgetly-v2.everyday-shell:not(.has-ai) .page-wrap.palette-sheet { padding:34px var(--layout-gutter) 24px; }
+body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2 .palette-sheet { position:relative;background:var(--surface);border:0;border-radius:24px 24px 0 0; }
+body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2 .palette-sheet::before {
+  content:'';position:absolute;top:14px;left:50%;width:30px;height:4px;translate:-50% 0;
+  border-radius:3px;background:var(--line);pointer-events:none;
+}
+.budgetly-v2 .palette-dark-section { padding:0 var(--layout-gutter) 24px; }
+body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2 .palette-dark-section { color:var(--palette-light); }
+body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2 .palette-dark-section :is(h2,.wallet-ledger-total strong) { color:inherit; }
+body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2 .palette-dark-section :is(p,.wallet-ledger-total span) { color:var(--palette-header-muted); }
+body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2 .palette-dark-section :is(.wallet-page-back,.settings-back,.overview-all-wallets) { color:var(--palette-bright); }
+
+.budgetly-v2 .overview-focus.overview-page { display:flex;flex-direction:column;gap:0;min-height:100%; }
+.overview-top { display:grid;gap:8px; }
+.budgetly-v2 .overview-focus .overview-balance { display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:14px 16px; }
+.budgetly-v2 .overview-focus .overview-balance h1 { margin-top:4px;font-size:clamp(23px,5.9vw,38px); }
+.overview-balance .budgetly-card-art.mini { width:clamp(52px,16vw,72px); }
+.overview-wallet-shortcuts>div { grid-template-columns:repeat(auto-fit,minmax(min(100%,120px),1fr)); }
+.overview-wallet-shortcuts>div>a { border:1px solid var(--palette-header-hover); }
+.overview-wallet-shortcuts>div>a>strong { font-size:12px; }
+.overview-all-wallets { margin-top:3px; }
+.budgetly-v2 .overview-focus .overview-activity-sheet { display:block;flex:1;padding:34px var(--layout-gutter) 10px; }
+.budgetly-v2 .overview-focus .overview-activity-sheet :is(.overview-focus-month,.overview-recent,.overview-focus-action) { padding-inline:0; }
+.budgetly-v2 .overview-focus .overview-activity-sheet .overview-focus-month { padding-top:0;border-bottom:0; }
+.budgetly-v2 .overview-focus .overview-focus-month-head { display:grid;grid-template-columns:minmax(0,1fr) minmax(0,auto);gap:8px; }
+.budgetly-v2 .overview-focus .overview-focus-month-head .field { width:auto;min-width:0; }
+.budgetly-v2 .overview-focus .overview-focus-month-head .app-select-trigger { min-height:40px;padding:7px 9px;background:var(--surface-soft); }
+.budgetly-v2 .overview-focus .overview-focus-metrics { gap:8px;margin-top:8px; }
+.budgetly-v2 .overview-focus .overview-focus-metrics > a { padding:10px;border:0;border-radius:12px;background:var(--surface-soft); }
+.budgetly-v2 .overview-focus .overview-focus-metrics > a + a { padding-left:10px;border:0; }
+.budgetly-v2 .overview-focus .overview-balance-details > summary { padding-inline:0; }
+
+.budgetly-v2 .everyday-wallets { padding:0; }
+.budgetly-v2 .everyday-wallets:has(.wallet-detail-card) { gap:0; }
+.wallet-list-title { margin:0;font-size:17px; }
+.budgetly-v2 .wallet-detail-card { padding-bottom:28px;gap:9px; }
+.wallet-page-back { justify-self:start;display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0;border:0;background:none;color:var(--accent-text);font-weight:650; }
+.wallet-detail-card .wallet-ledger-total { display:grid;justify-content:center;padding:0 0 5px;gap:8px; }
+.wallet-detail-card .wallet-detail-actions { margin-top:10px; }
+body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2 .wallet-detail-actions :is(.button.ghost,summary) { color:var(--palette-light); }
+.budgetly-v2 .wallet-activity-sheet { min-height:260px;padding:34px var(--layout-gutter) 72px; }
+.budgetly-v2 .wallet-activity-sheet .wallet-ledger-tabs { margin-top:-6px; }
+.budgetly-v2.has-wallet-detail .page-wrap { padding-bottom:45px; }
+.budgetly-v2.keyboard-open .transaction-fab { display:none; }
+
+.budgetly-v2 .settings-workspace.palette-settings-workspace { display:block;max-width:none;min-height:0;background:none;border:0;isolation:auto; }
+.palette-settings-heading { padding-bottom:20px; }
+.palette-settings-heading p { margin:6px 0 0;font-size:14px; }
+.palette-settings-heading .settings-back { display:inline-flex;min-height:34px;margin:0 0 7px;padding:0; }
+.budgetly-v2 .palette-settings-workspace :is(.settings-menu,.settings-detail) { padding:34px var(--layout-gutter) 24px;border:0; }
+.palette-settings-workspace .settings-category { border:0;border-bottom:1px solid var(--line);border-radius:0;min-height:62px;margin:0;padding:9px 0; }
+.palette-settings-workspace .settings-selection,.palette-settings-workspace .settings-menu-label { display:none; }
+.palette-settings-workspace .settings-category>svg:first-child { width:36px;height:36px;padding:8px;background:var(--surface-soft);border-radius:10px; }
+.palette-settings-workspace .settings-search { margin-bottom:12px; }
+.palette-settings-workspace .settings-scope { padding-bottom:10px;margin-top:0; }
+.palette-settings .palette-appearance { display:grid;grid-template-columns:minmax(0,1fr) minmax(130px,auto);align-items:center;gap:10px;margin-top:12px; }
+.palette-settings .palette-appearance .app-select-trigger { min-height:42px;background:var(--surface-soft); }
+.palette-settings .settings-subsection { padding-top:14px; }
+.palette-settings .palette-picker { grid-template-columns:1fr; }
+.budgetly-v2.everyday-shell .more-page { padding:0; }
+.budgetly-v2 .more-directory { grid-template-columns:1fr;gap:0; }
+.budgetly-v2 .more-directory .more-tool { background:none;border:0;border-bottom:1px solid var(--line);border-radius:0;padding-inline:0; }
+.budgetly-v2 .more-directory .more-tool:hover { background:var(--surface-hover); }
+
+.budgetly-v2.everyday-shell .mobile-nav :is(a,button) { position:relative; }
+.budgetly-v2.everyday-shell .mobile-nav a.active { background:none; }
+.budgetly-v2.everyday-shell .mobile-nav a.active::before {
+  content:'';position:absolute;top:0;width:28px;height:2px;background:var(--palette-bright);border-radius:2px;
+}
+@media(max-width:820px) {
+  .budgetly-v2.everyday-shell:not(.has-ai) .main-area { padding-bottom:calc(68px + env(safe-area-inset-bottom)); }
+  .budgetly-v2.everyday-shell.has-ledger .page-wrap.palette-sheet { padding-bottom:90px; }
+  .budgetly-v2.everyday-shell .topbar .mobile-space { display:block; }
+  .budgetly-v2.everyday-shell .topbar .top-actions { display:flex; }
+  .budgetly-v2.everyday-shell .topbar .top-actions:empty { display:none; }
+  .budgetly-v2 .overview-wallet-shortcuts>div { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .budgetly-v2 .overview-wallet-shortcuts>div>a:nth-child(n+3) { display:none; }
+  .budgetly-v2 .overview-focus-month-head { align-items:center; }
+}

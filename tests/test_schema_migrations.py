@@ -9,7 +9,7 @@ from api.database import Base
 from api.index import ensure_note_columns
 from api.schema_migrations import apply_migrations
 
-LATEST_REVISION = 'f73b921cd054'
+LATEST_REVISION = 'f84c032ed165'
 
 
 def test_feedback_conversation_upgrade_keeps_existing_reply_and_status():
@@ -78,6 +78,7 @@ def test_reporting_month_migration_backfills_old_transaction_dates():
         assert connection.execute(text('SELECT reporting_month FROM planned_transactions WHERE id = 1')).scalar_one() == '2026-09'
         assert connection.execute(text('SELECT posted_transaction_id FROM planned_transactions WHERE id = 1')).scalar_one() == 1
         assert connection.execute(text('SELECT card_network FROM wallets WHERE id = 1')).scalar_one() is None
+        assert connection.execute(text('SELECT color, card_finish FROM wallets WHERE id = 1')).one() == ('#3158aa', None)
         assert connection.execute(text('SELECT COUNT(*) FROM wallet_balance_checks')).scalar_one() == 0
         assert connection.execute(text('SELECT reporting_month FROM budgets WHERE id = 1')).scalar_one() is None
         assert connection.execute(text('SELECT limit_amount FROM budgets WHERE id = 1')).scalar_one() == 50

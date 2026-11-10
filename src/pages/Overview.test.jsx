@@ -9,7 +9,7 @@ it('keeps the essential mobile summary visible and reporting details collapsed',
   render(<MemoryRouter><Overview/></MemoryRouter>)
   expect(await screen.findByText('Available now · Personal wallets')).toBeInTheDocument()
   expect(screen.getByRole('heading',{name:'KWD 30'})).toBeInTheDocument()
-  expect(screen.getByRole('heading',{name:'September 2026 activity'})).toBeInTheDocument()
+  expect(screen.getByRole('heading',{name:'Monthly activity'})).toBeInTheDocument()
   expect(screen.getByLabelText('Selected month summary')).toHaveTextContent('Money inKWD 100SpentKWD 70')
   expect(screen.getByText('Balance & month details').closest('details')).not.toHaveAttribute('open')
   expect(screen.getByText('Money in includes KWD 70 income and KWD 30 starting funds.')).toBeInTheDocument()

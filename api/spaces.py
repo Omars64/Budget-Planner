@@ -27,7 +27,7 @@ def migrate_shared_wallets(connection, owner_id=None):
     for share in all_shares:
         grouped.setdefault(share['wallet_id'], []).append(share)
     groups = {}
-    query = wallets.select().where(wallets.c.space_id.is_(None))
+    query = wallets.select().with_only_columns(wallets.c.id, wallets.c.user_id).where(wallets.c.space_id.is_(None))
     if owner_id is not None:
         query = query.where(wallets.c.user_id == owner_id)
     for wallet in connection.execute(query).mappings():
