@@ -4,6 +4,8 @@ Add-Type -AssemblyName System.Drawing
 $root = Split-Path $PSScriptRoot -Parent
 $res = Join-Path $root 'android/app/src/main/res'
 $palettes = [ordered]@{ navy='#101E33'; aubergine='#150929'; burgundy='#321622'; pine='#132B25'; graphite='#20232C' }
+# Keep the textured tile within Android's 66 dp safe zone on the 108 dp layer.
+$androidLauncherFill = 66.0 / 108.0
 
 function Get-IconBounds([Drawing.Bitmap]$image) {
     $left = $image.Width; $top = $image.Height; $right = 0; $bottom = 0
@@ -93,7 +95,7 @@ foreach ($key in $palettes.Keys) {
             Save-Ico (Join-Path $root 'desktop/icon.ico') @(16,24,32,48,64,128,256)
             Get-ChildItem -Path $res -Directory -Filter 'mipmap-*' | ForEach-Object {
                 Get-ChildItem -LiteralPath $_.FullName -Filter 'ic_launcher*.png' | ForEach-Object {
-                    $fill = if ($_.Name -eq 'ic_launcher_foreground.png') { .84 } else { .96 }
+                    $fill = if ($_.Name -eq 'ic_launcher_foreground.png') { $androidLauncherFill } else { .96 }
                     Save-ExistingPng $_.FullName $fill
                 }
             }
@@ -107,7 +109,7 @@ foreach ($key in $palettes.Keys) {
 
         $resource = "wallet_launcher_$key"
         Save-Png (Join-Path $res "mipmap-xxxhdpi/$resource.png") 192 192 .96
-        Save-Png (Join-Path $foregrounds.FullName "${resource}_art.png") 432 432 .84
+        Save-Png (Join-Path $foregrounds.FullName "${resource}_art.png") 432 432 $androidLauncherFill
         $colors += "    <color name=""${resource}_background"">$($palettes[$key])</color>"
         @"
 <?xml version="1.0" encoding="utf-8"?>

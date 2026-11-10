@@ -1,4 +1,10 @@
 {
+  "6.22.3": [
+    {"title":"Palette changes keep Budgetly open","detail":"Android updates the home-screen icon after you leave Budgetly. The in-app palette and logo change as soon as you choose them."}
+  ],
+  "6.22.2": [
+    {"title":"Better fit for Android launcher icons","detail":"The textured wallet has more room inside the launcher icon across all five palettes, keeping the cards and clasp visible."}
+  ],
   "6.22.1": [
     {"title":"Textured palette logos","detail":"The five palettes now use the approved textured wallet artwork. The Android launcher icon and the open Windows app follow your selected palette."}
   ],

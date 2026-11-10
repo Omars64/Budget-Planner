@@ -10,6 +10,7 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 @CapacitorPlugin(name = "BudgetlyLauncherIcon")
@@ -17,24 +18,42 @@ public class BudgetlyLauncherIconPlugin extends Plugin {
     private static final String[] PALETTES = {"navy", "aubergine", "burgundy", "pine", "graphite"};
     private static final String[] ALIASES = {"LauncherNavy", "LauncherAubergine", "LauncherBurgundy", "LauncherPine", "LauncherGraphite"};
     private static final int FLAGS = PackageManager.DONT_KILL_APP;
+    // Only the activity's main thread reads or writes these fields.
+    private boolean stopped;
+    private int pendingPalette = -1;
 
     @PluginMethod
-    public synchronized void setPalette(PluginCall call) {
-        String palette = call.getString("palette", "");
-        int selected = -1;
-        for (int index = 0; index < PALETTES.length; index++) {
-            if (PALETTES[index].equals(palette)) selected = index;
-        }
+    public void setPalette(PluginCall call) {
+        int selected = Arrays.asList(PALETTES).indexOf(call.getString("palette", ""));
         if (selected < 0) {
             call.reject("Unknown Budgetly palette.");
             return;
         }
 
-        try {
-            applyPalette(getContext().getPackageManager(), getContext().getPackageName(), selected);
+        getActivity().runOnUiThread(() -> {
+            pendingPalette = selected;
+            if (stopped) applyPendingPalette();
             call.resolve();
+        });
+    }
+
+    @Override protected void handleOnStart() {
+        stopped = false;
+    }
+
+    @Override protected void handleOnStop() {
+        if (getActivity().isChangingConfigurations()) return;
+        stopped = true;
+        applyPendingPalette();
+    }
+
+    private void applyPendingPalette() {
+        if (pendingPalette < 0) return;
+        try {
+            applyPalette(getContext().getPackageManager(), getContext().getPackageName(), pendingPalette);
+            pendingPalette = -1;
         } catch (RuntimeException error) {
-            call.reject("The Android launcher icon could not be updated.");
+            // Keep the pending palette for the next time Budgetly is backgrounded.
         }
     }
 
