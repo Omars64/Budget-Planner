@@ -1,4 +1,8 @@
 {
+  "6.22.4": [
+    {"title":"Cleaner Android launcher icon","detail":"The centered wallet sits on a single background across all five palettes."},
+    {"title":"Midnight Blue & Mint","detail":"The mint palette now uses deep blue backgrounds and cool blue surfaces."}
+  ],
   "6.22.3": [
     {"title":"Palette changes keep Budgetly open","detail":"Android updates the home-screen icon after you leave Budgetly. The in-app palette and logo change as soon as you choose them."}
   ],
