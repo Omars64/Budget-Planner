@@ -33,7 +33,7 @@ const More = lazy(() => import('./pages/More'))
 const Spaces = lazy(() => import('./pages/Spaces'))
 const BankMessages = lazy(() => import('./pages/BankMessages'))
 import BrandLogo from './components/BrandLogo'
-import { applyInstalledBrandIcon, brandLogoUrl } from './lib/brandLogo'
+import { applyInstalledBrandIcon, setBrandFavicon } from './lib/brandLogo'
 import BrandFooter from './components/BrandFooter'
 import PasswordInput from './components/PasswordInput'
 import { useConfirmation } from './components/Confirmation'
@@ -217,11 +217,19 @@ export function LoginScreen({ onLogin, onGuest, returningGuest = false, initialM
   </div>
 }
 
+function StartupScreen({ label }) {
+  return <div className="app-loading" role="status" aria-label={label}><span className="startup-ring" aria-hidden="true"/></div>
+}
+
 export default function App() {
   const currentLocation = useLocation()
   const { confirm, confirmation } = useConfirmation()
   const [session, setSession] = useState({ loading: true, user: null })
-  const [settings, setSettings] = useState(() => ({ ...readDeviceAppearance(), logo_style: 'current', currency: 'KWD', display_name: 'Budgetly', week_starts_on: 'sunday', compact_numbers: false }))
+  const [deviceAppearance, setDeviceAppearanceState] = useState(readDeviceAppearance)
+  const [accountSettings, setSettings] = useState(() => ({ ...deviceAppearance, logo_style: 'current', currency: 'KWD', display_name: 'Budgetly', week_starts_on: 'sunday', compact_numbers: false }))
+  const setDeviceAppearance = useCallback(patch => setDeviceAppearanceState(current => ({ ...current, ...patch })), [])
+  const { color_palette, theme } = deviceAppearance
+  const settings = useMemo(() => ({ ...accountSettings, color_palette, theme }), [accountSettings, color_palette, theme])
   const [appearance, setAppearance] = useState({ profile_image: '', wallpaper_image: '' })
   const [refreshKey, setRefreshKey] = useState(0)
   const plannedRead = useRef(null)
@@ -250,14 +258,12 @@ export default function App() {
   const spaceState = useSpaces(session.user, notify, confirm)
   const { activeSpace } = spaceState
   const { count:bankInboxCount, latestId:bankInboxLatestId } = usePendingBankAlerts(!isGuest && spaceState.spacesReady ? session.user?.id : null, activeSpace?.id)
-  useAppearance(settings, activeSpace?.accent)
-  useEffect(() => {
-    const icon = document.querySelector('link[rel="icon"]')
-    if (icon) icon.href = brandLogoUrl(settings.color_palette, session.user ? settings.logo_style : 'current')
-  }, [settings.color_palette, settings.logo_style, session.user])
-  useEffect(() => applyInstalledBrandIcon(settings.color_palette), [settings.color_palette])
+  useAppearance(settings)
+  const faviconStyle = session.user ? settings.logo_style : 'current'
+  useEffect(() => setBrandFavicon(color_palette, faviconStyle), [color_palette, faviconStyle])
+  useEffect(() => applyInstalledBrandIcon(color_palette), [color_palette])
   const accountPage = ['/settings', '/admin', '/feedback', '/ask-ai'].includes(currentLocation.pathname)
-  const viewSettings = activeSpace && !accountPage ? {...settings, currency: activeSpace.currency, accent_color: activeSpace.accent} : settings
+  const viewSettings = activeSpace && !accountPage ? {...settings, currency: activeSpace.currency} : settings
   useEffect(()=>installMoneyInputDefaults(document,viewSettings.currency),[viewSettings.currency])
   useEffect(() => {
     if (!toast) return undefined
@@ -422,15 +428,15 @@ export default function App() {
   }, [])
 
   const value = useMemo(() => ({
-    user: session.user, settings: viewSettings, accountSettings: settings, setSettings, appearance, setAppearance, ...spaceState,
+    user: session.user, settings: viewSettings, accountSettings: settings, setSettings, setDeviceAppearance, appearance, setAppearance, ...spaceState,
     spaceKey: activeSpace ? `space:${activeSpace.id}` : 'personal',
     canAdd: !activeSpace || ['owner', 'edit'].includes(activeSpace.role), canManage: !activeSpace || ['owner', 'edit'].includes(activeSpace.role),
     bankInboxCount, bankInboxLatestId, refreshKey, refresh, notify, confirm, reloadSettings: loadSettings, reloadAppearance: loadAppearance, reloadUser, isGuest, requestSignIn, lock: isGuest ? () => setGuestSigningIn(true) : signOut,
-  }), [session.user, settings, viewSettings, spaceState, activeSpace, appearance, bankInboxCount, bankInboxLatestId, refreshKey, refresh, notify, confirm, loadSettings, loadAppearance, reloadUser, signOut, isGuest, requestSignIn])
+  }), [session.user, settings, viewSettings, setDeviceAppearance, spaceState, activeSpace, appearance, bankInboxCount, bankInboxLatestId, refreshKey, refresh, notify, confirm, loadSettings, loadAppearance, reloadUser, signOut, isGuest, requestSignIn])
 
-  if (session.loading) return <div className="app-loading"><BrandLogo className="pulse" /></div>
+  if (session.loading) return <StartupScreen label="Loading Budgetly"/>
   if (!session.user || guestSigningIn) return <WelcomeScreen onGuest={enterGuest} returningGuest={isGuest} renderAuth={(mode, setWorking) => <LoginScreen initialMode={mode} embedded onBusyChange={setWorking} onLogin={completeLogin} onGuest={enterGuest} returningGuest={isGuest}/>}/>
-  if (!spaceState.spacesReady) return <div className="app-loading" role="status"><BrandLogo className="pulse" /><span>Opening workspace...</span></div>
+  if (!spaceState.spacesReady) return <StartupScreen label="Opening workspace"/>
 
   return <AppContext.Provider value={value}>
     {!isGuest && <Experience />}

@@ -97,6 +97,54 @@
             </intent-filter>
         </activity-alias>
 
+        <activity-alias android:name=".LauncherPorcelain" android:targetActivity=".MainActivity"
+            android:icon="@mipmap/wallet_launcher_porcelain" android:enabled="false" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias android:name=".LauncherVoltage" android:targetActivity=".MainActivity"
+            android:icon="@mipmap/wallet_launcher_voltage" android:enabled="false" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias android:name=".LauncherLagoon" android:targetActivity=".MainActivity"
+            android:icon="@mipmap/wallet_launcher_lagoon" android:enabled="false" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias android:name=".LauncherUltramarine" android:targetActivity=".MainActivity"
+            android:icon="@mipmap/wallet_launcher_ultramarine" android:enabled="false" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias android:name=".LauncherLilac" android:targetActivity=".MainActivity"
+            android:icon="@mipmap/wallet_launcher_lilac" android:enabled="false" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias android:name=".LauncherPapaya" android:targetActivity=".MainActivity"
+            android:icon="@mipmap/wallet_launcher_papaya" android:enabled="false" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

@@ -5,8 +5,8 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#101b29",
-  "theme_color": "#0a4173",
+  "background_color": "#101318",
+  "theme_color": "#1c3a59",
   "icons": [
     { "src": "/budgetly-wallet-icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "/budgetly-wallet-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }

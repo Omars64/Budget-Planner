@@ -97,7 +97,7 @@ export default function Wallets(){
               <div className="wallet-network-options">{['visa','mastercard'].map(network => <button key={network} type="button" className={form.card_network === network ? 'selected' : ''} aria-pressed={form.card_network === network} onClick={() => setForm({...form,card_network:network})}><CardNetworkMark network={network}/></button>)}</div>
             </fieldset>}
             <label className="field"><span>Card finish</span><AppSelect value={form.card_finish || 'fixed'} onChange={event => setForm({...form,card_finish:event.target.value === 'fixed' ? null : event.target.value})}>
-              <option value="cream">Follow palette · Cream wordmark</option><option value="gold">Follow palette · Soft gold wordmark</option>
+              <option value="cream">Follow palette · Automatic wordmark</option><option value="gold">Follow palette · Soft gold wordmark</option>
               <option value="charcoal">Follow palette · Charcoal wordmark</option><option value="fixed">Fixed color</option>
             </AppSelect></label>
             {!form.card_finish && <fieldset className="wallet-card-setting"><legend>Card color</legend><div className="wallet-color-options">

@@ -15,17 +15,15 @@ import java.util.List;
 
 @CapacitorPlugin(name = "BudgetlyLauncherIcon")
 public class BudgetlyLauncherIconPlugin extends Plugin {
-    private static final String[] PALETTES = {"navy", "aubergine", "burgundy", "pine", "graphite"};
-    private static final String[] ALIASES = {"LauncherNavy", "LauncherAubergine", "LauncherBurgundy", "LauncherPine", "LauncherGraphite"};
     private static final int FLAGS = PackageManager.DONT_KILL_APP;
     // Only the activity's main thread reads or writes these fields.
     private boolean stopped;
-    private int pendingPalette = -1;
+    private String pendingPalette;
 
     @PluginMethod
     public void setPalette(PluginCall call) {
-        int selected = Arrays.asList(PALETTES).indexOf(call.getString("palette", ""));
-        if (selected < 0) {
+        String selected = call.getString("palette", "");
+        if (!Arrays.asList(getContext().getResources().getStringArray(R.array.budgetly_launcher_palettes)).contains(selected)) {
             call.reject("Unknown Budgetly palette.");
             return;
         }
@@ -48,28 +46,30 @@ public class BudgetlyLauncherIconPlugin extends Plugin {
     }
 
     private void applyPendingPalette() {
-        if (pendingPalette < 0) return;
+        if (pendingPalette == null) return;
         try {
-            applyPalette(getContext().getPackageManager(), getContext().getPackageName(), pendingPalette);
-            pendingPalette = -1;
+            applyPalette(getContext().getPackageManager(), getContext().getPackageName(), pendingPalette,
+                    getContext().getResources().getStringArray(R.array.budgetly_launcher_palettes));
+            pendingPalette = null;
         } catch (RuntimeException error) {
             // Keep the pending palette for the next time Budgetly is backgrounded.
         }
     }
 
-    private static void applyPalette(PackageManager manager, String packageName, int selected) {
+    private static void applyPalette(PackageManager manager, String packageName, String selected, String[] palettes) {
         List<ComponentName> changed = new ArrayList<>();
-        for (int index = 0; index < ALIASES.length; index++) {
-            ComponentName alias = new ComponentName(packageName, MainActivity.class.getPackage().getName() + "." + ALIASES[index]);
+        for (String palette : palettes) {
+            ComponentName alias = new ComponentName(packageName, aliasClass(palette));
             int state = manager.getComponentEnabledSetting(alias);
             boolean enabled = state == PackageManager.COMPONENT_ENABLED_STATE_ENABLED
-                    || (index == 0 && state == PackageManager.COMPONENT_ENABLED_STATE_DEFAULT);
-            if (enabled == (index == selected)) continue;
+                    || ("navy".equals(palette) && state == PackageManager.COMPONENT_ENABLED_STATE_DEFAULT);
+            boolean shouldEnable = palette.equals(selected);
+            if (enabled == shouldEnable) continue;
             // On older Android versions, enable the replacement before disabling the old icon.
-            if (index == selected) changed.add(0, alias);
+            if (shouldEnable) changed.add(0, alias);
             else changed.add(alias);
         }
-        String target = MainActivity.class.getPackage().getName() + "." + ALIASES[selected];
+        String target = aliasClass(selected);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             List<PackageManager.ComponentEnabledSetting> settings = new ArrayList<>();
             for (ComponentName alias : changed) {
@@ -79,6 +79,11 @@ public class BudgetlyLauncherIconPlugin extends Plugin {
         } else {
             for (ComponentName alias : changed) manager.setComponentEnabledSetting(alias, enabledState(alias, target), FLAGS);
         }
+    }
+
+    private static String aliasClass(String palette) {
+        return MainActivity.class.getPackage().getName() + ".Launcher"
+                + Character.toUpperCase(palette.charAt(0)) + palette.substring(1);
     }
 
     private static int enabledState(ComponentName alias, String target) {

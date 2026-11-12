@@ -2,6 +2,7 @@
   "appId": "com.flowbudget.app",
   "appName": "Budgetly",
   "webDir": "dist",
+  "android": { "backgroundColor": "#101318" },
   "server": { "androidScheme": "https", "cleartext": false },
   "plugins": {
     "CapacitorHttp": { "enabled": true },

@@ -1,13 +1,14 @@
-const { app, BrowserWindow, ipcMain, nativeImage, net, shell, session } = require('electron')
+const { app, BrowserWindow, ipcMain, net, shell, session } = require('electron')
 const fs = require('node:fs/promises')
 const path = require('node:path')
 const { registerWindowsUpdates } = require('./windows-update.cjs')
+const { appId, restorePalette, imageForPalette, applyPalette } = require('./palette-icon.cjs')
 
 const origin = 'https://budget-planner-ecru-seven.vercel.app'
 const assets = path.join(__dirname, '..', 'dist')
 const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.woff2': 'font/woff2' }
 let mainWindow
-const paletteIcons = new Set(['navy', 'aubergine', 'burgundy', 'pine', 'graphite'])
+let showOnPaletteReady
 
 function isBudgetlyFrame(event) {
   const frame = event.senderFrame
@@ -33,9 +34,18 @@ async function serve(request) {
 }
 
 function createWindow() {
-  const win = new BrowserWindow({ width: 1280, height: 820, minWidth: 920, minHeight: 620, title: 'Budgetly', icon: path.join(__dirname, 'icon.ico'), webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, preload: path.join(__dirname, 'preload.cjs') } })
+  const savedPalette = restorePalette()
+  const win = new BrowserWindow({ width: 1280, height: 820, minWidth: 920, minHeight: 620, title: 'Budgetly', show: false, backgroundColor: '#101318', icon: imageForPalette(savedPalette), webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, preload: path.join(__dirname, 'preload.cjs') } })
   mainWindow = win
-  win.on('closed', () => { if (mainWindow === win) mainWindow = null })
+  let readyToPaint = false
+  let paletteReady = Boolean(savedPalette)
+  const show = () => { if (!win.isDestroyed() && !win.isVisible()) win.show() }
+  const fallback = setTimeout(show, 5000)
+  showOnPaletteReady = () => { paletteReady = true; if (readyToPaint) show() }
+  win.once('ready-to-show', () => { readyToPaint = true; if (paletteReady) show() })
+  win.once('show', () => clearTimeout(fallback))
+  win.on('closed', () => { clearTimeout(fallback); if (mainWindow === win) { mainWindow = null; showOnPaletteReady = null } })
+  if (savedPalette) applyPalette(win, savedPalette)
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (url === 'about:blank' || url.startsWith('https://accounts.google.com/')) return { action: 'allow', overrideBrowserWindowOptions: { webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true } } }
     if (url.startsWith('https://')) void shell.openExternal(url)
@@ -49,12 +59,11 @@ function createWindow() {
 
 if (!app.requestSingleInstanceLock()) app.quit()
 else app.whenReady().then(() => {
+  if (process.platform === 'win32') app.setAppUserModelId(appId)
   ipcMain.on('budgetly:version', event => { event.returnValue = app.getVersion() })
   registerWindowsUpdates(origin, isBudgetlyFrame)
   ipcMain.on('budgetly:palette-icon', (event, palette) => {
-    if (!isBudgetlyFrame(event) || !paletteIcons.has(palette)) return
-    const icon = nativeImage.createFromPath(path.join(__dirname, 'brand', palette + '.png'))
-    if (!icon.isEmpty()) mainWindow.setIcon(icon)
+    if (isBudgetlyFrame(event) && applyPalette(mainWindow, palette)) showOnPaletteReady?.()
   })
   session.defaultSession.protocol.handle('https', serve)
   createWindow()

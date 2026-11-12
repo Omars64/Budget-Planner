@@ -208,7 +208,7 @@ class SettingsPayload(BaseModel):
     font_family: Literal['system', 'arial', 'georgia', 'verdana'] = 'system'
     text_color: Literal['ink', 'charcoal', 'forest'] = 'ink'
     theme: Literal['light', 'dark', 'system'] = 'light'
-    color_palette: Literal['navy', 'aubergine', 'burgundy', 'pine', 'graphite'] = 'navy'
+    color_palette: Literal['navy', 'aubergine', 'burgundy', 'pine', 'graphite', 'porcelain', 'voltage', 'lagoon', 'ultramarine', 'lilac', 'papaya'] = 'navy'
     seasonal_mode: Literal['off', 'automatic', 'manual'] = 'off'
     seasonal_theme: Literal['halloween', 'rain', 'winter', 'summer', 'autumn', 'spring'] = 'winter'
     seasonal_hemisphere: Literal['north', 'south'] = 'north'

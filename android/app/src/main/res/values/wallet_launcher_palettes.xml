@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="budgetly_launcher_palettes" translatable="false">
+        <item>navy</item>
+        <item>aubergine</item>
+        <item>burgundy</item>
+        <item>pine</item>
+        <item>graphite</item>
+        <item>porcelain</item>
+        <item>voltage</item>
+        <item>lagoon</item>
+        <item>ultramarine</item>
+        <item>lilac</item>
+        <item>papaya</item>
+    </string-array>
+</resources>

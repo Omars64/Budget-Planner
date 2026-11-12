@@ -1,4 +1,9 @@
 {
+  "6.22.5": [
+    {"title":"Six new palettes","detail":"Each palette has its own light and dark colors, matching launcher icon, and wallet cards. Navy & Glacier Blue is now a clearer navy."},
+    {"title":"A smoother startup","detail":"Budgetly uses a circular loading indicator and restores your chosen launcher or window icon."},
+    {"title":"A palette for each device","detail":"Appearance and palette choices stay on this device and apply in Personal and shared Spaces."}
+  ],
   "6.22.4": [
     {"title":"Cleaner Android launcher icon","detail":"The centered wallet sits on a single background across all five palettes."},
     {"title":"Midnight Blue & Mint","detail":"The mint palette now uses deep blue backgrounds and cool blue surfaces."}

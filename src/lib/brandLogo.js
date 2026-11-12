@@ -7,6 +7,10 @@ export function brandLogoUrl(palette, style) {
   return style === 'legacy' ? '/flowbudget-logo-legacy.png' : `/brand/wallet-${paletteKey(palette)}.png`
 }
 
+export function setBrandFavicon(palette, style) {
+  document.querySelector('link[rel="icon"]')?.setAttribute('href', brandLogoUrl(palette, style))
+}
+
 export function applyInstalledBrandIcon(palette) {
   const key = paletteKey(palette)
   window.budgetlyDesktop?.setPaletteIcon?.(key)

@@ -7,6 +7,7 @@ import { restoreOfflineSession, setOfflineUser } from './lib/offlineSync'
 import { syncPlannedNotifications } from './lib/plannedNotifications'
 import { notificationSettingsChangedEvent } from './lib/notificationSettings'
 import { updateResourcePolicy } from './lib/resourcePolicy'
+import { readDeviceAppearance } from './lib/appearance'
 
 vi.mock('./lib/api', async importOriginal => ({
   ...await importOriginal(), api: vi.fn(), flushOfflineTransactions: vi.fn(async () => {}),
@@ -15,7 +16,7 @@ vi.mock('./lib/api', async importOriginal => ({
 vi.mock('./lib/plannedNotifications', () => ({syncPlannedNotifications:vi.fn(),cancelPlannedNotifications:vi.fn(async()=>{})}))
 vi.mock('./lib/offlineSync', () => ({rememberOfflineSession:vi.fn(async()=>{}),restoreOfflineSession:vi.fn(async()=>null),setOfflineUser:vi.fn()}))
 vi.mock('./lib/useSpaces', () => ({default:()=>({spacesReady:true,activeSpace:null})}))
-vi.mock('./lib/appearance', () => ({readDeviceAppearance:()=>({}),useAppearance:()=>{}}))
+vi.mock('./lib/appearance', () => ({readDeviceAppearance:vi.fn(()=>({})),useAppearance:()=>{}}))
 vi.mock('./components/Experience', () => ({default:()=>null}))
 vi.mock('./components/FeedbackPrompt', () => ({default:()=>null}))
 vi.mock('./components/AppShell', () => ({default:({children})=><main>{children}</main>}))
@@ -24,8 +25,8 @@ vi.mock('./components/RouteMotion', async () => {
   return {default:({children})=>children(useLocation())}
 })
 vi.mock('./pages/Overview', () => ({default:()=>{
-  const {refresh}=useApp()
-  return <button onClick={refresh}>Refresh data</button>
+  const {refresh,settings,setDeviceAppearance}=useApp()
+  return <><button onClick={refresh}>Refresh data</button><button onClick={()=>setDeviceAppearance({color_palette:'pine'})}>{settings.theme} {settings.color_palette}</button></>
 }}))
 
 const tick = async ms => { await act(async()=>vi.advanceTimersByTimeAsync(ms)) }
@@ -38,7 +39,7 @@ beforeEach(() => {
   syncPlannedNotifications.mockResolvedValue(undefined)
   api.mockImplementation(async path => path==='/api/auth/me' ? {id:7,role:'user'} : path==='/api/runtime-policy' ? {client_poll_seconds:60} : {})
 })
-afterEach(()=>{cleanup();vi.useRealTimers();vi.restoreAllMocks();updateResourcePolicy({client_poll_seconds:60})})
+afterEach(()=>{cleanup();vi.useRealTimers();vi.restoreAllMocks();vi.unstubAllGlobals();updateResourcePolicy({client_poll_seconds:60})})
 
 async function openApp() {
   const view=render(<MemoryRouter><App/></MemoryRouter>)
@@ -46,6 +47,23 @@ async function openApp() {
   await tick(0)
   return view
 }
+
+test('account settings cannot replace the device palette or reset the launcher on sign-in',async()=>{
+  readDeviceAppearance.mockReturnValueOnce({theme:'dark',color_palette:'burgundy'})
+  const setPaletteIcon=vi.fn()
+  vi.stubGlobal('budgetlyDesktop',{setPaletteIcon})
+  const defaultApi=api.getMockImplementation()
+  api.mockImplementation((path,...args)=>path==='/api/settings' ? Promise.resolve({theme:'light',color_palette:'navy'}) : defaultApi(path,...args))
+  const {container}=render(<MemoryRouter><App/></MemoryRouter>)
+  expect(screen.getByRole('status',{name:'Loading Budgetly'})).toBeInTheDocument()
+  expect(container.querySelector('.app-loading img')).toBeNull()
+  await tick(0)
+  expect(setPaletteIcon.mock.calls).toEqual([['burgundy']])
+  fireEvent.click(screen.getByRole('button',{name:'dark burgundy'}))
+  expect(screen.getByRole('button',{name:'dark pine'})).toBeInTheDocument()
+  expect(setPaletteIcon.mock.calls).toEqual([['burgundy'],['pine']])
+  expect(api.mock.calls.some(([path,options])=>path==='/api/settings'&&options?.method==='PUT')).toBe(false)
+})
 
 test('planned notification polling follows policy, pauses hidden/offline and cleans up events',async()=>{
   const view=await openApp()

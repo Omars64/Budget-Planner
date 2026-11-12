@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="startup_ring_icon" type="drawable">@drawable/startup_ring_motion</item>
+</resources>

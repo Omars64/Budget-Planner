@@ -1,0 +1,116 @@
+{
+  "navy": {
+    "name": "Navy & Glacier Blue",
+    "deep": "#1c3a59",
+    "light": "#f1f8fc",
+    "action": "#195c7a",
+    "bright": "#8fd8f5",
+    "iconBackground": "#1C3A59",
+    "composeIcon": true,
+    "card": {"light":"#285679","dark":"#1c3a59","ink":"#effaff","line":"#8fd8f5"}
+  },
+  "aubergine": {
+    "name": "Midnight Blue & Mint",
+    "deep": "#0b1830",
+    "light": "#f2f7fc",
+    "action": "#176447",
+    "bright": "#43f4b3",
+    "iconBackground": "#150929"
+  },
+  "burgundy": {
+    "name": "Burgundy, Cream & Soft Gold",
+    "deep": "#321622",
+    "light": "#fff5e7",
+    "action": "#742c48",
+    "bright": "#e7be79",
+    "iconBackground": "#321622"
+  },
+  "pine": {
+    "name": "Pine Green & Copper",
+    "deep": "#132b25",
+    "light": "#f7f3e9",
+    "action": "#285a49",
+    "bright": "#e5ac86",
+    "iconBackground": "#132B25"
+  },
+  "graphite": {
+    "name": "Graphite & Lavender",
+    "deep": "#20232c",
+    "light": "#f5f4f8",
+    "action": "#62468e",
+    "bright": "#c5b5fa",
+    "iconBackground": "#20232C"
+  },
+  "porcelain": {
+    "name": "Porcelain & Vermilion",
+    "deep": "#211d1c",
+    "light": "#f6f1ec",
+    "action": "#aa2827",
+    "bright": "#ff8174",
+    "iconBackground": "#F5EEE4",
+    "composeIcon": true,
+    "card": {"light":"#fffefa","dark":"#e8dfd4","ink":"#29221e","line":"#aa2827"},
+    "lightMode": {"bar":"#fffefa","barInk":"#26211f","page":"#f6f1ec","ink":"#24201e","muted":"#625751","balance":"#fffefa","balanceInk":"#26211f","action":"#aa2827","actionInk":"#ffffff"},
+    "darkMode": {"bar":"#161515","barInk":"#fff4e8","page":"#211d1c","ink":"#fff4e8","muted":"#d2bfb4","balance":"#3f2421","balanceInk":"#fff4e8","action":"#ff8174","actionInk":"#30100d"}
+  },
+  "voltage": {
+    "name": "Carbon & Voltage",
+    "deep": "#171d17",
+    "light": "#eef0e8",
+    "action": "#202b1b",
+    "bright": "#e1fa87",
+    "iconBackground": "#CAFF36",
+    "composeIcon": true,
+    "card": {"light":"#d6f43d","dark":"#9fbb24","ink":"#151e0d","line":"#3c5515"},
+    "lightMode": {"bar":"#171b17","barInk":"#e4ff83","page":"#eef0e8","ink":"#172016","muted":"#4b594c","balance":"#d6f43d","balanceInk":"#151e0d","action":"#202b1b","actionInk":"#edffc2"},
+    "darkMode": {"bar":"#0c100c","barInk":"#ddfb84","page":"#171d17","ink":"#f4f8ec","muted":"#bdccbd","balance":"#d6f43d","balanceInk":"#151e0d","action":"#e1fa87","actionInk":"#1c270e"}
+  },
+  "lagoon": {
+    "name": "Lagoon & Orchid",
+    "deep": "#163d38",
+    "light": "#e4f6f0",
+    "action": "#91266a",
+    "bright": "#f0aed8",
+    "iconBackground": "#E79CCA",
+    "composeIcon": true,
+    "card": {"light":"#00736a","dark":"#004c46","ink":"#f0fffa","line":"#f0aed8"},
+    "lightMode": {"bar":"#00675f","barInk":"#f0fffa","page":"#e4f6f0","ink":"#103f37","muted":"#3b5e57","balance":"#00675f","balanceInk":"#f0fffa","action":"#91266a","actionInk":"#fff4fc"},
+    "darkMode": {"bar":"#12352f","barInk":"#d7fff5","page":"#163d38","ink":"#e7fff8","muted":"#b7dcd2","balance":"#f0aed8","balanceInk":"#421133","action":"#f0aed8","actionInk":"#421133"}
+  },
+  "ultramarine": {
+    "name": "Sand & Ultramarine",
+    "deep": "#1d2143",
+    "light": "#fdf5e7",
+    "action": "#263dc0",
+    "bright": "#f1d4a1",
+    "iconBackground": "#2945DB",
+    "composeIcon": true,
+    "card": {"light":"#3149d5","dark":"#192a8e","ink":"#fffafa","line":"#f1d4a1"},
+    "lightMode": {"bar":"#f3ddba","barInk":"#282017","page":"#fdf5e7","ink":"#282017","muted":"#5e5042","balance":"#263dc0","balanceInk":"#fffafa","action":"#263dc0","actionInk":"#fffafa"},
+    "darkMode": {"bar":"#151937","barInk":"#f8ebd3","page":"#1d2143","ink":"#fbf4e8","muted":"#c7c7e2","balance":"#2e45ca","balanceInk":"#fffafa","action":"#f1d4a1","actionInk":"#27221b"}
+  },
+  "lilac": {
+    "name": "Lilac & Evergreen",
+    "deep": "#19382e",
+    "light": "#f8f1ff",
+    "action": "#20503a",
+    "bright": "#d7c3ff",
+    "iconBackground": "#DDD1FF",
+    "composeIcon": true,
+    "card": {"light":"#d7c3ff","dark":"#ae94e1","ink":"#251538","line":"#174c38"},
+    "lightMode": {"bar":"#e9dcfc","barInk":"#2e2241","page":"#f8f1ff","ink":"#302343","muted":"#645271","balance":"#20503a","balanceInk":"#f0fff2","action":"#20503a","actionInk":"#f0fff2"},
+    "darkMode": {"bar":"#103225","barInk":"#f3e6ff","page":"#19382e","ink":"#f3e6ff","muted":"#c9dbcb","balance":"#d7c3ff","balanceInk":"#2e1c49","action":"#d7c3ff","actionInk":"#2e1c49"}
+  },
+  "papaya": {
+    "name": "Papaya & Espresso",
+    "deep": "#301c18",
+    "light": "#fff1e3",
+    "action": "#48271d",
+    "bright": "#ffdfb7",
+    "iconBackground": "#FFAE70",
+    "composeIcon": true,
+    "card": {"light":"#ffbd86","dark":"#e88b55","ink":"#361c12","line":"#6f3722"},
+    "lightMode": {"bar":"#ffc08c","barInk":"#361c12","page":"#fff1e3","ink":"#361c12","muted":"#705143","balance":"#ffbd86","balanceInk":"#361c12","action":"#48271d","actionInk":"#fff6eb"},
+    "darkMode": {"bar":"#211413","barInk":"#ffe5d1","page":"#301c18","ink":"#fff1e2","muted":"#dfc0b0","balance":"#ffad71","balanceInk":"#37190f","action":"#ffdfb7","actionInk":"#381e17"}
+  }
+}

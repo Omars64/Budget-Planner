@@ -63,7 +63,7 @@
 .spending-dot { width:14px;height:14px;border-radius:50%;justify-self:center; }
 .goal-detail-icon {
   display:grid;place-items:center;width:56px;height:56px;border-radius:17px;
-  background:var(--palette-header-panel);color:var(--palette-bright);
+  background:var(--palette-header-panel);color:var(--palette-header-accent);
 }
 .goal-detail-hero h2 { margin:0;font-size:clamp(25px,4vw,38px);overflow-wrap:anywhere; }
 .goal-detail-hero p { margin:0; }

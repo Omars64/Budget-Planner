@@ -4,6 +4,7 @@ import com.getcapacitor.BridgeActivity;
 import androidx.activity.OnBackPressedCallback;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.browser.auth.AuthTabIntent;
+import androidx.core.splashscreen.SplashScreen;
 import android.content.Intent;
 import android.net.Uri;
 
@@ -23,6 +24,7 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override public void onCreate(android.os.Bundle state) {
+        SplashScreen.installSplashScreen(this);
         registerPlugin(BankSmsPlugin.class);
         registerPlugin(BankNotificationsPlugin.class);
         registerPlugin(PasskeysPlugin.class);

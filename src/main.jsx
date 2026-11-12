@@ -4,6 +4,7 @@ import { Capacitor } from '@capacitor/core'
 import { HashRouter } from 'react-router-dom'
 import MotionPreferences from './components/MotionPreferences'
 import { applyAppearance, readDeviceAppearance } from './lib/appearance'
+import { setBrandFavicon } from './lib/brandLogo'
 import App from './App'
 import {installNumberWheelGuard} from './lib/numberWheel'
 import DownloadApp from './pages/DownloadApp'
@@ -50,7 +51,9 @@ import './poc-followup.css'
 import AppErrorBoundary from './components/AppErrorBoundary'
 import { installClientDiagnostics } from './lib/diagnostics'
 
-applyAppearance(readDeviceAppearance())
+const deviceAppearance = readDeviceAppearance()
+applyAppearance(deviceAppearance)
+setBrandFavicon(deviceAppearance.color_palette)
 const removeNumberWheelGuard=installNumberWheelGuard()
 const removeClientDiagnostics=installClientDiagnostics()
 if(import.meta.hot)import.meta.hot.dispose(removeClientDiagnostics)

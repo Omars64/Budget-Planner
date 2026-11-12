@@ -1,0 +1,24 @@
+.app-loading {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #101318;
+}
+
+.startup-ring {
+  width: 54px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: conic-gradient(from -60deg, #ffffff18, #ffffff36 38%, #ffffffa0 75%, #fff);
+  mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3.5px));
+  animation: startup-spin 1s linear infinite;
+}
+
+@keyframes startup-spin {
+  to { transform: rotate(1turn); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .startup-ring { animation: none; }
+}

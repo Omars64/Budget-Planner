@@ -1,6 +1,7 @@
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { applyAppearance, readDeviceAppearance, useAppearance } from './appearance'
+import { colorPalettes } from './colorPalettes'
 
 let media
 beforeEach(()=>{
@@ -22,7 +23,7 @@ it('retains visual preferences after logout/unmount and restores them on a fresh
   expect(localStorage.getItem('budgetly_device_appearance')).not.toContain('email')
 })
 
-it('updates for another account and tracks device theme changes',()=>{
+it('tracks changes to the local appearance and system theme',()=>{
   const {rerender}=renderHook(({theme})=>useAppearance({theme}),{initialProps:{theme:'dark'}})
   rerender({theme:'light'})
   expect(document.documentElement.dataset.theme).toBe('light')
@@ -39,11 +40,33 @@ it('falls back safely if cached appearance is malformed',()=>{
   expect(readDeviceAppearance().color_palette).toBe('navy')
 })
 
-it('keeps the selected palette on the welcome screen and honors the Space accent in the workspace',()=>{
-  const {unmount}=renderHook(()=>useAppearance({theme:'dark',color_palette:'burgundy',accent_color:'#123456'},'#267d75'))
+it('keeps the personal palette in a shared workspace and on the welcome screen',()=>{
+  const {unmount}=renderHook(()=>useAppearance({theme:'dark',color_palette:'burgundy',accent_color:'#267d75'}))
   expect(document.documentElement.style.getPropertyValue('--palette-bright')).toBe('#e7be79')
-  expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#267d75')
+  expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#e7be79')
   unmount()
   applyAppearance(readDeviceAppearance())
   expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#e7be79')
+})
+
+it('applies the approved surfaces and default wallet card in both modes and clears them on a legacy palette',()=>{
+  const { style } = document.documentElement
+  for (const key of ['porcelain','voltage','lagoon','ultramarine','lilac','papaya']) {
+    const palette = colorPalettes[key]
+    for (const theme of ['light','dark']) {
+      const colors = palette[`${theme}Mode`]
+      applyAppearance({theme,color_palette:key})
+      expect(style.getPropertyValue('--palette-role-header')).toBe(colors.bar)
+      expect(style.getPropertyValue('--palette-role-page')).toBe(colors.page)
+      expect(style.getPropertyValue('--palette-role-balance')).toBe(colors.balance)
+      expect(style.getPropertyValue('--accent-contrast')).toBe(colors.actionInk)
+      expect(style.getPropertyValue('--palette-card-ink')).toBe(palette.card.ink)
+    }
+  }
+  applyAppearance({theme:'dark',color_palette:'aubergine'})
+  expect(style.getPropertyValue('--palette-role-balance')).toBe('')
+  expect(style.getPropertyValue('--palette-card-ink')).toBe('')
+  expect(style.getPropertyValue('--palette-deep')).toBe('#0b1830')
+  applyAppearance({theme:'dark',color_palette:'navy'})
+  expect(style.getPropertyValue('--palette-deep')).toBe('#1c3a59')
 })

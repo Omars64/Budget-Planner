@@ -4,4 +4,10 @@
     <color name="wallet_launcher_burgundy_background">#321622</color>
     <color name="wallet_launcher_pine_background">#132B25</color>
     <color name="wallet_launcher_graphite_background">#20232C</color>
+    <color name="wallet_launcher_porcelain_background">#F5EEE4</color>
+    <color name="wallet_launcher_voltage_background">#CAFF36</color>
+    <color name="wallet_launcher_lagoon_background">#E79CCA</color>
+    <color name="wallet_launcher_ultramarine_background">#2945DB</color>
+    <color name="wallet_launcher_lilac_background">#DDD1FF</color>
+    <color name="wallet_launcher_papaya_background">#FFAE70</color>
 </resources>

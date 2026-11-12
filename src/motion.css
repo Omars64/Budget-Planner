@@ -60,7 +60,7 @@
 }
 
 /* Decorative movement never repeats; functional status spinners remain. */
-.ambient i,.auth-card .brand-logo,.app-loading .pulse,.wallet-orbit { animation:none!important; }
+.ambient i,.auth-card .brand-logo,.wallet-orbit { animation:none!important; }
 
 :root:is([data-motion=reduced],[data-motion=off]) *,
 :root:is([data-motion=reduced],[data-motion=off]) *::before,
