@@ -1,4 +1,9 @@
 {
+  "6.22.6": [
+    {"title":"Cleaner Settings and Admin","detail":"Settings rows are easier to tap, privacy has its own page, and explanations are available from info buttons. Admin uses the same navigation as Settings."},
+    {"title":"A clearer Overview balance","detail":"The label above your total now uses the balance card’s text colour."},
+    {"title":"Windows update progress","detail":"Budgetly displays download and verification progress for signed in-app updates."}
+  ],
   "6.22.5": [
     {"title":"Six new palettes","detail":"Each palette has its own light and dark colors, matching launcher icon, and wallet cards. Navy & Glacier Blue is now a clearer navy."},
     {"title":"A smoother startup","detail":"Budgetly uses a circular loading indicator and restores your chosen launcher or window icon."},

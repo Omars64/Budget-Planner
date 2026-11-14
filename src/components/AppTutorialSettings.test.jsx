@@ -3,6 +3,9 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import AppTutorial from './AppTutorial'
+import SettingsSection from './SettingsSection'
+import SettingsWorkspace from './SettingsWorkspace'
+import { Activity } from 'lucide-react'
 
 const state = vi.hoisted(() => ({ config: null, driver: null, steps: [], notify: vi.fn() }))
 vi.mock('../App', () => ({ useApp: () => ({ user: { id: 101, role: 'user' }, notify: state.notify }) }))
@@ -142,4 +145,22 @@ test.each([true, false])('legacy admin summaries remain targetable and open thei
   } finally {
     window.removeEventListener('budgetly:settings-open', opened)
   }
+})
+
+test('the tutorial opens the Admin directory and reveals the service heading', async () => {
+  state.steps = [{ route: '/admin', section: 'Service health', title: 'Health', description: 'Health' }]
+  const sections = [{ id: 'health', title: 'Service health', description: 'Health checks', icon: Activity }]
+  function Workspace() {
+    const { pathname } = useLocation()
+    return <main className="page-wrap" data-tour-page={pathname}>
+      {pathname === '/admin' && <SettingsWorkspace admin sections={sections}>
+        <SettingsSection title="Service health" settingsId="health"><p>Service details</p></SettingsSection>
+      </SettingsWorkspace>}
+    </main>
+  }
+  await startTour(<Workspace/>)
+  const target = state.config.steps[0].element()
+  expect(target.tagName).toBe('H3')
+  expect(target).toBeVisible()
+  expect(screen.getByRole('button', { name: 'All admin tools' })).toBeVisible()
 })

@@ -13,14 +13,11 @@
 .settings-search input { border:0;background:transparent;color:var(--text);padding:0;min-width:0;width:100%;font-size:14px;outline-offset:4px; }
 .settings-menu-label { margin:22px 12px 10px;text-transform:uppercase;font-size:12px;font-weight:700;color:var(--muted); }
 .settings-category { display:flex;align-items:center;gap:12px;position:relative;isolation:isolate;width:100%;border:0;text-align:left;background:transparent;color:var(--text);padding:13px 12px;border-radius:8px;min-height:72px;margin:3px 0; }
-.settings-category>span:not(.settings-selection) { flex:1;min-width:0;font-size:15px;line-height:1.4;font-weight:650; }
-.settings-category small { display:block;font-size:12px;line-height:1.45;color:var(--muted);font-weight:400;margin-top:4px; }
+.settings-category>span { flex:1;min-width:0;font-size:16px;line-height:1.4;font-weight:650; }
+.settings-category small { display:block;font-size:13px;line-height:1.45;color:var(--muted);font-weight:400;margin-top:4px; }
 .settings-category>svg { flex-shrink:0; }
 .settings-category>svg:last-child { color:var(--muted); }
-.settings-category[aria-current=page] { color:var(--accent-text,var(--accent)); }
 .settings-category:hover { background:var(--surface-hover); }
-.settings-selection { position:absolute;inset:0;z-index:-1;background:var(--accent-soft);border-radius:8px;pointer-events:none; }
-.settings-selection:before { content:'';position:absolute;left:0;top:24%;bottom:24%;width:3px;border-radius:3px;background:var(--accent-text,var(--accent)); }
 .settings-detail { padding:30px 32px;min-width:0;overflow-x:clip;scroll-margin-top:80px; }
 .settings-breadcrumb { font-size:12px;color:var(--muted);margin:0 0 22px; }
 .settings-page-heading { display:flex;align-items:center;gap:15px;margin-bottom:12px; }
@@ -29,11 +26,17 @@
 .settings-description { color:var(--muted);font-size:15px;margin:0 0 22px; }
 .settings-scope { display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px;padding-bottom:20px;border-bottom:2px solid var(--settings-divider);margin-bottom:4px; }
 .settings-scope svg { flex-shrink:0; }
-.settings-back { display:inline-flex;align-items:center;gap:8px;background:transparent;border:0;padding:8px 0;color:var(--accent-text,var(--accent));min-height:44px;margin-bottom:18px; }
+.settings-back { display:inline-flex;align-items:center;gap:9px;background:transparent;border:1px solid var(--line);border-radius:10px;padding:9px 14px;color:var(--accent-text,var(--accent));min-height:48px;margin:0 0 12px;font-size:15px;font-weight:650; }
+.settings-back:hover { background:var(--surface-hover); }
 .settings-workspace .settings-subsection { padding:26px 0;border:0;border-bottom:2px solid var(--settings-divider);background:transparent;box-shadow:none;border-radius:0; }
 .settings-workspace .settings-subsection:last-child { border-bottom:0; }
-.settings-workspace .settings-subsection>h3 { display:flex;align-items:center;gap:10px;font-size:18px;line-height:1.4;margin:0 0 18px;font-weight:700; }
-.settings-workspace .settings-subsection>h3:before { content:'';width:4px;height:17px;border-radius:3px;background:var(--accent-text,var(--accent));flex-shrink:0; }
+.settings-workspace :is(.settings-subsection>h3,.settings-heading-with-help>h3) { display:flex;align-items:center;gap:10px;font-size:18px;line-height:1.4;margin:0 0 18px;font-weight:700; }
+.settings-workspace :is(.settings-subsection>h3,.settings-heading-with-help>h3):before { content:'';width:4px;height:17px;border-radius:3px;background:var(--accent-text,var(--accent));flex-shrink:0; }
+.settings-heading-with-help,.settings-help-row { display:flex;align-items:center;gap:8px; }
+.settings-workspace .settings-heading-with-help { margin-bottom:12px; }
+.settings-workspace .settings-heading-with-help>h3 { margin:0; }
+.settings-help-row>.button { flex:1; }
+.settings-help-row>.compact-info-button { flex-shrink:0; }
 .settings-subsection-body { min-width:0; }
 .settings-workspace .settings-subsection :is(h4,legend) { font-size:16px;font-weight:650;line-height:1.4;margin-block:14px 10px; }
 .settings-workspace .settings-subsection .muted { font-size:13px;line-height:1.6; }
@@ -49,8 +52,9 @@
 .settings-workspace .settings-subsection details { border:1px solid var(--line);border-radius:8px;margin:14px 0;background:var(--surface-soft); }
 .settings-workspace .settings-subsection details>summary { display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:54px;padding:14px 16px;font-size:15px;font-weight:650;list-style:none;cursor:pointer; }
 .settings-workspace .settings-subsection details>summary::-webkit-details-marker { display:none; }
-.settings-workspace .settings-subsection details>summary:after { content:'›';font-size:24px;line-height:1;color:var(--accent-text,var(--accent));transition:rotate .25s; }
+.settings-workspace .settings-subsection details:not(.welcome-animation-settings)>summary::after { content:'›';font-size:24px;line-height:1;color:var(--accent-text,var(--accent));transition:rotate .25s; }
 .settings-workspace .settings-subsection details[open]>summary:after { rotate:90deg; }
+.welcome-animation-settings summary>svg { flex-shrink:0;color:var(--accent-text,var(--accent)); }
 .settings-workspace .settings-subsection details>summary~* { margin-inline:16px;max-width:calc(100% - 32px); }
 .settings-workspace .settings-subsection details>summary~*:last-child { margin-bottom:16px; }
 .settings-workspace .settings-profile { padding:26px 0;border:0;border-bottom:2px solid var(--settings-divider);border-radius:0;background:transparent;box-shadow:none; }
@@ -72,8 +76,6 @@
   .budgetly-v2 .settings-workspace { display:block;min-height:600px; }
   .settings-workspace .settings-menu { border:0;padding:22px 16px; }
   .settings-category { border-bottom:2px solid var(--settings-divider);border-radius:0;min-height:76px;margin:0; }
-  .settings-selection { display:none; }
-  .settings-category[aria-current=page] { color:var(--text); }
   .settings-workspace[data-mobile-detail=false] .settings-detail,.settings-workspace[data-mobile-detail=true] .settings-menu { display:none; }
   .settings-detail { padding:18px 20px 26px; }
   .settings-back { display:flex; }

@@ -14,7 +14,6 @@ import ScrollMemory from './ScrollMemory'
 import Milestone from './Milestone'
 import ConnectionStatus from './ConnectionStatus'
 import AndroidUpdate from './AndroidUpdate'
-import WindowsUpdate from './WindowsUpdate'
 import { useContainedScroll } from '../lib/scrollLock'
 import BrandFooter from './BrandFooter'
 import { useWorkspacePreferences } from '../lib/workspacePreferences'
@@ -123,7 +122,7 @@ export default function AppShell({ children }) {
   const walletDetail = isWallets && Boolean(pageParams.get('wallet') || location.state?.walletId)
   const goalDetail = location.pathname === '/goals' && (pageParams.has('goal') || pageParams.has('debt'))
   const spending = location.pathname === '/spending'
-  const isSettings = location.pathname === '/settings'
+  const isSettings = ['/settings','/admin'].includes(location.pathname)
   const selectedPage = visibleNav.find(([path]) => path === location.pathname)
   const subtitle = isOverview
     ? isGuest ? 'Saved on this device' : activeSpace ? 'Shared money at a glance' : 'Your money at a glance'
@@ -177,7 +176,6 @@ export default function AppShell({ children }) {
         </div>
       </header>
       <AndroidUpdate userId={user?.id} role={user?.role} guest={isGuest}/>
-      <WindowsUpdate/>
       {isGuest && <div className="guest-banner"><span>Guest mode · Saved on this device</span><button className="button ghost small" onClick={() => requestSignIn('cloud storage and more features')}>Sign in</button></div>}
       <motion.div className={`page-wrap${isOverview || walletDetail || goalDetail || spending || isSettings ? ' palette-page-split' : ' palette-sheet'}`} data-tour-page={location.pathname} key={location.pathname} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .18, ease: 'easeOut' }}>
         <PageActionsProvider target={pageActions} floatingTarget={floatingAction}>{children}</PageActionsProvider>

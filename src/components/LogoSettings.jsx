@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useApp } from '../App'
 import { api, jsonBody } from '../lib/api'
 import SettingsSection from './SettingsSection'
+import SettingsHelp from './SettingsHelp'
 import BrandLogo from './BrandLogo'
 import './LogoSettings.css'
 
@@ -26,8 +27,9 @@ export default function LogoSettings() {
     finally { setSaving(false) }
   }
 
-  return <SettingsSection title="App logo" className="logo-settings">
-    <p className="muted">The wallet logo follows your color palette. Choose Legacy blue to use the original logo inside Budgetly.</p>
+  return <SettingsSection title="App logo" className="logo-settings" help={<SettingsHelp title="About the app logo">
+    <p>The wallet logo follows your color palette. Choose Legacy blue to use the original logo inside Budgetly.</p>
+  </SettingsHelp>}>
     <div className="logo-choices" role="group" aria-label="App logo">
       {choices.map(choice => <button key={choice.value} type="button" className="logo-choice" aria-pressed={selected === choice.value} disabled={saving} onClick={() => choose(choice.value)}>
         <BrandLogo style={choice.value} palette={(accountSettings || settings).color_palette} alt=""/>

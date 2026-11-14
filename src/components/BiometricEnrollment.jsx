@@ -4,6 +4,7 @@ import { biometricSupported } from '../lib/biometric'
 import DeviceSignInPreference from './DeviceSignInPreference'
 import GoogleSignIn from './GoogleSignIn'
 import PasswordInput from './PasswordInput'
+import SettingsHelp from './SettingsHelp'
 
 export default function BiometricEnrollment({ user, enabled, busy, passwordOnly, onPasswordOnly, password, onPassword, onEnable, onDisable }) {
   const [method, setMethod] = useState(() => user.google_linked || user.has_password === false ? 'google' : 'password')
@@ -25,16 +26,17 @@ export default function BiometricEnrollment({ user, enabled, busy, passwordOnly,
     await onEnable(method)
   }
   return <div className="biometric-enrollment stack gap-12">
-    <p className="muted">Register your device fingerprint, face or screen lock as a passkey. {user.google_linked ? 'Google sign-in remains available as a fallback.' : 'Your Budgetly password remains available as a fallback.'}</p>
     <DeviceSignInPreference googleOnly={user.has_password === false} disabled={blocked} onChange={onPasswordOnly}/>
     {passwordOnly ? <p className="muted">Biometrics are turned off on this device. Turn off the sign-in-only setting above to register a passkey.</p> : <>
       {user.google_linked && user.has_password !== false && <fieldset><legend>Confirm your identity using</legend><div className="segment-control" role="group" aria-label="Passkey confirmation method">
         <button type="button" aria-pressed={method === 'google'} disabled={blocked} onClick={() => setMethod('google')}>Google</button>
         <button type="button" aria-pressed={method === 'password'} disabled={blocked} onClick={() => setMethod('password')}>Budgetly password</button>
       </div></fieldset>}
-      <div className="biometric-steps" aria-label="Registration steps"><span className={method === 'google' && verifiedUntil > Date.now() ? '' : 'active'}><b>1</b>Verify account</span><span aria-hidden="true">→</span><span className={method === 'google' && verifiedUntil > Date.now() ? 'active' : ''}><b>2</b>Register device</span></div>
+      <div className="settings-help-row">
+        <div className="biometric-steps" aria-label="Registration steps"><span className={method === 'google' && verifiedUntil > Date.now() ? '' : 'active'}><b>1</b>Verify account</span><span aria-hidden="true">→</span><span className={method === 'google' && verifiedUntil > Date.now() ? 'active' : ''}><b>2</b>Register device</span></div>
+        {method === 'google' && <SettingsHelp title="Using Google to verify your account"><p>Confirm with your linked Google account, then register your device. You can do this without a Budgetly password.</p></SettingsHelp>}
+      </div>
       {method === 'google' ? <>
-        <p className="muted">Confirm with your linked Google account, then register your device below. No Budgetly password is needed.</p>
         {verifiedUntil > Date.now() ? <p className="biometric-verified" role="status"><CheckCircle2 size={18}/>Google account confirmed. Ready to register this device.</p> : <GoogleSignIn mode="reauth" disabled={busy || !supported} onBusyChange={setGoogleBusy} onComplete={() => setVerifiedUntil(Date.now() + 4 * 60 * 1000)} unavailableMessage="Google confirmation is unavailable. Check your connection and retry, or choose Budgetly password if you have one."/>}
       </> : <>
         <label className="field"><span>Confirm password to register a passkey</span><PasswordInput autoComplete="current-password" value={password} onChange={event => onPassword(event.target.value)}/></label>

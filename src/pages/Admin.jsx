@@ -1,6 +1,6 @@
 import AppSelect from '../components/AppSelect'
 import { useEffect, useMemo, useState } from 'react'
-import { History, Palette, Pencil, Plus, Search, ShieldCheck, Trash2, UserRoundCheck, UserRoundX } from 'lucide-react'
+import { Activity, Database, History, MessageSquare, Palette, Pencil, Plus, Search, Trash2, UserRoundCheck, UserRoundX, Users } from 'lucide-react'
 import { api, jsonBody } from '../lib/api'
 import PasswordInput from '../components/PasswordInput'
 import { useApp } from '../App'
@@ -9,6 +9,7 @@ import OperationsPanel from '../components/OperationsPanel'
 import ResourcePolicyPanel from '../components/ResourcePolicyPanel'
 import EmptyState from '../components/EmptyState'
 import SettingsSection from '../components/SettingsSection'
+import SettingsWorkspace from '../components/SettingsWorkspace'
 import AssistantSettings from '../components/AssistantSettings'
 import GoogleMark from '../components/GoogleMark'
 import UserSignins from '../components/UserSignins'
@@ -16,6 +17,12 @@ import { signinTime } from '../lib/signinTime'
 
 const fresh = () => ({ username: '', email: '', password: '', role: 'user', active: true })
 const freshCategory = () => ({ name: '', kind: 'expense', icon: 'circle', color: '#0a4173' })
+const sections = [
+  { id:'health', title:'Service health', description:'Scheduler, backups and service checks', icon:Activity },
+  { id:'database', title:'Database usage', description:'Resource controls and usage history', icon:Database },
+  { id:'assistant', title:'Ask Budgetly', description:'AI availability and usage limits', icon:MessageSquare },
+  { id:'users', title:'User management', description:'Accounts, roles and sign-in history', icon:Users },
+]
 
 export default function Admin() {
   const { user, notify ,confirm} = useApp()
@@ -86,28 +93,19 @@ export default function Admin() {
     catch (err) { notify(err.message, 'error') }
   }
 
-  return <div className="settings-grid admin-settings">
+  return <div className="admin-settings"><SettingsWorkspace admin sections={sections}>
+    <SettingsSection title="Service health" settingsId="health"><OperationsPanel standalone={false}/></SettingsSection>
+    <SettingsSection title="Database usage" settingsId="database"><ResourcePolicyPanel/></SettingsSection>
+    <SettingsSection title="Ask Budgetly" settingsId="assistant"><AssistantSettings/></SettingsSection>
+    <SettingsSection title="User management" settingsId="users">
     {error && !open && <div className="form-error" role="alert">{error}<button className="button ghost small" onClick={()=>load().catch(err=>setError(err.message))}>Retry</button></div>}
-    <SettingsSection title="Service health"><OperationsPanel/></SettingsSection>
-    <SettingsSection title="Database usage"><ResourcePolicyPanel/></SettingsSection>
-    <SettingsSection title="Ask Budgetly"><AssistantSettings/></SettingsSection>
-    <SettingsSection title="User management">
-    <section className="section-intro glass">
-      <div>
-        <p className="eyebrow"><ShieldCheck size={14}/> Admin workspace</p>
-        <h2>Manage the people who use Budgetly.</h2>
-        <p className="muted">Create accounts, adjust roles, reset passwords, and retire users cleanly.</p>
-      </div>
+
+    <section className="toolbar admin-user-toolbar">
+      <div className="search-box"><Search size={18}/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search users" aria-label="Search users"/></div>
       <button className="button primary" onClick={() => show(null)}><Plus/>Add user</button>
     </section>
 
-    <section className="toolbar glass">
-      <div className="search-box"><Search size={18}/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search users" /></div>
-      <span className="admin-count">{visible.length} visible</span>
-    </section>
-
-    <section className="panel glass">
-      <div className="panel-head"><div><p className="eyebrow">Accounts</p><h3>User directory</h3></div></div>
+    <section className="admin-user-directory" aria-label="User directory">
       {!visible.length ? <EmptyState title="No users found" text="Try a different search or create a teammate."/> : <div className="user-table">
         {visible.map(row => <article className="user-row" key={row.id}>
           <span className={`round-icon ${row.active ? '' : 'inactive'}`}>{row.active ? <UserRoundCheck/> : <UserRoundX/>}</span>
@@ -119,6 +117,7 @@ export default function Admin() {
       </div>}
     </section>
     </SettingsSection>
+    </SettingsWorkspace>
 
     {signinUser && <UserSignins key={signinUser.id} account={signinUser} onClose={() => setSigninUser(null)}/>}
 

@@ -1,6 +1,5 @@
-import { Children, isValidElement, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
-import { motion } from 'framer-motion'
-import { ArrowLeft, Banknote, Bell, ChevronRight, CloudUpload, Coffee, Landmark, Palette, Search, ShieldCheck, Smartphone, UserRound } from 'lucide-react'
+import { Children, isValidElement, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { ArrowLeft, Banknote, Bell, ChevronRight, CloudUpload, Coffee, FileLock2, Landmark, Palette, Search, ShieldCheck, Smartphone, UserRound } from 'lucide-react'
 import { useAppMotion } from '../lib/appMotion'
 import { SettingsInlineContext, SettingsVisibleContext } from '../lib/settingsContext'
 import './SettingsWorkspace.css'
@@ -12,7 +11,8 @@ const groups = [
   { id: 'notifications', title: 'Notifications', description: 'Updates, reminders and scheduled entries', icon: Bell, terms: 'upcoming expense update quiet hours reminder scheduled notification' },
   { id: 'android', title: 'Android app', description: 'Latest version and release notes', icon: Smartphone, terms: 'android phone latest version release mobile app' },
   { id: 'bank', title: 'Bank messages', description: 'Connected apps and wallet matching', icon: Landmark, terms: 'smart bank inbox notification access card matching capture android' },
-  { id: 'backup', title: 'Backups & data', description: 'Google Drive, exports and recovery', icon: CloudUpload, label: 'Your data', terms: 'trash deleted recovery restore google drive export statement privacy reset guest records' },
+  { id: 'backup', title: 'Backups & data', description: 'Google Drive, exports and recovery', icon: CloudUpload, label: 'Your data', terms: 'trash deleted recovery restore google drive export statement reset guest records' },
+  { id: 'privacy', title: 'Privacy policy', description: 'How Budgetly handles your data', icon: FileLock2, terms: 'privacy personal information data storage retention sharing rights' },
   { id: 'support', title: 'Support & about', description: 'Coffee preferences and app information', icon: Coffee, terms: 'coffee tip support popup sidebar about' },
 ]
 const titleGroups = {
@@ -20,27 +20,28 @@ const titleGroups = {
   'Currency configuration': 'money', 'Display & locale': 'money', 'Categories': 'money', 'Transaction entry': 'money',
   'Notifications': 'notifications', 'Smart Bank Inbox': 'bank',
   'Biometric sign-in': 'account', 'Delete account': 'account', 'Guest workspace': 'account', 'Account features': 'account',
-  'Backup & restore': 'backup', 'Privacy & data': 'backup', 'Reset workspace': 'backup', 'Export and local data': 'backup',
+  'Backup & restore': 'backup', 'Privacy policy': 'privacy', 'Reset workspace': 'backup', 'Export and local data': 'backup',
 }
-const sectionOrder = { 'Biometric sign-in': 30, 'Delete account': 90, 'Reset workspace': 90, 'Privacy & data': 80, 'Categories': 20, 'Transaction entry': 30, 'Display & locale': 40 }
+const sectionOrder = { 'Biometric sign-in': 30, 'Delete account': 90, 'Reset workspace': 90, 'Categories': 20, 'Transaction entry': 30, 'Display & locale': 40 }
 
-export default function SettingsWorkspace({ children, guest = false }) {
-  const [selected, setSelected] = useState('account')
-  const [displayed, setDisplayed] = useState('account')
+export default function SettingsWorkspace({ children, guest = false, sections = groups, admin = false }) {
+  const title = admin ? 'Admin' : 'Settings'
+  const directory = admin ? 'admin' : 'settings'
+  const [selected, setSelected] = useState(sections[0].id)
+  const [displayed, setDisplayed] = useState(sections[0].id)
   const [mobileDetail, setMobileDetail] = useState(false)
   const [query, setQuery] = useState('')
   const mode = useAppMotion()
   const body = useRef(null), heading = useRef(null), menuHeading = useRef(null)
   const sequence = useRef(0), direction = useRef(1)
-  const instance = useId()
   const parts = Children.toArray(children).map(child => ({ child, group: isValidElement(child) ? child.props.settingsId || child.props['data-settings-id'] || titleGroups[child.props.title] : null }))
-  const available = groups.filter(group => parts.some(part => part.group === group.id))
-  const visible = available.filter(group => `${group.title} ${group.description} ${group.terms}`.toLowerCase().includes(query.trim().toLowerCase()))
-  const current = groups.find(group => group.id === displayed)
+  const available = sections.filter(group => parts.some(part => part.group === group.id))
+  const visible = available.filter(group => `${group.title} ${group.description} ${group.terms || ''}`.toLowerCase().includes(query.trim().toLowerCase()))
+  const current = sections.find(group => group.id === displayed)
 
   const show = useCallback(async (id, immediate = false) => {
     const token = ++sequence.current
-    direction.current = groups.findIndex(group => group.id === id) >= groups.findIndex(group => group.id === selected) ? 1 : -1
+    direction.current = sections.findIndex(group => group.id === id) >= sections.findIndex(group => group.id === selected) ? 1 : -1
     setSelected(id)
     body.current?.getAnimations?.().forEach(animation => animation.cancel())
     if (!immediate && mode === 'full' && body.current?.getBoundingClientRect().width && body.current.animate) {
@@ -54,7 +55,7 @@ export default function SettingsWorkspace({ children, guest = false }) {
       heading.current?.scrollIntoView?.({ block: 'nearest', behavior: 'instant' })
       heading.current?.focus({ preventScroll: true })
     })
-  }, [mode, selected])
+  }, [mode, selected, sections])
 
   useLayoutEffect(() => {
     if (mode !== 'full') return
@@ -67,14 +68,15 @@ export default function SettingsWorkspace({ children, guest = false }) {
   // listener in the same commit so it can handle the first reveal request.
   useLayoutEffect(() => {
     const reveal = event => {
+      if ((event.detail?.directory || 'settings') !== directory) return
       const title = event.detail?.section
-      const section = [...document.querySelectorAll('[data-settings-group] [data-tour-section]')].find(element => element.dataset.tourSection === title)
+      const section = [...(body.current?.querySelectorAll('[data-settings-group] [data-tour-section]') ?? [])].find(element => element.dataset.tourSection === title)
       const id = section?.closest('[data-settings-group]')?.dataset.settingsGroup || titleGroups[title]
       if (id) void show(id, true)
     }
     window.addEventListener('budgetly:settings-open', reveal)
     return () => window.removeEventListener('budgetly:settings-open', reveal)
-  }, [show])
+  }, [directory, show])
 
   const back = useCallback(() => {
     sequence.current++
@@ -93,23 +95,22 @@ export default function SettingsWorkspace({ children, guest = false }) {
 
   return <div className="settings-workspace palette-settings-workspace" data-mobile-detail={mobileDetail}>
     <div className="palette-dark-section palette-settings-heading">
-      {mobileDetail ? <><button type="button" className="settings-back" onClick={back}><ArrowLeft size={18}/>All settings</button><h2 ref={heading} tabIndex={-1}>{current.title}</h2><p>{current.description}</p></> : <><h2 ref={menuHeading} tabIndex={-1}>Settings</h2><p>Make Budgetly work the way you like</p></>}
+      {mobileDetail ? <><button type="button" className="settings-back" onClick={back}><ArrowLeft size={20}/>{admin ? 'All admin tools' : 'All settings'}</button><h2 ref={heading} tabIndex={-1}>{current.title}</h2><p>{current.description}</p></> : <><h2 ref={menuHeading} tabIndex={-1}>{title}</h2><p>{admin ? 'Manage accounts and service controls' : 'Make Budgetly work the way you like'}</p></>}
     </div>
-    <aside className="settings-menu palette-sheet" aria-label="Settings categories" hidden={mobileDetail}>
-      <label className="settings-search"><Search size={18} aria-hidden="true"/><input type="search" value={query} placeholder="Search settings" aria-label="Search settings" onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && visible[0]) { event.preventDefault(); void show(visible[0].id) } }}/></label>
-      <nav aria-label="Choose a settings category">
+    <aside className="settings-menu palette-sheet" aria-label={admin ? 'Admin tools' : 'Settings categories'} hidden={mobileDetail}>
+      <label className="settings-search"><Search size={18} aria-hidden="true"/><input type="search" value={query} placeholder={admin ? 'Search admin tools' : 'Search settings'} aria-label={admin ? 'Search admin tools' : 'Search settings'} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && visible[0]) { event.preventDefault(); void show(visible[0].id) } }}/></label>
+      <nav aria-label={admin ? 'Choose an admin tool' : 'Choose a settings category'}>
         {visible.map(group => <div key={group.id}>
           {group.label && <p className="settings-menu-label">{group.label}</p>}
-          <button type="button" className="settings-category" aria-current={selected === group.id ? 'page' : undefined} onClick={() => void show(group.id)}>
-            {selected === group.id && <motion.span className="settings-selection" layoutId={`${instance}-selection`} transition={{ duration: mode === 'full' ? .38 : 0, ease: [.22, .8, .24, 1] }} aria-hidden="true"/>}
+          <button type="button" className="settings-category" onClick={() => void show(group.id)}>
             <group.icon size={20} aria-hidden="true"/><span>{group.title}<small>{group.description}</small></span><ChevronRight size={16} aria-hidden="true"/>
           </button>
         </div>)}
-        {!visible.length && <p className="muted" role="status">No matching settings.</p>}
+        {!visible.length && <p className="muted" role="status">{admin ? 'No matching admin tools.' : 'No matching settings.'}</p>}
       </nav>
     </aside>
     <div className="settings-detail palette-sheet" ref={body} hidden={!mobileDetail}>
-      <p className="settings-scope">{guest || ['bank', 'notifications', 'android'].includes(displayed) ? <Smartphone size={17} aria-hidden="true"/> : <UserRound size={17} aria-hidden="true"/>}{displayed === 'android' ? 'Official Android download' : guest ? 'Guest workspace · this device' : ['bank', 'notifications'].includes(displayed) ? 'This device only' : 'Your account and selected workspace'}</p>
+      {admin ? <p className="settings-scope"><ShieldCheck size={17} aria-hidden="true"/>Administrator access</p> : displayed !== 'privacy' && <p className="settings-scope">{guest || ['bank', 'notifications', 'android'].includes(displayed) ? <Smartphone size={17} aria-hidden="true"/> : <UserRound size={17} aria-hidden="true"/>}{displayed === 'android' ? 'Official Android download' : guest ? 'Guest workspace · this device' : ['bank', 'notifications'].includes(displayed) ? 'This device only' : 'Your account and selected workspace'}</p>}
       <SettingsInlineContext.Provider value={true}>
         {available.map(group => <div key={group.id} data-settings-group={group.id} hidden={displayed !== group.id} aria-label={group.title}>
           <SettingsVisibleContext.Provider value={mobileDetail && displayed === group.id}>{parts.filter(part => part.group === group.id).sort((a, b) =>

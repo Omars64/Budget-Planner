@@ -40,7 +40,7 @@ async function releaseFor(origin, version, signal) {
   return data
 }
 
-async function downloadInstaller(release, file, signal) {
+async function downloadInstaller(release, file, signal, report) {
   let url = new URL(release.url)
   for (let attempt = 0; attempt < 6; attempt++) {
     if (url.protocol !== 'https:' || !installerHosts.has(url.hostname) || url.port || url.username || url.password) {
@@ -57,11 +57,17 @@ async function downloadInstaller(release, file, signal) {
     if (!reply.ok || !reply.body) throw new Error('The Windows installer could not be downloaded.')
     const hash = createHash('sha256')
     let bytes = 0
+    let percentage = -1
     const verify = new Transform({
       transform(chunk, encoding, done) {
         bytes += chunk.length
         if (bytes > release.size) return done(new Error('The Windows installer exceeds its published size.'))
         hash.update(chunk)
+        const progress = Math.floor(100 * bytes / release.size)
+        if (progress !== percentage) {
+          percentage = progress
+          report({ phase:'downloading', percentage })
+        }
         done(null, chunk)
       },
     })
@@ -92,6 +98,9 @@ function registerWindowsUpdates(origin, trustedSender) {
       return { error:'The Windows update could not be started.' }
     }
     installing = true
+    const report = progress => {
+      if (trustedSender(event)) event.sender.send('budgetly:update-progress', progress)
+    }
     try {
       const identity = await installedIdentity()
       if (!identity) throw new Error('Install the first signed Budgetly version from the website to enable in-app updates.')
@@ -99,9 +108,11 @@ function registerWindowsUpdates(origin, trustedSender) {
       const release = await releaseFor(origin, version, signal)
       await startupCleanup
       await fs.mkdir(directory, { recursive:true })
-      await downloadInstaller(release, file, signal)
+      await downloadInstaller(release, file, signal, report)
+      report({ phase:'verifying' })
       if (await windowsPublisher(file) !== identity.publisher) throw new Error('Windows could not verify the installer against the installed publisher.')
       if (!trustedSender(event)) throw new Error('Open Budgetly to continue with the update.')
+      report({ phase:'restarting' })
       const scope = identity.scope === 'machine' ? '/allusers' : '/currentuser'
       const installer = spawn(file, ['/S', scope, '--updated', '--force-run'], { detached:true, stdio:'ignore', windowsHide:true })
       await new Promise((resolve, reject) => installer.once('spawn', resolve).once('error', reject))

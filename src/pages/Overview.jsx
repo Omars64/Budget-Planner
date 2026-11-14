@@ -58,7 +58,7 @@ export default function Overview() {
   return <div className="overview-page overview-focus">
     <div className="overview-top palette-dark-section">
     <section className="overview-balance palette-hero" aria-label="Available wallet balance">
-      <div><p className="muted">Available now · {activeSpace ? 'Space wallets' : 'Personal wallets'}</p><h1>{data ? <AnimatedMoney value={data.total_balance} currency={settings.currency} compact={settings.compact_numbers}/> : '-'}</h1></div>
+      <div><p className="overview-balance-label">Available now · {activeSpace ? 'Space wallets' : 'Personal wallets'}</p><h1>{data ? <AnimatedMoney value={data.total_balance} currency={settings.currency} compact={settings.compact_numbers}/> : '-'}</h1></div>
       {lead && <Link to={`/wallets?wallet=${lead.id}`} aria-label={`Open ${lead.name} wallet from balance`}><WalletCardArt wallet={lead} variant="mini"/></Link>}
     </section>
     {wallets.length > 0 && <div className="overview-wallet-shortcuts">

@@ -14,6 +14,7 @@ import ComfortSettings from '../components/ComfortSettings'
 import AppearancePreferences from '../components/AppearancePreferences'
 import WorkspacePreferences from '../components/WorkspacePreferences'
 import UpdateNotificationPreference from '../components/UpdateNotificationPreference'
+import PrivacySettings from '../components/PrivacySettings'
 
 export default function GuestSettings() {
   const { refresh, notify, confirm, requestSignIn } = useApp()
@@ -25,6 +26,7 @@ export default function GuestSettings() {
     } catch (error) { notify(error.message, 'error') }
   }
   return <SettingsWorkspace guest>
+    <PrivacySettings settingsId="privacy" guest/>
     <PaletteSettings settingsId="appearance" settingsOrder={0}/>
     <WelcomeAnimationSettings settingsId="appearance"/>
     <LogoSettings settingsId="appearance"/>

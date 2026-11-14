@@ -6,7 +6,7 @@ import {useApp} from '../App'
 import OperationalSignals from './OperationalSignals'
 import OperationJobs from './OperationJobs'
 
-export default function OperationsPanel(){
+export default function OperationsPanel({ standalone = true }){
   const {notify}=useApp()
   const [data,setData]=useState(null),[error,setError]=useState(''),[busy,setBusy]=useState(false)
   const [loading,setLoading]=useState(false),[checked,setChecked]=useState(null)
@@ -24,8 +24,8 @@ export default function OperationsPanel(){
     finally{if(!controller.signal.aborted)setLoading(false)}
   },[])
   useEffect(()=>{load();return()=>request.current?.abort()},[load])
-  return <section className="panel glass">
-    <div className="panel-head"><h3>Service health</h3><button className="icon-button" title="Refresh service health" aria-label="Refresh service health" disabled={loading||busy} onClick={load}><RefreshCw size={18}/></button></div>
+  return <section className={standalone ? 'panel glass' : 'stack gap-12'}>
+    <div className="panel-head">{standalone && <h3>Service health</h3>}<button type="button" className="button ghost" disabled={loading||busy} onClick={load}><RefreshCw size={18}/>Refresh service health</button></div>
     {error&&<p className="form-error" role="alert">{error}</p>}
     {loading&&<p role="status">Checking service health…</p>}
     {checked&&<p className="muted">{error?'Last successful check: ':'Checked: '}{showTime(checked)} Kuwait{error?' · Current status is unconfirmed.':''}</p>}

@@ -158,6 +158,8 @@ Run `npm run desktop:installer` to build the Windows installer. An upgrade reuse
 
 For verified distribution, configure Electron Builder with a trusted Windows code-signing identity. Set `BUDGETLY_REQUIRE_WINDOWS_SIGNING=1` before running the release batch to require valid Authenticode signatures from the same publisher on the installer and app. Existing unsigned installations need one manual installation of the first signed version. Later signed updates can use **Update and restart** inside Budgetly.
 
+To package Budgetly for Microsoft Store signing and managed updates, follow the [Store build instructions](docs/native-apps.md#desktop-application).
+
 ## First launch
 
 The first API startup creates the database and seeds a small demo dataset with wallets, transactions, budgets, goals and a debt. You can remove these records normally or use **Settings → Demo data → Reset demo data** to restore them.

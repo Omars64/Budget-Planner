@@ -3,8 +3,8 @@
   "description": "Budgetly personal finance and shared spaces",
   "author": "Omar Solanki",
   "private": true,
-  "version": "6.22.5",
-  "androidVersionCode": 131,
+  "version": "6.22.6",
+  "androidVersionCode": 132,
   "type": "module",
   "main": "desktop/main.cjs",
   "scripts": {
@@ -25,6 +25,7 @@
     "android:release-manifest": "node scripts/android-release-manifest.mjs",
     "preview": "vite preview",
     "desktop:installer": "npm run build && electron-builder --win nsis --x64",
+    "desktop:store": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows-store.ps1",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint ."

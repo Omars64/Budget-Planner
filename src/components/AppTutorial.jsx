@@ -36,8 +36,10 @@ function waitForTarget(step, signal) {
       const page = document.querySelector('.page-wrap')
       if (page?.dataset.tourPage === step.route) {
         if (targetFor(step)) return finish(true)
-        if (step.route === '/settings' && step.section) {
-          window.dispatchEvent(new window.CustomEvent('budgetly:settings-open', { detail: { section: step.section } }))
+        if (['/settings', '/admin'].includes(step.route) && step.section) {
+          const detail = { section: step.section }
+          if (step.route === '/admin') detail.directory = 'admin'
+          window.dispatchEvent(new window.CustomEvent('budgetly:settings-open', { detail }))
         }
       }
       if (window.performance.now() > deadline) return finish(false)

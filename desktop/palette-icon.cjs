@@ -46,7 +46,7 @@ function applyPalette(win, value) {
   const image = imageForPalette(value)
   if (image.isEmpty()) return false
   win.setIcon(image)
-  if (windows) {
+  if (windows && !process.windowsStore) {
     const icon = path.join(iconDirectory, value + '.ico')
     if (fs.existsSync(icon)) {
       win.setAppDetails({ appId, appIconPath: icon, appIconIndex: 0, relaunchCommand: `"${process.execPath}"`, relaunchDisplayName: 'Budgetly' })

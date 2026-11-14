@@ -27,7 +27,12 @@ WEBAUTHN_ORIGIN defaults to the production website above. Set it to the exact we
 
 ## Desktop application
 
-For a Windows installer, use a packaged Tauri or Electron desktop client with bundled assets and the same API, secure credential storage, native notification scheduling, and signed updates. For macOS add notarization and Apple signing; Linux can use AppImage/deb. Desktop packaging has not been implemented in this patch. Keep the server on Vercel so every client uses the same accounts and shared wallets. Do not bundle SMTP/database credentials into any client.
+Budgetly for Windows is an Electron build with bundled assets and the hosted API.
+
+- **Direct Windows installer.** Build with `npm run desktop:installer`. Set `BUDGETLY_REQUIRE_WINDOWS_SIGNING=1` for the release packaging workflow when a trusted signing identity is available. The installed app and setup executable must have valid Authenticode signatures from the same publisher. The in-app updater verifies the release checksum and publisher and runs the installer in the existing installation scope. Existing unsigned installations need a one-time transition to a trusted build.
+- **Microsoft Store.** Create and verify a Microsoft Partner Center developer account and reserve the app name. Copy the package identity, publisher certificate subject and publisher display name from the app's Product identity page into `BUDGETLY_STORE_IDENTITY`, `BUDGETLY_STORE_PUBLISHER` and `BUDGETLY_STORE_PUBLISHER_DISPLAY_NAME`. On Windows, run `npm run desktop:store` and submit the AppX from `dist-desktop/store`. Microsoft signs approved packages and delivers subsequent updates through the Store. Store installations use Windows package identity and rely on the Store to update. Before switching channels, save a copy of guest or other local-only data.
+
+See [Microsoft's code-signing options](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/code-signing-options) and [developer account registration](https://learn.microsoft.com/en-us/windows/apps/publish/partner-center/open-a-developer-account).
 
 ## SMS across both platforms
 

@@ -11,6 +11,7 @@ let mainWindow
 let showOnPaletteReady
 
 function isBudgetlyFrame(event) {
+  if (event.sender.isDestroyed()) return false
   const frame = event.senderFrame
   if (!frame || mainWindow?.webContents !== event.sender || frame !== event.sender.mainFrame || !frame.url.startsWith(origin + '/')) return false
   return new URL(frame.url).pathname === '/'
@@ -59,9 +60,11 @@ function createWindow() {
 
 if (!app.requestSingleInstanceLock()) app.quit()
 else app.whenReady().then(() => {
-  if (process.platform === 'win32') app.setAppUserModelId(appId)
-  ipcMain.on('budgetly:version', event => { event.returnValue = app.getVersion() })
-  registerWindowsUpdates(origin, isBudgetlyFrame)
+  if (process.platform === 'win32' && !process.windowsStore) app.setAppUserModelId(appId)
+  ipcMain.on('budgetly:desktop-info', event => {
+    event.returnValue = { version: app.getVersion(), updateChannel: process.windowsStore ? 'store' : 'installer' }
+  })
+  if (!process.windowsStore) registerWindowsUpdates(origin, isBudgetlyFrame)
   ipcMain.on('budgetly:palette-icon', (event, palette) => {
     if (isBudgetlyFrame(event) && applyPalette(mainWindow, palette)) showOnPaletteReady?.()
   })

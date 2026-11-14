@@ -8,6 +8,7 @@ import { notificationSettingsChangedEvent, updateNotificationsEnabled } from '..
 import { cancelUpdateNotification, notifyAppUpdate } from '../lib/updateNotifications'
 import { syncUpdatePush } from '../lib/updatePush'
 import Modal from './Modal'
+import WindowsUpdate from './WindowsUpdate'
 import { version } from '../../package.json'
 import { hasSeenRelease, markReleaseSeen, releaseNotes } from '../lib/releaseNotes'
 import { canReadResources } from '../lib/resourcePolicy'
@@ -29,8 +30,9 @@ export default function AndroidUpdate({ authentication = false, userId, guest = 
   const checking = useRef(null)
   const lastCheck = useRef(0)
   const native = androidUpdatesAvailable()
+  const desktop = Boolean(window.budgetlyDesktop)
   const enabled = !authentication && !guest && userId != null
-  const settings = enabled && pathname === '/settings'
+  const settings = (desktop || enabled) && pathname === '/settings'
   const currentNotes = releaseNotes(version, undefined, role)
 
   useEffect(() => {
@@ -52,7 +54,7 @@ export default function AndroidUpdate({ authentication = false, userId, guest = 
 
   async function check(manual = false, resumed = false) {
     if (!manual && !canReadResources()) return
-    if (!enabled || busy.current || checking.current || (!manual && Date.now() - lastCheck.current < (resumed ? 300000 : 21600000))) return
+    if (desktop || !enabled || busy.current || checking.current || (!manual && Date.now() - lastCheck.current < (resumed ? 300000 : 21600000))) return
     const controller = new AbortController()
     checking.current = controller
     const timeout = setTimeout(() => controller.abort(), 15000)
@@ -75,7 +77,7 @@ export default function AndroidUpdate({ authentication = false, userId, guest = 
 
   useEffect(() => {
     mounted.current = true
-    if (!enabled) return () => { mounted.current = false }
+    if (!enabled || desktop) return () => { mounted.current = false }
     void check()
     const timer = setInterval(() => { if (document.visibilityState === 'visible') void check() }, 21600000)
     const resume = () => { if (document.visibilityState === 'visible') void check(false, true) }
@@ -90,7 +92,7 @@ export default function AndroidUpdate({ authentication = false, userId, guest = 
       document.removeEventListener('visibilitychange', resume)
     }
     // This component owns one update check lifecycle, independent of page navigation.
-  }, [enabled])
+  }, [enabled, desktop])
 
   useEffect(() => {
     const changed = () => { const next = updateNotificationsEnabled(); setAlerts(next); if (!next) void cancelUpdateNotification().catch(() => {}); void syncUpdatePush(next).catch(() => {}) }
@@ -137,14 +139,16 @@ export default function AndroidUpdate({ authentication = false, userId, guest = 
   const publishedNotes = role === 'admin' && release?.adminNotes?.length ? release.adminNotes : release?.notes
   const notes = release ? releaseNotes(release.version, publishedNotes, role) : []
   const renderNotes = items => <ul className="release-change-list">{items.map(item => <li key={item.title}><Check size={17} aria-hidden="true"/><div><strong>{item.title}</strong><p>{item.detail}</p></div></li>)}</ul>
+  const whatsNewButton = !!currentNotes.length && !authentication && <button className="button ghost" onClick={() => setWhatsNew(true)}>What's new</button>
   return <>
-    {settings && <section className="update-settings-controls" aria-label="App updates">
+    {desktop && !authentication && <WindowsUpdate settings={settings}>{whatsNewButton}</WindowsUpdate>}
+    {!desktop && settings && <section className="update-settings-controls" aria-label="App updates">
       <button className="button ghost" disabled={status === 'checking'} onClick={() => {
         if (release && native) { setManualOpen(true); setDismissed(false) }
         else if (release) window.location.reload()
         else void check(true)
       }}><RefreshCw size={17}/>{status === 'checking' ? 'Checking...' : release ? native ? 'View update' : 'Refresh to latest version' : 'Check updates'}</button>
-      {!!currentNotes.length && !authentication && <button className="button ghost" onClick={() => setWhatsNew(true)}>What's new</button>}
+      {whatsNewButton}
       {message && !availableOpen && <p role="status">{message}</p>}
     </section>}
     <Modal open={availableOpen} onClose={() => { setDismissed(true); setManualOpen(false) }}

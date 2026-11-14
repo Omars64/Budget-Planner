@@ -297,13 +297,14 @@ body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2 .palette-sheet::befor
 .budgetly-v2 .palette-dark-section { padding:0 var(--layout-gutter) 24px; }
 body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2 .palette-dark-section { color:var(--palette-header-ink); }
 body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2 .palette-dark-section :is(h2,.wallet-ledger-total strong) { color:inherit; }
-body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2 .palette-dark-section :is(p,.wallet-ledger-total span) { color:var(--palette-header-muted); }
+body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2 .palette-dark-section :is(p:not(.overview-balance-label),.wallet-ledger-total span) { color:var(--palette-header-muted); }
 body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2 .palette-dark-section :is(.wallet-page-back,.settings-back,.overview-all-wallets) { color:var(--palette-header-accent); }
 
 .budgetly-v2 .overview-focus.overview-page { display:flex;flex-direction:column;gap:0;min-height:100%; }
 .overview-top { display:grid;gap:8px; }
 .budgetly-v2 .overview-focus .overview-balance { display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:14px 16px; }
 .budgetly-v2 .overview-focus .overview-balance h1 { margin-top:4px;font-size:clamp(23px,5.9vw,38px); }
+.overview-balance .overview-balance-label { color:inherit; }
 .overview-balance .budgetly-card-art.mini { width:clamp(52px,16vw,72px); }
 .overview-wallet-shortcuts>.overview-wallet-grid { grid-template-columns:repeat(auto-fit,minmax(min(100%,120px),1fr)); }
 .overview-wallet-shortcuts>.overview-wallet-grid>a { border:1px solid var(--palette-header-hover); }
@@ -335,11 +336,10 @@ body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2 .wallet-detail-action
 .budgetly-v2 .settings-workspace.palette-settings-workspace { display:block;max-width:none;min-height:0;background:none;border:0;isolation:auto; }
 .palette-settings-heading { padding-bottom:20px; }
 .palette-settings-heading p { margin:6px 0 0;font-size:14px; }
-.palette-settings-heading .settings-back { display:inline-flex;min-height:34px;margin:0 0 7px;padding:0; }
 .budgetly-v2 .palette-settings-workspace :is(.settings-menu,.settings-detail) { padding:34px var(--layout-gutter) 24px;border:0; }
-.palette-settings-workspace .settings-category { border:0;border-bottom:1px solid var(--line);border-radius:0;min-height:62px;margin:0;padding:9px 0; }
-.palette-settings-workspace .settings-selection,.palette-settings-workspace .settings-menu-label { display:none; }
-.palette-settings-workspace .settings-category>svg:first-child { width:36px;height:36px;padding:8px;background:var(--surface-soft);border-radius:10px; }
+.palette-settings-workspace .settings-category { border:0;border-bottom:1px solid var(--line);border-radius:0;min-height:76px;margin:0;padding:13px 5px; }
+.palette-settings-workspace .settings-menu-label { display:none; }
+.palette-settings-workspace .settings-category>svg:first-child { width:40px;height:40px;padding:9px;background:var(--surface-soft);border-radius:11px; }
 .palette-settings-workspace .settings-search { margin-bottom:12px; }
 .palette-settings-workspace .settings-scope { padding-bottom:10px;margin-top:0; }
 .palette-settings .palette-appearance { display:grid;grid-template-columns:minmax(0,1fr) minmax(130px,auto);align-items:center;gap:10px;margin-top:12px; }
