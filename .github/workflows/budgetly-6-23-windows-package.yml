@@ -1,0 +1,28 @@
+name: Budgetly 6.23.0 Windows packaging
+on:
+  push:
+    branches: [codex/budgetly-6-23-windows-package]
+permissions:
+  contents: read
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run desktop:installer -- --publish never
+      - run: node scripts/windows-release-manifest.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: budgetly-6.23.0-windows
+          path: |
+            dist-desktop/Budgetly-Setup-6.23.0.exe
+            dist-desktop/windows-update.json
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 3

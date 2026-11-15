@@ -1,6 +1,9 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render as mount, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import SpaceSwitcher from './SpaceSwitcher'
+
+const render = element => mount(element,{wrapper:MemoryRouter})
 
 const mocks = vi.hoisted(() => ({ app: {}, api: vi.fn() }))
 vi.mock('../App', () => ({ useApp: () => mocks.app }))

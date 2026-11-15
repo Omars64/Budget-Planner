@@ -182,6 +182,10 @@ def clear_workspace(payload: ClearWorkspaceIn, request: Request, user=Depends(cu
     confirmed(request, db, user)
     point = save_recovery(db, user, user, f"Cleared {payload.scope}")
     clear_budget(db, user.id, preserve_main_wallet=True, preserve_categories=True)
+    from .debt_workspace import Workspace, load_workspace
+    debt_row, debt_state = load_workspace(db, user.id)
+    if debt_row:
+        debt_row.value = Workspace(revision=debt_state.revision + 1).model_dump_json()
     if payload.scope == "workspace": clear_notes(db, user.id)
     set_setting(db, user.id, "workspace_initialized", "true")
     db.commit()
