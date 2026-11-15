@@ -1,4 +1,8 @@
 {
+  "6.23.0": [
+    {"title":"A private Debt Management workspace","detail":"Track loans, borrowed money and money lent. Open it from More or the workspace picker."},
+    {"title":"Payment months and actual dates","detail":"Log payments or receipts against an instalment, keep partial payments in history, set independent reminders and estimate your debt-free month."}
+  ],
   "6.22.6": [
     {"title":"Cleaner Settings and Admin","detail":"Settings rows are easier to tap, privacy has its own page, and explanations are available from info buttons. Admin uses the same navigation as Settings."},
     {"title":"A clearer Overview balance","detail":"The label above your total now uses the balance card’s text colour."},

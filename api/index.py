@@ -45,6 +45,7 @@ from .ledger_accounting import personal_wallet_ids, personal_records, opening_am
 from .spaces import workspace_user, router as spaces_router, attach_wallet_members
 from .auth_dependency import current_user
 from .coordination import lock_owners, snapshot_session
+from .debt_workspace import KEY as debt_workspace_key, Workspace as DebtWorkspace, router as debt_workspace_router
 
 APP_SECRET = os.getenv("APP_SECRET", "flowbudget-dev-secret-change-me")
 serializer = URLSafeTimedSerializer(APP_SECRET, salt="flowbudget-lock")
@@ -203,6 +204,7 @@ async def lifespan(application: FastAPI):
 
 app = FastAPI(title="Budgetly API", version=VERSION, lifespan=lifespan)
 app.include_router(spaces_router)
+app.include_router(debt_workspace_router)
 
 
 @app.middleware("http")
@@ -1430,6 +1432,8 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
             if share["wallet_id"] not in wallet_ids or share["permission"] not in {"view", "add", "edit"}: raise ValueError("Invalid share")
         from .planner import KEY as planner_key, validate_archive
         planner_archives = {}
+        debt_archive_value = data.get('settings', {}).get(debt_workspace_key)
+        debt_archive = DebtWorkspace.model_validate_json(debt_archive_value) if debt_archive_value is not None else None
         for key, value in data.get('settings', {}).items():
             if key != planner_key and not (key.startswith('cash_flow_space_') and key.endswith('_v1')):
                 continue
@@ -1448,6 +1452,13 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
         planner_revision = int(json.loads(old_planner).get('revision', 0))
     except (ValueError, TypeError, AttributeError):
         planner_revision = 0
+    existing_debts = db.get(AppSetting, (user.id, debt_workspace_key), populate_existing=True)
+    old_revision = DebtWorkspace.model_validate_json(existing_debts.value).revision if existing_debts else 0
+    if debt_archive is not None:
+        debt_archive.revision = max(old_revision, debt_archive.revision) + 1
+    elif existing_debts:
+        data.setdefault('settings', {})[debt_workspace_key] = ''
+        debt_archive = DebtWorkspace(revision=old_revision + 1)
     save_recovery(db, user, user, "Before backup restore")
     audit(db, user.id, user.id, 'Restored JSON backup', 'workspace')
     # Preserve PIN while replacing budget data.
@@ -1547,6 +1558,12 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
         d = {k: v for k, v in dict(d).items() if k not in {"id", "user_id"}}
         d["due_date"] = date.fromisoformat(d["due_date"]) if d.get("due_date") else None; db.add(Debt(user_id=user.id, **d))
     for k, v in data.get("settings", {}).items():
+        if k == debt_workspace_key and debt_archive is not None:
+            for record in debt_archive.records:
+                for item in record.items:
+                    for payment in item.payments:
+                        payment.transaction_id = tx_map.get(payment.transaction_id)
+            v = debt_archive.model_dump_json()
         if k in planner_archives:
             planner_archive = planner_archives[k]
             planner_archive['revision'] = max(planner_revision, planner_archive['revision']) + 1

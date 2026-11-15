@@ -1,4 +1,4 @@
-import { BarChart3, BellDot, CalendarClock, CalendarDays, Gauge, LayoutDashboard, ReceiptText, Target, WalletCards, CircleHelp, MessageSquare, NotebookPen, Settings, Users, Menu } from 'lucide-react'
+import { BarChart3, BellDot, CalendarClock, CalendarDays, Gauge, Landmark, LayoutDashboard, ReceiptText, Target, WalletCards, CircleHelp, MessageSquare, NotebookPen, Settings, Users, Menu } from 'lucide-react'
 
 export const workspaceNavigation = [
   ['/', 'Overview', LayoutDashboard, 'Every day', 'Balances, recent activity and what needs attention'],
@@ -12,6 +12,7 @@ export const workspaceNavigation = [
   ['/attention', 'Attention', BellDot, 'Planning & insights', 'Items that need a closer look'],
   ['/calendar', 'Calendar', CalendarDays, 'Planning & insights', 'See activity and payments by date'],
   ['/goals', 'Goals & debts', Target, 'Planning & insights', 'Savings goals and debt repayments'],
+  ['/debt-management', 'Debt Management', Landmark, 'Planning & insights', 'Loans, repayments and money lent'],
   ['/analytics', 'Analytics', BarChart3, 'Planning & insights', 'Understand spending and income trends'],
   ['/spending', 'Spending tracker', BarChart3, 'Planning & insights', 'See where your money goes'],
   ['/ask-ai', 'Ask Budgetly', CircleHelp, 'Tools & support', 'Guidance and conversations'],

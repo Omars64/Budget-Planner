@@ -6,11 +6,14 @@ import { notificationSettingsChangedEvent, readNotificationSettings } from '../l
 import {dateKey,clockTime} from '../lib/time'
 import { syncBankSms } from '../lib/bankSms'
 import SecurityPrompt from './SecurityPrompt'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { useDebtNotifications } from '../lib/debtNotifications'
 
 export default function Experience() {
   const location = useLocation()
+  const navigate = useNavigate()
   const { settings, user, notify } = useApp()
+  useDebtNotifications(user.id,notify,navigate)
   const [pending, setPending] = useState(0)
   const [showProgress, setShowProgress] = useState(false)
   const [notificationSettings, setNotificationSettings] = useState(() => readNotificationSettings(settings, user.id))

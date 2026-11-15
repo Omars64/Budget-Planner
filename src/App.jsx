@@ -21,6 +21,7 @@ const Spending = lazy(() => import('./pages/Spending'))
 const Analytics = lazy(() => import('./pages/Analytics'))
 const Budgets = lazy(() => import('./pages/Budgets'))
 const GoalsDebts = lazy(() => import('./pages/GoalsDebts'))
+const DebtWorkspace = lazy(() => import('./pages/DebtWorkspace'))
 const Wallets = lazy(() => import('./pages/Wallets'))
 const Settings = lazy(() => import('./pages/Settings'))
 const Admin = lazy(() => import('./pages/Admin'))
@@ -456,6 +457,7 @@ export default function App() {
         <Route path="/spending" element={<Spending />} />
         <Route path="/budgets" element={<Budgets />} />
         <Route path="/goals" element={<GoalsDebts />} />
+        <Route path="/debt-management" element={<DebtWorkspace />} />
         <Route path="/more" element={<More />} />
         <Route path="/spaces" element={<Spaces />} />
         <Route path="/wallets" element={<Wallets />} />

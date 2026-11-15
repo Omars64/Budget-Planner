@@ -98,6 +98,7 @@ export default function AppShell({ children }) {
   const isOverview = location.pathname === '/'
   const isLedger = ['/transactions', '/shared-transactions'].includes(location.pathname)
   const isUpcoming = location.pathname === '/upcoming'
+  const isDebt = location.pathname === '/debt-management' && !isGuest
   const shouldLoadAttention = !isGuest && (isOverview || notificationsOpen)
   useEffect(() => {
     if (!shouldLoadAttention) return
@@ -133,7 +134,7 @@ export default function AppShell({ children }) {
     ? window.dispatchEvent(new window.Event('budgetly:add-shared-transaction'))
     : setTxModal(true)
 
-  return <div className={`app-shell budgetly-v2 everyday-shell ${collapsed ? 'sidebar-collapsed' : ''} ${nativeAndroid ? 'native-android' : 'browser-app'} ${isLedger ? 'has-ledger' : ''} ${(isLedger || isUpcoming) && canAdd !== false ? 'has-floating-entry' : ''} ${walletDetail ? 'has-wallet-detail' : ''} ${keyboardOpen ? 'keyboard-open' : ''} ${location.pathname === '/ask-ai' ? 'has-ai' : ''}`}>
+  return <div className={`app-shell budgetly-v2 everyday-shell ${collapsed ? 'sidebar-collapsed' : ''} ${nativeAndroid ? 'native-android' : 'browser-app'} ${isLedger ? 'has-ledger' : ''} ${isDebt || ((isLedger || isUpcoming) && canAdd !== false) ? 'has-floating-entry' : ''} ${walletDetail ? 'has-wallet-detail' : ''} ${keyboardOpen ? 'keyboard-open' : ''} ${location.pathname === '/ask-ai' ? 'has-ai' : ''}`}>
     <ScrollMemory userId={`${user?.id}:${spaceKey}`}/>
     {!nativeAndroid && <aside ref={sidebar} className="sidebar glass">
       <div className="sidebar-head">
