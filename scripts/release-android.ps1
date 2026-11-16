@@ -3,6 +3,7 @@ param(
     [switch]$Debug,
     [switch]$SkipInstall,
     [switch]$SkipTests,
+    [switch]$Bundle,
     [switch]$CheckOnly,
     [string]$Message,
     [string]$JdkHome,
@@ -12,7 +13,7 @@ $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 . (Join-Path $PSScriptRoot 'android-publish.ps1')
 $buildArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'build-android-all.ps1'))
-foreach ($flag in @('Debug', 'SkipInstall', 'SkipTests', 'CheckOnly')) {
+foreach ($flag in @('Debug', 'SkipInstall', 'SkipTests', 'CheckOnly', 'Bundle')) {
     if (Get-Variable -Name $flag -ValueOnly) { $buildArgs += "-$flag" }
 }
 if ($JdkHome) { $buildArgs += @('-JdkHome', $JdkHome.TrimEnd('\')) }

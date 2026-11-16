@@ -2,11 +2,11 @@
 
 Double-click `build-Budgetly.bat` in the repository root, or run `./build-Budgetly.bat` from PowerShell. It works regardless of the terminal's starting directory and keeps the window open to show the result.
 
-Default execution publishes a release. It checks GitHub access, the main branch and original signing files; stages changes with git add .; creates a relevant versioned commit message when changes exist; pushes origin main; then installs dependencies, runs frontend tests, builds the signed APK/AAB, and verifies the update manifest. It uploads both assets to a draft GitHub release and only then publishes it as latest. Errors stop subsequent steps. A completed push is not rolled back if the build fails. No artificial waiting or Vercel deployment polling is added; backend changes should remain compatible with the previous app during deployment.
+The batch checks GitHub access, the main branch, and the original signing files. It refreshes npm dependencies when the lockfile changes or the required tools are missing, runs local tests, and builds the web assets once for both packages. After verifying the APK, Windows installer, and both manifests, it stages changes, commits them if needed, and pushes main. It waits for Vercel and the GitHub quality workflow for that commit, then uploads the files to a draft release and publishes it.
 
 One-time setup: install GitHub CLI (`winget install --id GitHub.cli --exact`), reopen the terminal, then run `gh auth login`. Git must also be authenticated for pushes. The launcher does not collect or embed credentials.
 
-The APK is `android/app/build/outputs/apk/release/Budgetly-VERSION.apk`. The Play bundle is `android/app/build/outputs/bundle/release/app-release.aab`. Release builds generate `update.json` beside the APK, containing its version, size, and SHA-256 checksum. Default execution publishes both automatically. See [Android updates](ANDROID_UPDATES.md) for device-testing guidance. Existing Budgetly installations detect the release on their normal update checks; this is not a push notification to closed apps.
+The batch publishes `Budgetly-VERSION.apk` and `update.json` from `android/app/build/outputs/apk/release`, and `Budgetly-Setup-VERSION.exe` and `windows-update.json` from `dist-desktop`. Use `-Bundle` to also build the local Play bundle at `android/app/build/outputs/bundle/release/app-release.aab`. See [Android updates](ANDROID_UPDATES.md) for device testing.
 
 Optional PowerShell commands:
 
@@ -15,6 +15,7 @@ Optional PowerShell commands:
 ./build-Budgetly.bat -BuildOnly
 ./build-Budgetly.bat -Message "Budgetly update: improve Google signup"
 ./build-Budgetly.bat -SkipInstall
+./build-Budgetly.bat -BuildOnly -Bundle
 ./build-Budgetly.bat -Debug
 ./build-Budgetly.bat -JdkHome "C:\path\to\jdk-21" -SdkHome "C:\path\to\Android\Sdk"
 ```

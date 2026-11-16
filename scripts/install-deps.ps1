@@ -1,5 +1,18 @@
+param([switch]$IfNeeded)
 $ErrorActionPreference = 'Stop'
 $projectRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path.TrimEnd('\')
+$stamp = Join-Path $projectRoot 'node_modules/.budgetly-lock.sha256'
+$sha = [System.Security.Cryptography.SHA256]::Create()
+try {
+    $lockHash = [BitConverter]::ToString($sha.ComputeHash([IO.File]::ReadAllBytes((Join-Path $projectRoot 'package-lock.json'))))
+} finally { $sha.Dispose() }
+$required = @('vite', 'vitest', 'eslint', 'cap', 'electron-builder')
+if ($IfNeeded -and (Test-Path -LiteralPath $stamp) -and
+    (Get-Content -LiteralPath $stamp -Raw).Trim() -eq $lockHash -and
+    !($required | Where-Object { !(Test-Path -LiteralPath (Join-Path $projectRoot "node_modules/.bin/$_.cmd")) })) {
+    Write-Host 'Locked dependencies are current.'
+    return
+}
 
 try {
     $viteProcesses = @(Get-CimInstance Win32_Process -Filter "name = 'node.exe'" |
@@ -29,10 +42,12 @@ foreach ($viteProcess in $viteProcesses) {
 
 Push-Location $projectRoot
 try {
-    & npm.cmd ci --offline=false
+    $env:NODE_USE_SYSTEM_CA = '1'
+    & npm.cmd ci --no-audit --no-fund
     if ($LASTEXITCODE -ne 0) {
         throw "npm ci failed with exit code $LASTEXITCODE. If EPERM persists, check antivirus or another process holding node_modules open."
     }
+    Set-Content -LiteralPath $stamp -Value $lockHash -Encoding ASCII
 } finally {
     Pop-Location
 }

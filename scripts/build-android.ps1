@@ -1,4 +1,7 @@
-param([string]$JdkHome, [string]$SdkHome, [switch]$UseWindowsTrustStore, [switch]$Release)
+param(
+    [string]$JdkHome, [string]$SdkHome, [switch]$UseWindowsTrustStore, [switch]$Release,
+    [switch]$UseBuiltWeb, [switch]$ApkOnly, [switch]$SkipTests
+)
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1')
 $projectRoot = Split-Path $PSScriptRoot -Parent
@@ -19,10 +22,11 @@ if ($UseWindowsTrustStore) {
 }
 Push-Location $projectRoot
 try {
-    & npm.cmd run android:sync
-    if ($LASTEXITCODE -ne 0) { throw 'Web build or Android sync failed.' }
-    & ./android/gradlew.bat -p android :app:testDebugUnitTest --no-daemon
-    if ($LASTEXITCODE -ne 0) { throw 'Android JVM tests failed; assembly stopped.' }
+    if ($UseBuiltWeb) { & ./node_modules/.bin/cap.cmd sync android }
+    else { & npm.cmd run android:sync }
+    if ($LASTEXITCODE -ne 0) { throw 'Android sync failed.' }
+    $tasks = @()
+    if (!$SkipTests) { $tasks += ':app:testDebugUnitTest' }
     if ($Release) {
         $signingDir = Join-Path $projectRoot '.android-signing'
         $keyFile = Join-Path $signingDir 'flowbudget-upload.p12'
@@ -47,11 +51,13 @@ try {
             & (Join-Path $JdkHome 'bin/keytool.exe') -genkeypair -keystore $keyFile -storetype PKCS12 -alias flowbudget -keyalg RSA -keysize 3072 -validity 10000 -dname 'CN=FlowBudget' -storepass:env FLOWBUDGET_STORE_PASSWORD -keypass:env FLOWBUDGET_STORE_PASSWORD
             if ($LASTEXITCODE -ne 0) { throw 'Could not create the signing key.' }
         }
-        & ./android/gradlew.bat -p android assembleRelease bundleRelease --no-daemon
+        $tasks += ':app:assembleRelease'
+        if (!$ApkOnly) { $tasks += ':app:bundleRelease' }
     } else {
-        & ./android/gradlew.bat -p android assembleDebug --no-daemon
+        $tasks += ':app:assembleDebug'
     }
-    if ($LASTEXITCODE -ne 0) { throw 'Android compilation failed.' }
+    & ./android/gradlew.bat -p android @tasks --no-daemon --console=plain
+    if ($LASTEXITCODE -ne 0) { throw "Android tests or packaging failed (exit $LASTEXITCODE)." }
     $variant = if ($Release) { 'release' } else { 'debug' }
     $apkDir = Join-Path $projectRoot "android/app/build/outputs/apk/$variant"
     $metadata = Get-Content (Join-Path $apkDir 'output-metadata.json') -Raw | ConvertFrom-Json
@@ -60,7 +66,7 @@ try {
     $output = Join-Path $apkDir $name
     Copy-Item -LiteralPath (Join-Path $apkDir "app-$variant.apk") -Destination $output -Force
     Write-Output "Installable APK: $output"
-    if ($Release) { Write-Output 'Play bundle: android/app/build/outputs/bundle/release/app-release.aab' }
+    if ($Release -and !$ApkOnly) { Write-Output 'Play bundle: android/app/build/outputs/bundle/release/app-release.aab' }
 } finally {
     Remove-Item Env:FLOWBUDGET_STORE_FILE, Env:FLOWBUDGET_STORE_PASSWORD -ErrorAction SilentlyContinue
     Pop-Location

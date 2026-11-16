@@ -93,6 +93,7 @@ foreach ($case in @('success','transient-read','auth-failure','unchanged','check
     if($shouldFail -and $calls -match 'release edit'){throw "Published failed case: $case"}
     if($case -in @('build-failure', 'bad-hash') -and $calls -match 'git.exe (add|commit|push)'){throw 'Failed build validation changed Git or deployed unverified source'}
     if($case -eq 'check' -and $calls -match 'git.exe (add|commit|push)|release (create|edit)'){throw 'CheckOnly caused mutations'}
+    if($case -eq 'check' -and ($calls -notmatch 'powershell.exe build -CheckOnly' -or $calls -match 'electron-builder.cmd --win')){throw 'CheckOnly tried to package the app'}
     if($case -eq 'unchanged' -and $calls -match 'git.exe commit'){throw 'Empty commit created'}
     if($case -eq 'success'){
         $push=$state.Calls.FindIndex([Predicate[string]]{param($line)$line -like 'git.exe push*'})
@@ -100,6 +101,8 @@ foreach ($case in @('success','transient-read','auth-failure','unchanged','check
         $create=$state.Calls.FindIndex([Predicate[string]]{param($line)$line -like 'gh.exe release create*'})
         $publish=$state.Calls.FindIndex([Predicate[string]]{param($line)$line -like 'gh.exe release edit*'})
         if(!($build -lt $push -and $push -lt $create -and $create -lt $publish)){throw 'Incorrect release order'}
+        if($calls -match 'powershell.exe build -CheckOnly|npm.cmd run desktop:installer' -or
+            $calls -notmatch 'electron-builder.cmd --win nsis --x64 --publish never'){throw 'Release duplicated preflight or the web build'}
         if($calls -notmatch 'commit -m Budgetly 1.2.3: update authentication'){throw 'Automatic message missing'}
         if($calls -notmatch '--draft' -or $calls -notmatch '--draft=false --latest'){throw 'Draft publication guard missing'}
     }

@@ -99,13 +99,18 @@ def deletion_rows(db, space):
 
     collect('spaces', tables['spaces'].c.id == space.id)
     for name, table in tables.items():
-        if 'space_id' not in table.c:
+        column = table.c.get('space_id')
+        if column is None:
+            continue
+        # A different foreign-key target is a different workspace namespace.
+        # Columns with no declared target still get the fail-closed check.
+        if column.foreign_keys and all(fk.target_fullname != 'spaces.id' for fk in column.foreign_keys):
             continue
         if name not in ROOTS:
-            if db.execute(select(table).where(table.c.space_id == space.id).limit(1)).first():
+            if db.execute(select(table).where(column == space.id).limit(1)).first():
                 conflict()
             continue
-        collect(name, table.c.space_id == space.id)
+        collect(name, column == space.id)
     for name, (column, parent) in CHILDREN.items():
         if name in tables:
             for batch in batches(r['id'] for r in selected[parent].values()):

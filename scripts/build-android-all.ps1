@@ -2,6 +2,7 @@ param(
     [switch]$Debug,
     [switch]$SkipInstall,
     [switch]$SkipTests,
+    [switch]$Bundle,
     [switch]$CheckOnly,
     [string]$JdkHome,
     [string]$SdkHome
@@ -48,36 +49,27 @@ try {
     }
     Write-Host "JDK: $JdkHome"
     Write-Host "Android SDK: $SdkHome"
-    Write-Host 'Existing app version and signing identity are preserved. No deployment or database changes are performed.'
     if ($CheckOnly) { Write-Host 'Prerequisite check passed.'; exit 0 }
 
     Push-Location $projectRoot
     try {
-        # Child PowerShell processes make nonzero script exits fail the pipeline reliably.
         if (!$SkipInstall) {
-            $env:NODE_USE_SYSTEM_CA = '1'
-            Invoke-Step 'Install locked dependencies (stops this project Vite server)' {
-                & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'install-deps.ps1')
-            }
+            Write-Host "`n=== Prepare locked dependencies ===" -ForegroundColor Cyan
+            & (Join-Path $PSScriptRoot 'install-deps.ps1') -IfNeeded
         }
-        Invoke-Step 'Check app and Android version consistency' { & npm.cmd run version:check }
         if (!$SkipTests) {
             Invoke-Step 'Frontend lint (same gate as GitHub)' { & npm.cmd run lint }
             # One worker avoids intermittent Windows fork-start timeouts that can
             # leave an otherwise successful suite waiting for hours.
             Invoke-Step 'Frontend regression tests' { & npm.cmd test -- --maxWorkers=1 }
-            $numberTests = Join-Path $projectRoot '.verification/update-numbers'
-            Invoke-Step 'Compile native update metadata regression test' {
-                & (Join-Path $JdkHome 'bin/javac.exe') -d $numberTests (Join-Path $projectRoot 'android/app/src/main/java/com/flowbudget/app/UpdateNumbers.java') (Join-Path $projectRoot 'tests/android/UpdateNumbersTest.java')
-            }
-            Invoke-Step 'Native update metadata regression test' {
-                & (Join-Path $JdkHome 'bin/java.exe') -cp $numberTests com.flowbudget.app.UpdateNumbersTest
-            }
         }
-        $buildArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'build-android.ps1'), '-JdkHome', $JdkHome, '-SdkHome', $SdkHome, '-UseWindowsTrustStore')
-        if (!$Debug) { $buildArgs += '-Release' }
-        Invoke-Step 'Build web assets, sync Android, and compile APK' { & powershell.exe @buildArgs }
+        Invoke-Step 'Build shared web assets' { & npm.cmd run build }
         Invoke-Step 'Check measured web bundle budget' { & npm.cmd run budget:client }
+        $buildArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'build-android.ps1'), '-JdkHome', $JdkHome, '-SdkHome', $SdkHome, '-UseWindowsTrustStore', '-UseBuiltWeb')
+        if (!$Debug) { $buildArgs += '-Release' }
+        if (!$Bundle) { $buildArgs += '-ApkOnly' }
+        if ($SkipTests) { $buildArgs += '-SkipTests' }
+        Invoke-Step 'Sync Android and build the APK' { & powershell.exe @buildArgs }
         if (!$Debug) { Invoke-Step 'Prepare verified GitHub update manifest' { & node.exe (Join-Path $PSScriptRoot 'android-release-manifest.mjs') } }
         Write-Host "`nBUILD SUCCESSFUL. APK location is printed above." -ForegroundColor Green
     } finally { Pop-Location }

@@ -1,5 +1,5 @@
 function Invoke-BudgetlyNativeCommand([string]$Program, [string[]]$Arguments) {
-    $showOutput = $Program -eq 'powershell.exe' -or $Program -eq 'npm.cmd' -or
+    $showOutput = $Program -in @('powershell.exe', 'npm.cmd', 'node.exe') -or $Program -like '*electron-builder.cmd' -or
         ($Program -eq 'git.exe' -and $Arguments[0] -in @('commit', 'push')) -or
         ($Program -eq 'gh.exe' -and $Arguments[0] -eq 'release' -and $Arguments[1] -in @('create', 'upload', 'edit'))
     $output = [System.Collections.Generic.List[string]]::new()
@@ -96,17 +96,20 @@ function Invoke-BudgetlyRelease {
                 if ($path -ne '.env.example') { throw "Refusing to stage sensitive or generated file: $path. Ignore it before releasing." }
             }
         }
-        $null = Run powershell.exe ($BuildArguments + '-CheckOnly' | Select-Object -Unique)
-        if (!(Get-Command npm.cmd -ErrorAction SilentlyContinue) -or !(Test-Path -LiteralPath (Join-Path $Root 'node_modules/.bin/electron-builder.cmd'))) {
-            throw 'Windows installer tools are missing. Run npm ci, then retry the release launcher.'
+        if ($CheckOnly) {
+            if ($BuildArguments -notcontains '-CheckOnly') { $BuildArguments += '-CheckOnly' }
+            $null = Run powershell.exe $BuildArguments
+            Write-Host 'Release checks passed. Run the batch without -CheckOnly to build and publish.'
+            return
         }
-        if ($CheckOnly) { Write-Host 'Release checks passed. No commit, push, build, or publication performed.'; return }
 
         Write-Host 'Building and testing locally before making any Git or production changes...' -ForegroundColor Cyan
         $null = Run powershell.exe $BuildArguments
-        Write-Host 'Building the Windows installer from the same tested source...' -ForegroundColor Cyan
+        Write-Host 'Packaging Windows with the tested web build...' -ForegroundColor Cyan
         $env:NODE_USE_SYSTEM_CA = '1'
-        $null = Run npm.cmd @('run', 'desktop:installer')
+        $desktopBuilder = Join-Path $Root 'node_modules/.bin/electron-builder.cmd'
+        if (!(Test-Path -LiteralPath $desktopBuilder)) { throw 'Windows installer tools are missing. Run npm ci or remove -SkipInstall.' }
+        $null = Run $desktopBuilder @('--win', 'nsis', '--x64', '--publish', 'never')
         $null = Run node.exe @('scripts/windows-release-manifest.mjs')
         $windowsDirectory = Join-Path $Root 'dist-desktop'
         $installer = Join-Path $windowsDirectory "Budgetly-Setup-$version.exe"
