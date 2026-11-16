@@ -1,0 +1,22 @@
+.budgetly-v2.everyday-shell.debt-world-shell { --layout-rail:0px; }
+.budgetly-v2.everyday-shell.debt-world-shell:not(.has-ai) .main-area {
+  padding-bottom:calc(68px + env(safe-area-inset-bottom));
+}
+.budgetly-v2.everyday-shell.debt-world-shell:not(.has-ai) :is(.topbar,.page-wrap) { max-width:920px; }
+.budgetly-v2.everyday-shell.debt-world-shell .topbar .mobile-space { display:block; width:max-content; max-width:100%; }
+.budgetly-v2.everyday-shell.debt-world-shell .topbar .space-selector { min-height:44px; }
+.budgetly-v2.everyday-shell.debt-world-shell .topbar .space-selector .space-symbol { display:grid; }
+.debt-world-shell .topbar-left h1 { margin:0;font-size:clamp(28px,4vw,43px);line-height:1.12;overflow-wrap:anywhere; }
+.budgetly-v2.everyday-shell.debt-world-shell .debt-world-navigation {
+  position:fixed;left:0;right:0;bottom:0;z-index:50;display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));padding:7px 8px calc(8px + env(safe-area-inset-bottom));
+  border-width:1px 0 0;border-radius:0;max-width:920px;margin-inline:auto;
+}
+.debt-world-navigation a { display:grid;place-items:center;min-height:48px;text-decoration:none;gap:4px;font-weight:700; }
+.budgetly-v2.everyday-shell.debt-world-shell .transaction-fab { left:50%;bottom:calc(84px + env(safe-area-inset-bottom)); }
+.budgetly-v2.everyday-shell.debt-world-shell.has-floating-entry .page-wrap.palette-sheet { padding-bottom:88px; }
+.budgetly-v2.everyday-shell.debt-world-shell.keyboard-open .debt-world-navigation { display:none; }
+.debt-preview-notice {
+  display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;
+  width:100%;max-width:920px;margin-inline:auto;padding:8px var(--layout-gutter);background:var(--surface-soft);
+}

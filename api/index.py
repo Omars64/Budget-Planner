@@ -45,7 +45,8 @@ from .ledger_accounting import personal_wallet_ids, personal_records, opening_am
 from .spaces import workspace_user, router as spaces_router, attach_wallet_members
 from .auth_dependency import current_user
 from .coordination import lock_owners, snapshot_session
-from .debt_workspace import KEY as debt_workspace_key, Workspace as DebtWorkspace, router as debt_workspace_router
+from .debt_workspace import KEY as debt_workspace_key, Workspace as DebtWorkspace, remove_pending_debt_invitations, router as debt_workspace_router
+from .debt_workspace import DebtSpaceArchive, export_debt_spaces, restore_debt_spaces
 
 APP_SECRET = os.getenv("APP_SECRET", "flowbudget-dev-secret-change-me")
 serializer = URLSafeTimedSerializer(APP_SECRET, salt="flowbudget-lock")
@@ -607,6 +608,7 @@ def delete_account(request: Request, user: User = Depends(current_user), db: Ses
     db.query(Transaction).filter_by(user_id=user.id).update({Transaction.recurring_parent_id: None})
     db.query(PlannedTransaction).filter(or_(PlannedTransaction.owner_id == user.id, PlannedTransaction.created_by_id == user.id)).delete(synchronize_session=False)
     email = normalize_email(user.email)
+    remove_pending_debt_invitations(db, email)
     from .models import SpaceMember
     db.query(SpaceMember).filter(or_(SpaceMember.email == email, SpaceMember.member_user_id == user.id)).delete(synchronize_session=False)
     db.query(WalletShare).filter(or_(WalletShare.owner_id == user.id, WalletShare.member_user_id == user.id, WalletShare.invitee_email == email)).delete(synchronize_session=False)
@@ -696,6 +698,7 @@ def admin_delete_user(user_id: int, admin: User = Depends(admin_user), db: Sessi
     row = db.get(User, user_id)
     if not row:
         raise HTTPException(404, "User not found")
+    remove_pending_debt_invitations(db, normalize_email(row.email))
     from .google_auth import revoke_google_access
     revoke_google_access(db, user_id)
     db.query(Transaction).filter_by(user_id=user_id).update({Transaction.recurring_parent_id: None})
@@ -1340,6 +1343,9 @@ def _export_backup(user, db):
         payload['settings'][key] = json.dumps(archive_snapshot(saved_planner,
             {w['id'] for w in payload['wallets']}, {t['id'] for t in payload['transactions']}, {p['id'] for p in payload['planned_transactions']}, payment_records, user.id))
     from .backup_compatibility import normalize_legacy_space_categories
+    shared_debts = export_debt_spaces(db, user.id)
+    if shared_debts:
+        payload['debt_spaces'] = shared_debts
     return normalize_legacy_space_categories(payload)
 
 
@@ -1434,6 +1440,12 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
         planner_archives = {}
         debt_archive_value = data.get('settings', {}).get(debt_workspace_key)
         debt_archive = DebtWorkspace.model_validate_json(debt_archive_value) if debt_archive_value is not None else None
+        shared_debt_data = data.get('debt_spaces', [])
+        if not isinstance(shared_debt_data, list) or len(shared_debt_data) > 50:
+            raise ValueError('Invalid shared debt archive')
+        shared_debt_archives = [DebtSpaceArchive.model_validate(entry) for entry in shared_debt_data]
+        if len({entry.id for entry in shared_debt_archives}) != len(shared_debt_archives):
+            raise ValueError('Duplicate debt spaces')
         for key, value in data.get('settings', {}).items():
             if key != planner_key and not (key.startswith('cash_flow_space_') and key.endswith('_v1')):
                 continue
@@ -1461,6 +1473,7 @@ async def restore_backup(request: Request, user: User = Depends(current_user), d
         debt_archive = DebtWorkspace(revision=old_revision + 1)
     save_recovery(db, user, user, "Before backup restore")
     audit(db, user.id, user.id, 'Restored JSON backup', 'workspace')
+    restore_debt_spaces(db, user.id, shared_debt_archives)
     # Preserve PIN while replacing budget data.
     pin_hash = setting(db, user.id, "pin_hash")
     clear_budget(db, user.id)

@@ -1,4 +1,9 @@
 {
+  "6.24.0": [
+    {"title":"Debt Management has its own navigation","detail":"Open Debts, Schedule, History, reminders and the debt-free calculator inside the debt workspace."},
+    {"title":"Shared debt spaces","detail":"Track debts together and set Viewer or Manager access from People & access."},
+    {"title":"Pay more this month","detail":"Preview how an extra payment splits the remaining balance across later months before saving. Start an interest-free loan by leaving interest at 0%."}
+  ],
   "6.23.0": [
     {"title":"A private Debt Management workspace","detail":"Track loans, borrowed money and money lent. Open it from More or the workspace picker."},
     {"title":"Payment months and actual dates","detail":"Log payments or receipts against an instalment, keep partial payments in history, set independent reminders and estimate your debt-free month."}

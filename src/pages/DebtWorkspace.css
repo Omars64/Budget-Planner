@@ -1,18 +1,14 @@
 .debt-workspace { display:grid;gap:14px; }
-.debt-workspace .debt-tabs { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));padding:4px;gap:4px;border-radius:13px;background:var(--surface-soft); }
-.debt-tabs .button { min-height:44px;padding-inline:6px;border-color:transparent; }
-.debt-tabs .button[aria-current] { color:var(--accent-text,var(--accent));background:var(--surface);border-color:var(--line); }
-.debt-home { display:grid;gap:12px; }
+.debt-home { display:grid;gap:20px;align-items:start; }
+.debt-narrow { width:100%;max-width:640px;margin-inline:auto;min-width:0; }
 .debt-next {
-  display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:end;padding:15px 17px;border-radius:17px;
-  background:radial-gradient(ellipse at 95% 7%,var(--accent-soft),transparent 70%),var(--surface-soft);
+  display:grid;min-width:0;padding:15px 17px;border-radius:17px;background:var(--surface-soft);
   border:1px solid var(--line);color:var(--text);
 }
 .debt-next h2 { margin:4px 0;font-size:clamp(18px,4.4vw,24px);overflow-wrap:anywhere; }
 .debt-next small { display:block;color:var(--muted); }
 .debt-kicker { display:flex;align-items:center;gap:6px;color:var(--accent-text,var(--accent));font-weight:700;font-size:12px; }
 .debt-next-amount { display:block;margin-top:5px;font-size:clamp(21px,5.4vw,32px);line-height:1.2;letter-spacing:-.035em;overflow-wrap:anywhere; }
-.debt-next .button { min-width:0;padding-inline:10px; }
 .debt-overdue { color:var(--warning-text,var(--muted)); }
 .debt-balances { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px; }
 .debt-balance,.debt-record-balance { display:grid;gap:4px;min-width:0;padding:12px;text-align:left;color:var(--text);background:var(--surface-soft);border:1px solid var(--line);border-radius:13px; }
@@ -25,30 +21,46 @@
 .debt-heading { display:flex;align-items:center;gap:7px; }
 .debt-heading h2 { margin:0;font-size:18px; }
 .debt-heading .field { flex:1;min-width:0; }
-.debt-tools { display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap; }
-.debt-tools .button { background:transparent;border-color:transparent;padding-inline:4px;min-height:44px; }
-.debt-count { display:inline-grid;place-items:center;min-width:19px;height:19px;padding:0 4px;border-radius:12px;font-size:11px;background:var(--accent);color:var(--accent-contrast,#fff); }
 .debt-list { list-style:none;padding:0;margin:0; }
 .debt-list li+li { border-top:1px solid var(--line); }
-.debt-row { display:grid;grid-template-columns:35px minmax(0,1fr) auto;align-items:center;gap:8px;width:100%;padding:8px 4px;min-height:60px;text-align:left;background:transparent;color:var(--text);border:0;border-radius:9px; }
+.debt-row { display:grid;grid-template-columns:35px minmax(0,1fr) minmax(0,auto);align-items:center;gap:8px;width:100%;padding:8px 4px;min-height:60px;text-align:left;background:transparent;color:var(--text);border:0;border-radius:9px;text-decoration:none; }
 .debt-row:hover { background:var(--surface-hover); }
+.debt-row-tail { max-width:125px;overflow-wrap:anywhere; }
 .debt-row-icon { display:grid;place-items:center;width:34px;height:34px;border-radius:9px;background:var(--surface-soft);color:var(--accent-text,var(--accent)); }
 .debt-row-label strong,.debt-row small,.debt-payment-line small { display:block;overflow-wrap:anywhere; }
 .debt-row small,.debt-payment-line small { font-size:12px;color:var(--muted); }
 .debt-row-tail { text-align:right;font-variant-numeric:tabular-nums; }
-.debt-month { display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:6px;align-items:center;max-width:355px; }
-.debt-history-tools { display:flex;align-items:end;gap:10px;flex-wrap:wrap; }
-.debt-history-tools>.field { width:auto;min-width:145px; }
+.debt-history-tools,.debt-form-pair { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px; }
+:is(.debt-history-tools,.debt-form-pair) .field { min-width:0; }
+:is(.debt-history-tools,.debt-form-pair) .app-select-trigger { padding-inline:9px; }
+:is(.debt-history-tools,.debt-form-pair) .app-select-trigger svg { flex-shrink:0;width:16px; }
+.debt-history-help { display:flex;justify-content:flex-end; }
+.debt-schedule-control { align-items:end; }
+.debt-schedule-control > .field { flex:0 1 245px; }
 .debt-data { display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 10px;margin:0;padding:12px;background:var(--surface-soft);border-radius:12px; }
 .debt-data dd { margin:0;text-align:right;font-weight:700; }
 .debt-payment-line { display:flex;justify-content:space-between;gap:10px;padding:8px 0; }
 .debt-record-balance progress { width:100%;height:6px;margin-top:6px;accent-color:var(--positive); }
 .debt-form-help { align-self:start; }
+.debt-entry-fields { min-width:0;margin:0;padding:0;border:0; }
+.debt-entry-context { display:flex;justify-content:space-between;align-items:center;gap:8px;overflow-wrap:anywhere; }
+.budgetly-v2 .transaction-form .debt-amount-input {
+  display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface-soft);
+  border:1px solid var(--line);border-radius:14px;
+}
+.budgetly-v2 .transaction-form .debt-amount-input input { flex:1;width:0;min-width:0;background:transparent;border:0;text-align:start; }
+.budgetly-v2.debt-transaction-layer .debt-amount-input:focus-within { outline:2px solid var(--accent-text,var(--accent));outline-offset:2px; }
+.budgetly-v2.debt-transaction-layer .debt-amount-input input:focus { outline:none;box-shadow:none; }
+.debt-transaction-layer .modal-footer .modal-actions .button.primary { flex:1; }
+@media(min-width:600px) { .budgetly-v2.debt-transaction-layer .modal { width:min(460px,100%); } }
+.debt-month-due { display:block;margin-top:3px; }
+.debt-payment-preview { display:grid;gap:3px;padding:10px 12px;border-radius:12px;background:var(--surface-soft);overflow-wrap:anywhere; }
+.debt-reminder-rule { display:grid;grid-template-columns:minmax(0,1fr) minmax(106px,160px);gap:9px;align-items:center; }
+.debt-reminder-rule strong { overflow-wrap:anywhere; }
 /* Field pickers and help are separate portals above the entry sheet. */
 .budgetly-v2.debt-entry-layer .modal-backdrop { z-index:99; }
-@media(min-width:900px) {
+@media(min-width:650px) {
   .debt-home { grid-template-columns:minmax(0,.95fr) minmax(0,1.05fr);gap:22px; }
-  .debt-listing { padding-inline-start:20px;border-inline-start:1px solid var(--line); }
 }
 @media(max-width:430px) {
   .debt-next { padding:12px; }

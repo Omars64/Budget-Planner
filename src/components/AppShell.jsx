@@ -1,7 +1,7 @@
 import { workspaceNavigation } from '../lib/workspaceNavigation'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Bell, ChevronLeft, ChevronRight, LogOut, Menu, PanelLeftOpen, Plus, Search, ShieldCheck } from 'lucide-react'
+import { Bell, CalendarDays, ChevronLeft, ChevronRight, History, Landmark, LogOut, Menu, PanelLeftOpen, Plus, Search, ShieldCheck } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useApp } from '../App'
 import TransactionModal from './TransactionModal'
@@ -29,13 +29,19 @@ import Modal from './Modal'
 import { PageActionsProvider } from './PageActions'
 import { api } from '../lib/api'
 import { attentionKeys, useNotificationReads } from '../lib/notificationReads'
+import { debtRoles, debtRoute, debtUrl, debtViews } from '../lib/debtWorkspace'
+import './DebtNavigation.css'
 
 const nav = workspaceNavigation
 const primaryRoutes = new Set(['/', '/transactions', '/wallets', '/upcoming'])
 const groups = ['Every day', 'Your workspace', 'Planning & insights', 'Tools & support', 'Account']
+const debtNav = [['debts','Debts',Landmark],['schedule','Schedule',CalendarDays],['history','History',History],['more','More',Menu]]
 
 export default function AppShell({ children }) {
   const navigate = useNavigate()
+  const location = useLocation()
+  const debtLocation = debtRoute(location.pathname)
+  const debtRouteActive = Boolean(debtLocation)
   const nativeAndroid = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android'
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [notificationRequest, setNotificationRequest] = useState(0)
@@ -62,6 +68,7 @@ export default function AppShell({ children }) {
   useEffect(() => {
     const quickFind = event => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        if (debtRouteActive) return
         if (document.querySelector('[aria-modal="true"], dialog[open]')) return
         event.preventDefault()
         if (nativeAndroid || window.matchMedia('(max-width: 820px)').matches) {
@@ -77,13 +84,12 @@ export default function AppShell({ children }) {
     }
     window.addEventListener('keydown', quickFind)
     return () => window.removeEventListener('keydown', quickFind)
-  }, [navSearch, nativeAndroid, navigate])
+  }, [navSearch, nativeAndroid, navigate, debtRouteActive])
   useContainedScroll(sidebar)
-  const { user, settings, appearance, refresh, refreshKey, notify, lock, isGuest, requestSignIn, activeSpace, spaceKey, canAdd, bankInboxCount = 0, bankInboxLatestId = 0 } = useApp()
+  const { user, settings, appearance, refresh, refreshKey, notify, lock, isGuest, requestSignIn, activeSpace, spaceKey, canAdd, debtSpaces = [], bankInboxCount = 0, bankInboxLatestId = 0 } = useApp()
   const seen = useNotificationReads(isGuest ? null : user?.id, spaceKey)
   const [preferences] = useWorkspacePreferences(user?.id)
   const keyboardOpen = useKeyboardViewport()
-  const location = useLocation()
   const lastVisit = useRef('')
   useEffect(() => {
     const visit = `${user?.id}:${location.pathname}`
@@ -98,7 +104,13 @@ export default function AppShell({ children }) {
   const isOverview = location.pathname === '/'
   const isLedger = ['/transactions', '/shared-transactions'].includes(location.pathname)
   const isUpcoming = location.pathname === '/upcoming'
-  const isDebt = location.pathname === '/debt-management' && !isGuest
+  const isDebt = debtRouteActive && !isGuest
+  const debtSpace = debtSpaces.find(space => space.id === debtLocation?.id)
+  const requestedPreview = new URLSearchParams(location.search).get('preview')
+  const preview = isDebt && debtSpace?.role === 'owner' && ['view','edit'].includes(requestedPreview) ? requestedPreview : null
+  const debtView = debtLocation?.view
+  const debtMore = ['access','payoff','reminders'].includes(debtView)
+  const showDebtAdd = isDebt && ['debts','schedule','history'].includes(debtView) && (preview || debtSpace?.role) !== 'view'
   const shouldLoadAttention = !isGuest && (isOverview || notificationsOpen)
   useEffect(() => {
     if (!shouldLoadAttention) return
@@ -127,16 +139,18 @@ export default function AppShell({ children }) {
   const selectedPage = visibleNav.find(([path]) => path === location.pathname)
   const subtitle = isOverview
     ? isGuest ? 'Saved on this device' : activeSpace ? 'Shared money at a glance' : 'Your money at a glance'
+    : isDebt ? (debtView === 'debts' ? (debtLocation.id ? 'Shared debt space' : 'Loans, repayments and money lent') : '')
     : isWallets || isLedger || spending ? activeSpace?.name || 'Personal' : location.pathname === '/upcoming' ? 'See what happens next' : selectedPage?.[4]
+  const debtTitle = debtView === 'debts' && debtSpace ? debtSpace.name : debtViews[debtView]
   const greeting = new Intl.DateTimeFormat('en-GB', { timeZone:'Asia/Kuwait', hour:'numeric', hourCycle:'h23' }).format(new Date())
   const overviewTitle = isGuest ? 'Guest workspace' : activeSpace?.name || `Good ${Number(greeting) < 12 ? 'morning' : Number(greeting) < 18 ? 'afternoon' : 'evening'}, ${user?.username || 'there'}`
   const addTransaction = () => location.pathname === '/shared-transactions'
     ? window.dispatchEvent(new window.Event('budgetly:add-shared-transaction'))
     : setTxModal(true)
 
-  return <div className={`app-shell budgetly-v2 everyday-shell ${collapsed ? 'sidebar-collapsed' : ''} ${nativeAndroid ? 'native-android' : 'browser-app'} ${isLedger ? 'has-ledger' : ''} ${isDebt || ((isLedger || isUpcoming) && canAdd !== false) ? 'has-floating-entry' : ''} ${walletDetail ? 'has-wallet-detail' : ''} ${keyboardOpen ? 'keyboard-open' : ''} ${location.pathname === '/ask-ai' ? 'has-ai' : ''}`}>
-    <ScrollMemory userId={`${user?.id}:${spaceKey}`}/>
-    {!nativeAndroid && <aside ref={sidebar} className="sidebar glass">
+  return <div className={`app-shell budgetly-v2 everyday-shell ${collapsed ? 'sidebar-collapsed' : ''} ${nativeAndroid ? 'native-android' : 'browser-app'} ${isDebt ? 'debt-world-shell' : ''} ${isLedger ? 'has-ledger' : ''} ${showDebtAdd || ((isLedger || isUpcoming) && canAdd !== false) ? 'has-floating-entry' : ''} ${walletDetail ? 'has-wallet-detail' : ''} ${keyboardOpen ? 'keyboard-open' : ''} ${location.pathname === '/ask-ai' ? 'has-ai' : ''}`}>
+    <ScrollMemory userId={`${user?.id}:${isDebt ? `debt:${debtLocation.id || 'private'}` : spaceKey}`}/>
+    {!nativeAndroid && !isDebt && <aside ref={sidebar} className="sidebar glass">
       <div className="sidebar-head">
         <div className="brand">
           <BrandLogo style={settings.logo_style} palette={settings.color_palette} />
@@ -159,17 +173,18 @@ export default function AppShell({ children }) {
 
     <main className="main-area">
       {!isGuest && <ConnectionStatus/>}
+      {preview && <div className="debt-preview-notice"><span>Previewing as <strong>{debtRoles[preview]}</strong></span><Link className="button ghost" to={debtUrl(debtLocation.id,'access')}>Exit preview</Link></div>}
       <header className="topbar" role="banner">
         <div className="mobile-space"><SpaceSwitcher/></div>
-        <div className="header-controls">
+        {!isDebt && <div className="header-controls">
           {!isGuest && <button type="button" className="icon-button notification-trigger" aria-label={notificationLabel} aria-haspopup="dialog" onClick={() => { setNotificationRequest(value => value + 1); setNotificationsOpen(true) }}><Bell size={20} aria-hidden="true"/>{notificationCount > 0 && <small className="bank-inbox-badge" aria-hidden="true">{notificationCount}</small>}</button>}
           <Link to="/settings" className="header-user-tag" aria-label="Account and preferences" title={isGuest ? 'Guest' : user?.username}>
             {appearance.profile_image ? <img className="header-user-avatar" src={appearance.profile_image} alt=""/> : <span className="header-user-avatar" aria-hidden="true">{(isGuest ? 'Guest' : user?.username || 'Budgetly').slice(0,1).toUpperCase()}</span>}
           </Link>
-        </div>
+        </div>}
         {!walletDetail && !goalDetail && !isSettings && <div className="topbar-left">
           {location.pathname === '/ask-ai' && <button className="icon-button mobile-only" title="Open conversations" aria-label="Open conversations" onClick={() => window.dispatchEvent(new window.Event('budgetly:toggle-ai-history'))}><PanelLeftOpen size={20}/></button>}
-          <div><h2>{isOverview ? overviewTitle : selectedPage?.[1] || 'Budgetly'}</h2>{subtitle && <p className="eyebrow">{subtitle}</p>}</div>
+          <div>{isDebt ? <h1>{debtTitle}</h1> : <h2>{isOverview ? overviewTitle : selectedPage?.[1] || 'Budgetly'}</h2>}{subtitle && <p className="eyebrow">{subtitle}</p>}</div>
         </div>}
         <div className="button-row top-actions" ref={setPageActions}>
           {isOverview && !isGuest && <button className="button ghost tutorial-button" data-tour="tutorial" title="Tutorial" aria-label="Tutorial" onClick={() => setTutorialRequest(value => value + 1)}><Compass size={18}/><span>Tutorial</span></button>}
@@ -178,18 +193,23 @@ export default function AppShell({ children }) {
       </header>
       <AndroidUpdate userId={user?.id} role={user?.role} guest={isGuest}/>
       {isGuest && <div className="guest-banner"><span>Guest mode · Saved on this device</span><button className="button ghost small" onClick={() => requestSignIn('cloud storage and more features')}>Sign in</button></div>}
-      <motion.div className={`page-wrap${isOverview || walletDetail || goalDetail || spending || isSettings ? ' palette-page-split' : ' palette-sheet'}`} data-tour-page={location.pathname} key={location.pathname} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .18, ease: 'easeOut' }}>
+      <motion.div className={`page-wrap${isOverview || walletDetail || goalDetail || spending || isSettings ? ' palette-page-split' : ' palette-sheet'}`} data-tour-page={location.pathname} key={isDebt ? debtUrl(debtLocation.id) : location.pathname} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .18, ease: 'easeOut' }}>
         <PageActionsProvider target={pageActions} floatingTarget={floatingAction}>{children}</PageActionsProvider>
       </motion.div>
-      <BrandFooter className="app-footer"/>
+      {!isDebt && <BrandFooter className="app-footer"/>}
     </main>
     <div ref={setFloatingAction} className="floating-page-actions"/>
     {isLedger && canAdd !== false && <button data-tour="add-transaction" className="transaction-fab" aria-label="Add transaction" title="Add transaction" onClick={addTransaction}><Plus size={26} aria-hidden="true"/></button>}
 
-    <nav className="mobile-nav glass">
+    {isDebt ? <nav className="mobile-nav glass debt-world-navigation" aria-label="Debt Management navigation">
+      {debtNav.map(([view,label,Icon]) => {
+        const selected = view === (debtMore ? 'more' : debtView)
+        return <Link key={view} to={debtUrl(debtLocation.id,view)+(preview?`?preview=${preview}`:'')} className={selected?'active':''} aria-current={selected?'page':undefined}><Icon size={19} aria-hidden="true"/><span>{label}</span></Link>
+      })}
+    </nav> : <nav className="mobile-nav glass">
       {visibleNav.filter(([to]) => primaryRoutes.has(to)).map(([to, label, Icon]) => <NavLink key={to} to={to} end={to === '/'} onClick={event => {if(isGuest && !guestRoutes.has(to)){event.preventDefault();requestSignIn(label)}}} className={({isActive}) => isActive ? 'active' : ''}><Icon size={19}/><span>{label === 'Shared Transactions' ? 'Shared' : label}</span></NavLink>)}
       <Link to="/more" aria-label="More tools" className={!primaryRoutes.has(location.pathname) ? 'active' : ''} aria-current={!primaryRoutes.has(location.pathname) ? 'page' : undefined}><Menu size={19}/><span>More</span></Link>
-    </nav>
+    </nav>}
 
     <Modal open={notificationsOpen} onClose={() => setNotificationsOpen(false)} title="Notifications" size="small">
       <div className="notification-inbox">
@@ -203,7 +223,7 @@ export default function AppShell({ children }) {
       </div>
     </Modal>
     <TransactionModal open={txModal} onClose={() => setTxModal(false)} onSaved={(saved, scheduled) => { setTxModal(false); refresh(); notify(saved.queued ? 'Saved on this device. Will sync when connected.' : scheduled ? 'Transaction scheduled' : 'Transaction saved') }} />
-    <SupportPrompt userId={user?.id} guest={isGuest} popupEnabled={settings.support_popup_enabled !== false} suppressed={notificationsOpen || keyboardOpen || txModal}/>
+    <SupportPrompt userId={user?.id} guest={isGuest} popupEnabled={settings.support_popup_enabled !== false} suppressed={isDebt || notificationsOpen || keyboardOpen || txModal}/>
     {!isGuest && <><AppTutorial request={tutorialRequest}/><Milestone/></>}
   </div>
 }

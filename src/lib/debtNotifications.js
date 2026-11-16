@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { LocalNotifications } from '@capacitor/local-notifications'
 import { Capacitor } from '@capacitor/core'
 import { api } from './api'
-import { debtChanged, debtPath, dayLabel, openItems, shiftDay } from './debtWorkspace'
+import { debtChanged, debtPath, debtUrl, dayLabel } from './debtWorkspace'
 import { dateKey, saveDate } from './time'
 
 const base = 1011000000
@@ -22,17 +22,10 @@ function nativeSync(alarms, isCurrent) {
     const notifications = alarms.filter(alarm => alarm.at.getTime() > now).slice(0,40)
       .map((alarm,index) => ({id:base+index,title:'Budgetly · Debt reminder',body:'A debt payment needs your attention.',
         schedule:{at:alarm.at,allowWhileIdle:true},isExactNotification:false,channelId:channel,smallIcon:'flowbudget_notification',
-        extra:{budgetlyDebt:true}}))
+        extra:{budgetlyDebt:true,spaceId:alarm.space_id}}))
     if (notifications.length) await LocalNotifications.schedule({ notifications })
   }
   nativeQueue = nativeQueue.then(run,run).catch(() => {})
-}
-
-function getAlarms(workspace) {
-  if (!workspace?.enabled) return []
-  return openItems(workspace.records).filter(({record}) => record.reminder !== null)
-    .map(({record,item}) => ({record,item,at:new Date(saveDate(`${shiftDay(item.due,-record.reminder)}T09:00`))}))
-    .sort((a,b)=>a.at-b.at)
 }
 
 export async function allowDebtAlerts() {
@@ -55,37 +48,33 @@ export function useDebtNotifications(userId,notify,navigate) {
     const check = () => {
       if (!alive || document.visibilityState === 'hidden') return
       const now = new Date()
-      for (const {record,item,at} of alarms) {
+      for (const {space_id,item_id,name,due,at} of alarms) {
         if (at > now || dateKey(at) !== dateKey(now)) continue
-        const key = `budgetly:debt-notification:${userId}:${item.id}:${dateKey(at)}`
+        const key = `budgetly:debt-notification:${userId}:${space_id || 'personal'}:${item_id}:${dateKey(at)}`
         if (seen.has(key)) continue
         seen.add(key)
         try {
           if (localStorage.getItem(key)) continue
           localStorage.setItem(key,'1')
         } catch { /* The current session still deduplicates this reminder. */ }
-        const text = `${record.name} · due ${dayLabel(item.due)}`
+        const text = `${name} · due ${dayLabel(due)}`
         notify(text)
         if (!native && 'Notification' in window && window.Notification.permission === 'granted') {
-          try { new window.Notification('Budgetly · Debt reminder',{body:'A debt payment needs your attention.',tag:key}) } catch { /* In-app reminder remains available. */ }
+          try {
+            const notification = new window.Notification('Budgetly · Debt reminder',{body:'A debt payment needs your attention.',tag:key})
+            notification.onclick = () => { window.focus(); navigate(debtUrl(space_id,'reminders')); notification.close() }
+          } catch { /* In-app reminder remains available. */ }
         }
       }
     }
-    const refresh = event => {
+    const refresh = () => {
       if (!alive) return
-      if (event?.detail?.records) {
-        request?.abort()
-        alarms = getAlarms(event.detail)
-        check()
-        nativeSync(alarms, () => alive)
-        return
-      }
       request?.abort()
       const controller = new AbortController()
       request = controller
-      api(debtPath,{signal:controller.signal}).then(workspace=>{
+      api(`${debtPath}/reminders`,{signal:controller.signal}).then(entries=>{
         if (!alive || controller.signal.aborted) return
-        alarms = getAlarms(workspace)
+        alarms = Array.isArray(entries) ? entries.map(alarm=>({...alarm,at:new Date(saveDate(`${alarm.day}T09:00`))})) : []
         check()
         nativeSync(alarms, () => alive && !controller.signal.aborted)
       }).catch(()=>{})
@@ -97,7 +86,7 @@ export function useDebtNotifications(userId,notify,navigate) {
     }
     refresh()
     if (native) void LocalNotifications.addListener('localNotificationActionPerformed', event=>{
-      if (alive && event.notification.extra?.budgetlyDebt) navigate('/debt-management',{state:{debtReminders:true}})
+      if (alive && event.notification.extra?.budgetlyDebt) navigate(debtUrl(event.notification.extra.spaceId,'reminders'))
     }).then(listener=>{if (alive) handle=listener; else void listener.remove()}).catch(()=>{})
     const timer = window.setInterval(check,60000)
     window.addEventListener('focus',refresh)

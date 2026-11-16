@@ -7,7 +7,7 @@ const render = element => mount(element,{wrapper:MemoryRouter})
 
 const mocks = vi.hoisted(() => ({ app: {}, api: vi.fn() }))
 vi.mock('../App', () => ({ useApp: () => mocks.app }))
-vi.mock('../lib/api', () => ({ api: (...args) => mocks.api(...args), jsonBody: value => ({ body: JSON.stringify(value) }) }))
+vi.mock('../lib/api', () => ({ api: (...args) => mocks.api(...args), hasPendingWrites: () => false, jsonBody: value => ({ body: JSON.stringify(value) }) }))
 vi.mock('./CurrencyField', () => ({ default: () => null }))
 vi.mock('./Modal', () => ({ default: ({ open, children, title, isDirty, onClose }) => open ? <section aria-label={title} data-dirty={isDirty}><button onClick={onClose}>Close dialog</button>{children}</section> : null }))
 

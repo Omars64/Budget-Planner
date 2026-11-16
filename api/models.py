@@ -34,6 +34,33 @@ class Wallet(Base):
     created_at = Column(DateTime, default=datetime.now)
 
 
+class DebtSpace(Base):
+    __tablename__ = 'debt_spaces'
+    id = Column(String(36), primary_key=True)
+    owner_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    name = Column(String(40), nullable=False)
+    value = Column(Text, nullable=False)
+
+
+class DebtSpaceMember(Base):
+    __tablename__ = 'debt_space_members'
+    space_id = Column(String(36), ForeignKey('debt_spaces.id', ondelete='CASCADE'), primary_key=True)
+    email = Column(String(160), primary_key=True, index=True)
+    member_user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), index=True)
+    role = Column(String(4), nullable=False)
+    __table_args__ = (
+        CheckConstraint("role IN ('view', 'edit')", name='ck_debt_space_member_role'),
+        UniqueConstraint('space_id','member_user_id',name='uq_debt_space_member_account'),
+    )
+
+
+class DebtSpaceAlert(Base):
+    __tablename__ = 'debt_space_alerts'
+    space_id = Column(String(36), ForeignKey('debt_spaces.id', ondelete='CASCADE'), primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
+    value = Column(Text, nullable=False)
+
+
 class WalletBalanceCheck(Base):
     __tablename__ = "wallet_balance_checks"
     id = Column(Integer, primary_key=True)

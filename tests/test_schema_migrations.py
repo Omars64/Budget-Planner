@@ -9,7 +9,7 @@ from api.database import Base
 from api.index import ensure_note_columns
 from api.schema_migrations import apply_migrations
 
-LATEST_REVISION = 'f95d143fe276'
+LATEST_REVISION = 'd69c21d23ceb'
 
 
 def test_feedback_conversation_upgrade_keeps_existing_reply_and_status():
@@ -43,6 +43,7 @@ def test_new_and_existing_schemas_reach_baseline_without_losing_rows():
         assert 'reporting_month' in {column['name'] for column in inspect(connection).get_columns('transactions')}
         assert 'card_network' in {column['name'] for column in inspect(connection).get_columns('wallets')}
         assert 'wallet_balance_checks' in inspect(connection).get_table_names()
+        assert {'debt_spaces','debt_space_members','debt_space_alerts'} <= set(inspect(connection).get_table_names())
         assert 'reporting_month' in {column['name'] for column in inspect(connection).get_columns('budgets')}
         assert connection.execute(text('SELECT version_num FROM alembic_version')).scalar_one() == LATEST_REVISION
         connection.execute(text("INSERT INTO users (username, email, password_hash, role, active) VALUES ('Test', 'test@migration.test', 'hash', 'user', 1)"))

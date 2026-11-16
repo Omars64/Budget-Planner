@@ -6,7 +6,7 @@ import './AppSelect.css'
 
 const names = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
-export default function AppMonthField({ value, onChange, required, disabled, min = '1900-01', max = '9999-12', emptyLabel = 'Choose month', ...props }) {
+export default function AppMonthField({ value, onChange, required, disabled, short = false, min = '1900-01', max = '9999-12', emptyLabel = 'Choose month', ...props }) {
   const input = useRef(null)
   const trigger = useRef(null)
   const [open, setOpen] = useState(false)
@@ -16,7 +16,8 @@ export default function AppMonthField({ value, onChange, required, disabled, min
   useLayoutEffect(() => {
     setLabel(props['aria-label'] || input.current?.labels?.[0]?.querySelector('span')?.textContent?.trim() || 'Month')
   }, [props['aria-label']])
-  const selected = /^\d{4}-\d{2}$/.test(value || '') ? `${names[Number(value.slice(5)) - 1]} ${value.slice(0, 4)}` : emptyLabel
+  const name = names[Number(value?.slice(5)) - 1]
+  const selected = /^\d{4}-\d{2}$/.test(value || '') && name ? `${short ? name.slice(0,3) : name} ${value.slice(0, 4)}` : emptyLabel
   const choose = next => { setInvalid(false); onChange?.({ target: { value: next }, currentTarget: { value: next } }); setOpen(false); window.requestAnimationFrame(() => trigger.current?.focus()) }
   return <span className="app-month">
     <input {...props} ref={input} type="month" value={value || ''} onChange={onChange} min={min} max={max} required={required} disabled={disabled} tabIndex={-1} aria-hidden="true" className="app-select-native" onInvalid={event => { event.preventDefault(); setInvalid(true); trigger.current?.focus(); props.onInvalid?.(event) }}/>

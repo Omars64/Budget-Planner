@@ -30,6 +30,15 @@
 :is(.space-switcher-dialog,.space-library-options) .space-option-manage > span { min-width: 0; }
 :is(.space-switcher-dialog,.space-library-options) .space-option-row button:hover { background: var(--accent-soft); }
 .space-switcher-dialog button:focus-visible { outline: 3px solid var(--accent-text, var(--accent)); outline-offset: 2px; }
+.space-switcher-dialog .space-options > button.shared-debt-space {
+  background:color-mix(in srgb,var(--positive) 10%,var(--surface));
+  border-color:transparent;border-radius:12px;min-height:52px;
+}
+.space-switcher-dialog .space-options > button.shared-debt-space > svg:first-child { color:var(--positive); }
+.space-switcher-dialog .space-options > button.shared-debt-space:hover,
+.space-switcher-dialog .space-options > button.shared-debt-space.selected {
+  background:color-mix(in srgb,var(--positive) 18%,var(--surface));
+}
 .space-switcher-dialog .space-management { min-width: 0; overflow-wrap: anywhere; }
 .space-switcher-dialog .space-management-views { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
 .space-switcher-dialog .space-management-views button {
