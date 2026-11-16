@@ -1,4 +1,10 @@
 {
+  "6.24.1": [
+    {
+      "title": "Manage shared debt spaces",
+      "detail": "Open More → Debt spaces in Debt Management to create shared spaces and manage members. Owners can rename a space or permanently delete it after confirming its name."
+    }
+  ],
   "6.24.0": [
     {"title":"Debt Management has its own navigation","detail":"Open Debts, Schedule, History, reminders and the debt-free calculator inside the debt workspace."},
     {"title":"Shared debt spaces","detail":"Track debts together and set Viewer or Manager access from People & access."},

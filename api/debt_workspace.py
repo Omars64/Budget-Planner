@@ -5,9 +5,9 @@ from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from .auth_dependency import current_user
@@ -113,9 +113,16 @@ class Workspace(Record):
         return self
 
 
-class SharedSpaceIn(Record):
+class DebtSpaceName(Record):
     name: str = Field(min_length=1, max_length=40)
+
+
+class SharedSpaceIn(DebtSpaceName):
     currency: Annotated[str, StringConstraints(pattern=r'^[A-Z]{3}$')]
+
+
+class DebtSpaceDelete(Record):
+    confirmation_name: Annotated[str, StringConstraints(strip_whitespace=False, min_length=1, max_length=40)]
 
 
 class DebtAlerts(Record):
@@ -282,15 +289,15 @@ def shared_access(db, ident, user, *, write=False, owner_only=False, changing_al
     return row, member.role
 
 
-def summary(db, row, role):
-    return {'id': row.id, 'name': row.name, 'role': role,
-            'member_count': 1 + db.query(DebtSpaceMember).filter_by(space_id=row.id).count()}
+def summary(row, role, owner_name, member_count):
+    return {'id': row.id, 'name': row.name, 'role': role, 'owner_name': owner_name,
+            'member_count': member_count, 'currency': json.loads(row.value)['currency']}
 
 
 def access_details(db, row, role):
     owner = db.get(User, row.owner_id)
     members = db.query(DebtSpaceMember).filter_by(space_id=row.id).order_by(DebtSpaceMember.email).all()
-    return {**summary(db, row, role), 'members': [{'email': owner.email, 'name': owner.username, 'role': 'owner'}] + [
+    return {**summary(row, role, owner.username, len(members) + 1), 'members': [{'email': owner.email, 'name': owner.username, 'role': 'owner'}] + [
         {'email': member.email, 'role': member.role} for member in members]}
 
 
@@ -310,9 +317,11 @@ def list_spaces(user: User = Depends(current_user), db: Session = Depends(get_db
         db.commit()
     roles = dict(db.query(DebtSpaceMember.space_id, DebtSpaceMember.role).filter(member_match(user))
                  .order_by(DebtSpaceMember.member_user_id.asc().nullsfirst()).all())
-    rows = db.query(DebtSpace).filter(or_(DebtSpace.owner_id == user.id, DebtSpace.id.in_(roles)))
-    return [summary(db, row, 'owner' if row.owner_id == user.id else roles[row.id])
-            for row in rows.order_by(DebtSpace.name, DebtSpace.id)]
+    member_count = db.query(func.count()).filter(DebtSpaceMember.space_id == DebtSpace.id).correlate(DebtSpace).scalar_subquery()
+    rows = db.query(DebtSpace, User.username, member_count).join(User, User.id == DebtSpace.owner_id).filter(
+        or_(DebtSpace.owner_id == user.id, DebtSpace.id.in_(roles)))
+    return [summary(row, 'owner' if row.owner_id == user.id else roles[row.id], name, count + 1)
+            for row, name, count in rows.order_by(DebtSpace.name, DebtSpace.id)]
 
 
 @router.post('/spaces', status_code=201)
@@ -328,7 +337,7 @@ def create_shared_space(payload: SharedSpaceIn, request: Request, user: User = D
         raise HTTPException(422, 'You can own up to 50 shared debt spaces.')
     row = DebtSpace(id=str(uuid4()), owner_id=user.id, name=payload.name, value=Workspace(currency=payload.currency).model_dump_json())
     db.add(row)
-    result = summary(db, row, 'owner')
+    result = summary(row, 'owner', user.username, 1)
     if receipt:
         receipt.response = json.dumps(result)
     db.commit()
@@ -348,6 +357,28 @@ def save_shared_space(space_id: UUID, payload: Workspace, user: User = Depends(c
     if payload.currency != current.currency:
         raise HTTPException(422, 'The debt space currency is already set.')
     return store_workspace(db, row, current, payload, user, shared=True)
+
+
+@router.patch('/spaces/{space_id}')
+def rename_shared_space(space_id: UUID, payload: DebtSpaceName, user: User = Depends(current_user),
+                        db: Session = Depends(get_db)):
+    row, role = shared_access(db, str(space_id), user, write=True, owner_only=True)
+    row.name = payload.name
+    result = access_details(db, row, role)
+    db.commit()
+    return result
+
+
+@router.delete('/spaces/{space_id}', status_code=204)
+def delete_shared_space(space_id: UUID, payload: DebtSpaceDelete, user: User = Depends(current_user),
+                        db: Session = Depends(get_db)):
+    row, _ = shared_access(db, str(space_id), user, write=True, owner_only=True)
+    if payload.confirmation_name != row.name:
+        raise HTTPException(409, 'The space name did not match. Check the current name before deleting.')
+    # The database cascades to only this space's access grants and reminder preferences.
+    db.delete(row)
+    db.commit()
+    return Response(status_code=204)
 
 
 @router.get('/spaces/{space_id}/access')

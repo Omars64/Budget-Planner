@@ -4,7 +4,7 @@ from decimal import Decimal
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -12,7 +12,84 @@ from api.app import app
 from api.auth_dependency import current_user
 from api.database import Base, get_db
 from api.debt_workspace import DebtSpaceArchive, export_debt_spaces, restore_debt_spaces
-from api.models import Space, Transaction, User, Wallet
+from api.models import DebtSpaceAlert, DebtSpaceMember, Space, Transaction, User, Wallet
+
+
+def test_debt_space_rename_and_delete_are_owner_only_and_scoped(monkeypatch):
+    monkeypatch.setattr('api.debt_workspace.today', lambda: datetime(2026, 11, 15).date())
+    engine = create_engine('sqlite://', connect_args={'check_same_thread': False}, poolclass=StaticPool)
+
+    @event.listens_for(engine, 'connect')
+    def enforce_foreign_keys(connection, _):
+        connection.execute('PRAGMA foreign_keys=ON')
+
+    Base.metadata.create_all(engine)
+    with Session(engine) as db, TestClient(app) as client:
+        owner, manager, viewer, stranger = [
+            User(username=name, email=f'{name.lower()}@example.test', password_hash='unused')
+            for name in ('Owner', 'Manager', 'Viewer', 'Stranger')
+        ]
+        db.add_all([owner, manager, viewer, stranger])
+        db.commit()
+        actor = {'user': owner}
+        monkeypatch.setitem(app.dependency_overrides, get_db, lambda: db)
+        monkeypatch.setitem(app.dependency_overrides, current_user, lambda: actor['user'])
+        root = '/api/debt-workspace'
+        spaces = root + '/spaces'
+        target = client.post(spaces, json={'name':'Family debts','currency':'KWD'}).json()
+        other = client.post(spaces, json={'name':'Trip repayments','currency':'USD'}).json()
+        path = spaces + '/' + target['id']
+        other_path = spaces + '/' + other['id']
+        item = {'id':str(uuid4()),'month':'2026-11','due':'2026-11-20','amount':40000,
+                'payments':[{'id':str(uuid4()),'amount':10000,'date':'2026-11-14'}]}
+        record = {'id':str(uuid4()),'name':'Car loan','kind':'loan','opening':40000,'items':[item],'reminder':3}
+        ledger = {'revision':0,'currency':'KWD','records':[record]}
+        assert client.put(root,json=ledger).status_code == 200
+        saved = client.put(path,json=ledger)
+        assert saved.status_code == 200
+        assert client.put(other_path,json={**ledger,'currency':'USD'}).status_code == 200
+        for person, role in ((manager,'edit'),(viewer,'view')):
+            assert client.put(path+'/members',json={'email':person.email,'role':role}).status_code == 200
+            actor['user'] = person
+            rows = client.get(spaces).json()
+            assert rows[0]['id'] == target['id']
+            assert rows[0]['role'] == role
+            assert rows[0]['currency'] == 'KWD'
+            assert rows[0]['owner_name'] == 'Owner'
+            assert client.patch(path,json={'name':'Renamed'}).status_code == 403
+            db.rollback()
+            assert client.request('DELETE',path,json={'confirmation_name':'Family debts'}).status_code == 403
+            db.rollback()
+            assert client.put(path+'/alerts',json={'enabled':True,'rules':{record['id']:3}}).status_code == 200
+            assert len(client.get(root+'/reminders').json()) == 1
+            actor['user'] = owner
+
+        actor['user'] = stranger
+        assert client.request('DELETE',path,json={'confirmation_name':'Family debts'}).status_code == 404
+        db.rollback()
+        actor['user'] = owner
+        assert client.put(other_path+'/alerts',json={'enabled':True,'rules':{record['id']:3}}).status_code == 200
+        assert client.put(other_path+'/members',json={'email':viewer.email,'role':'view'}).status_code == 200
+        renamed = client.patch(path,json={'name':'Family repayments'})
+        assert renamed.status_code == 200
+        assert renamed.json()['name'] == 'Family repayments'
+        assert renamed.json()['member_count'] == 3
+        assert client.get(path).json() == saved.json()
+        assert client.patch(path,json={'name':'Family repayments','currency':'USD'}).status_code == 422
+        for name in ('Family debts', ' Family repayments '):
+            assert client.request('DELETE',path,json={'confirmation_name':name}).status_code == 409
+            db.rollback()
+        assert client.request('DELETE',path,json={'confirmation_name':'Family repayments'}).status_code == 204
+        assert [row['id'] for row in client.get(spaces).json()] == [other['id']]
+        assert client.get(root).json()['records'] == saved.json()['records']
+        assert client.get(other_path).json()['records'] == saved.json()['records']
+        assert db.query(DebtSpaceMember.space_id).all() == [(other['id'],)]
+        assert db.query(DebtSpaceAlert.space_id).all() == [(other['id'],)]
+        actor['user'] = manager
+        assert client.get(path).status_code == 404
+        assert client.get(path+'/access').status_code == 404
+        assert client.get(root+'/reminders').json() == []
+    engine.dispose()
 
 
 def test_debt_workspace_is_private_and_links_one_personal_transaction(monkeypatch):

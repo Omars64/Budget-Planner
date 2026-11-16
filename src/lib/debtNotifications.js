@@ -79,6 +79,14 @@ export function useDebtNotifications(userId,notify,navigate) {
         nativeSync(alarms, () => alive && !controller.signal.aborted)
       }).catch(()=>{})
     }
+    const onDebtChanged = event => {
+      const deleted = event.detail?.deletedSpaceId
+      if (deleted) {
+        alarms = alarms.filter(alarm => alarm.space_id !== deleted)
+        nativeSync(alarms, () => alive)
+      }
+      refresh()
+    }
     const logout = () => {
       alive = false
       request?.abort()
@@ -91,14 +99,14 @@ export function useDebtNotifications(userId,notify,navigate) {
     const timer = window.setInterval(check,60000)
     window.addEventListener('focus',refresh)
     window.addEventListener('online',refresh)
-    window.addEventListener(debtChanged,refresh)
+    window.addEventListener(debtChanged,onDebtChanged)
     window.addEventListener('budgetly:auth-cleared',logout)
     return () => {
       logout()
       window.clearInterval(timer)
       window.removeEventListener('focus',refresh)
       window.removeEventListener('online',refresh)
-      window.removeEventListener(debtChanged,refresh)
+      window.removeEventListener(debtChanged,onDebtChanged)
       window.removeEventListener('budgetly:auth-cleared',logout)
       void handle?.remove()
     }

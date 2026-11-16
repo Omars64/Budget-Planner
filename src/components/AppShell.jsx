@@ -109,7 +109,7 @@ export default function AppShell({ children }) {
   const requestedPreview = new URLSearchParams(location.search).get('preview')
   const preview = isDebt && debtSpace?.role === 'owner' && ['view','edit'].includes(requestedPreview) ? requestedPreview : null
   const debtView = debtLocation?.view
-  const debtMore = ['access','payoff','reminders'].includes(debtView)
+  const debtMore = ['directory','payoff','reminders'].includes(debtView)
   const showDebtAdd = isDebt && ['debts','schedule','history'].includes(debtView) && (preview || debtSpace?.role) !== 'view'
   const shouldLoadAttention = !isGuest && (isOverview || notificationsOpen)
   useEffect(() => {
@@ -173,7 +173,7 @@ export default function AppShell({ children }) {
 
     <main className="main-area">
       {!isGuest && <ConnectionStatus/>}
-      {preview && <div className="debt-preview-notice"><span>Previewing as <strong>{debtRoles[preview]}</strong></span><Link className="button ghost" to={debtUrl(debtLocation.id,'access')}>Exit preview</Link></div>}
+      {preview && <div className="debt-preview-notice"><span>Previewing as <strong>{debtRoles[preview]}</strong></span><Link className="button ghost" to={debtUrl(debtLocation.id,'directory')}>Exit preview</Link></div>}
       <header className="topbar" role="banner">
         <div className="mobile-space"><SpaceSwitcher/></div>
         {!isDebt && <div className="header-controls">

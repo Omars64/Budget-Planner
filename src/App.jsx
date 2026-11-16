@@ -258,7 +258,8 @@ export default function App() {
     setToast({ id: Date.now(), message, type, action })
   }, [])
   const spaceState = useSpaces(session.user, notify, confirm)
-  const {spaces:debtSpaces, reload:reloadDebtSpaces, remember:rememberDebtSpace, refresh:refreshDebtSpaces} = useDebtSpaces(session.user)
+  const {spaces:debtSpaces, loaded:debtSpacesLoaded, error:debtSpacesError, reload:reloadDebtSpaces,
+    remember:rememberDebtSpace, forget:forgetDeletedDebtSpace, refresh:refreshDebtSpaces} = useDebtSpaces(session.user)
   const { activeSpace } = spaceState
   const { count:bankInboxCount, latestId:bankInboxLatestId } = usePendingBankAlerts(!isGuest && spaceState.spacesReady ? session.user?.id : null, activeSpace?.id)
   useAppearance(settings)
@@ -434,9 +435,9 @@ export default function App() {
     user: session.user, settings: viewSettings, accountSettings: settings, setSettings, setDeviceAppearance, appearance, setAppearance, ...spaceState,
     spaceKey: activeSpace ? `space:${activeSpace.id}` : 'personal',
     canAdd: !activeSpace || ['owner', 'edit'].includes(activeSpace.role), canManage: !activeSpace || ['owner', 'edit'].includes(activeSpace.role),
-    debtSpaces, reloadDebtSpaces, rememberDebtSpace, refreshDebtSpaces,
+    debtSpaces, debtSpacesLoaded, debtSpacesError, reloadDebtSpaces, rememberDebtSpace, forgetDeletedDebtSpace, refreshDebtSpaces,
     bankInboxCount, bankInboxLatestId, refreshKey, refresh, notify, confirm, reloadSettings: loadSettings, reloadAppearance: loadAppearance, reloadUser, isGuest, requestSignIn, lock: isGuest ? () => setGuestSigningIn(true) : signOut,
-  }), [session.user, settings, viewSettings, setDeviceAppearance, spaceState, activeSpace, appearance, debtSpaces, reloadDebtSpaces, rememberDebtSpace, refreshDebtSpaces, bankInboxCount, bankInboxLatestId, refreshKey, refresh, notify, confirm, loadSettings, loadAppearance, reloadUser, signOut, isGuest, requestSignIn])
+  }), [session.user, settings, viewSettings, setDeviceAppearance, spaceState, activeSpace, appearance, debtSpaces, debtSpacesLoaded, debtSpacesError, reloadDebtSpaces, rememberDebtSpace, forgetDeletedDebtSpace, refreshDebtSpaces, bankInboxCount, bankInboxLatestId, refreshKey, refresh, notify, confirm, loadSettings, loadAppearance, reloadUser, signOut, isGuest, requestSignIn])
 
   if (session.loading) return <StartupScreen label="Loading Budgetly"/>
   if (!session.user || guestSigningIn) return <WelcomeScreen onGuest={enterGuest} returningGuest={isGuest} renderAuth={(mode, setWorking) => <LoginScreen initialMode={mode} embedded onBusyChange={setWorking} onLogin={completeLogin} onGuest={enterGuest} returningGuest={isGuest}/>}/>

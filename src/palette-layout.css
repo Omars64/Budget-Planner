@@ -93,7 +93,7 @@ body:not([data-seasonal]):not(.has-wallpaper):has(.budgetly-v2) { background:var
 body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2.everyday-shell .topbar {
   background:var(--palette-header);color:var(--palette-header-ink);border:1px solid var(--palette-header-panel);border-radius:20px;
 }
-body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2.everyday-shell .topbar h2 { color:var(--palette-header-ink); }
+body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2.everyday-shell .topbar :is(h1,h2) { color:var(--palette-header-ink); }
 body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2.everyday-shell .topbar .eyebrow { color:var(--palette-header-muted); }
 body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2.everyday-shell .topbar :is(.header-user-tag,.icon-button,.tutorial-button) {
   background:var(--palette-header-panel);color:var(--palette-header-ink);border-color:var(--palette-header-hover);

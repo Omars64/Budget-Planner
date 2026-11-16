@@ -15,7 +15,7 @@ import EmptyState from '../components/EmptyState'
 import InfoButton from '../components/InfoButton'
 import Modal from '../components/Modal'
 import PageActions from '../components/PageActions'
-import DebtAccess from './DebtAccess'
+import DebtSpaces from './DebtSpaces'
 import './DebtWorkspace.css'
 
 const explanations = {
@@ -30,7 +30,7 @@ const menu = [
   ['history','History','See payments you recorded',History],
   ['reminders','Debt reminders','Choose when to get alerts',Bell],
   ['payoff','Debt-free calculator','Try a monthly extra payment',Calculator],
-  ['access','People & access','Manage who can use this space',Users],
+  ['directory','Debt spaces','Manage shared debt workspaces',Users],
 ]
 const Row = ({icon:Icon,name,description,amount,status,onClick}) => <li><button type="button" className="debt-row" onClick={onClick}>
   <span className="debt-row-icon"><Icon size={18}/></span><span className="debt-row-label"><strong>{name}</strong><small>{description}</small></span>
@@ -42,7 +42,9 @@ export default function DebtWorkspace() {
   const route = debtRoute(pathname)
   if (!route) return <Navigate to={debtUrl()} replace/>
   if (state?.debtReminders && route.view==='debts') return <Navigate to={debtUrl(route.id,'reminders')} replace/>
-  return <DebtScreen key={route.id || 'private'} spaceId={route.id} tab={route.view} requestedPreview={new URLSearchParams(search).get('preview')}/>
+  const requestedPreview = new URLSearchParams(search).get('preview')
+  if (route.view==='directory') return <DebtSpaces key={route.id || 'private'} spaceId={route.id} requestedPreview={requestedPreview}/>
+  return <DebtScreen key={route.id || 'private'} spaceId={route.id} tab={route.view} requestedPreview={requestedPreview}/>
 }
 
 function DebtScreen({spaceId,tab,requestedPreview}) {
@@ -251,7 +253,6 @@ function DebtScreen({spaceId,tab,requestedPreview}) {
     {tab==='more' && <ul className="debt-list debt-narrow">{menu.map(([view,name,description,Icon])=><li key={view}><Link to={url(view)} className="debt-row">
       <span className="debt-row-icon"><Icon size={18} aria-hidden="true"/></span><span className="debt-row-label"><strong>{name}</strong><small>{description}</small></span><ChevronRight size={16} aria-hidden="true"/>
     </Link></li>)}</ul>}
-    {tab==='access' && <DebtAccess spaceId={spaceId} currency={personalCurrency} preview={preview}/>}
 
     <Modal open={canEdit&&modal?.type==='entry'} onClose={close} title="Add an entry" size="small">
       <ul className="debt-list">

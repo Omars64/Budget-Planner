@@ -57,6 +57,14 @@
 .debt-payment-preview { display:grid;gap:3px;padding:10px 12px;border-radius:12px;background:var(--surface-soft);overflow-wrap:anywhere; }
 .debt-reminder-rule { display:grid;grid-template-columns:minmax(0,1fr) minmax(106px,160px);gap:9px;align-items:center; }
 .debt-reminder-rule strong { overflow-wrap:anywhere; }
+.debt-spaces { width:100%;max-width:780px;min-width:0;margin-inline:auto; }
+.debt-spaces .debt-space-row .space-option-choose > svg:first-child { color:var(--positive); }
+.debt-spaces .space-current-label { flex:none; }
+.debt-spaces .space-option-manage { width:fit-content;max-width:100%;justify-self:start; }
+.debt-space-management .modal-actions { flex-wrap:wrap; }
+.debt-space-management .modal-actions .button { min-height:44px;white-space:normal; }
+.debt-space-management .modal-actions .button.danger { background:#9d3840;color:#fff; }
+.debt-space-management .space-delete-panel p { margin-bottom:0; }
 /* Field pickers and help are separate portals above the entry sheet. */
 .budgetly-v2.debt-entry-layer .modal-backdrop { z-index:99; }
 @media(min-width:650px) {

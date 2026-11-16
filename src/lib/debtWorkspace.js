@@ -3,15 +3,16 @@ import { currencyDigits } from './currency'
 
 export const debtPath = '/api/debt-workspace'
 export const debtChanged = 'budgetly:debt-workspace'
-export const debtViews = { debts:'Debt Management', schedule:'Repayment schedule', history:'Payment history', more:'More', reminders:'Debt reminders', payoff:'Debt-free calculator', access:'People & access' }
+export const debtViews = { debts:'Debt Management', schedule:'Repayment schedule', history:'Payment history', more:'More', reminders:'Debt reminders', payoff:'Debt-free calculator', directory:'Debt spaces' }
 export const debtRoles = { owner:'Owner', edit:'Manager', view:'Viewer' }
 const debtRoot = '/debt-management'
 export const debtUrl = (id, view = 'debts') => debtRoot + (id ? `/spaces/${id}` : '') + (view === 'debts' ? '' : `/${view}`)
 export const debtApi = id => id ? `${debtPath}/spaces/${id}` : debtPath
 export function debtRoute(path) {
   const match = /^\/debt-management(?:\/spaces\/([0-9a-f-]{36}))?(?:\/([^/]+))?\/?$/i.exec(path)
-  if (!match || (match[2] && !Object.hasOwn(debtViews, match[2]))) return null
-  return { id:match[1] || null, view:match[2] || 'debts' }
+  if (!match) return null
+  const view = match[2] === 'access' ? 'directory' : match[2] || 'debts'
+  return Object.hasOwn(debtViews, view) ? {id:match[1] || null, view} : null
 }
 export const reminderLeads = [[null,'Off'], [0,'On the due date'], [1,'1 day before'], [3,'3 days before'], [7,'7 days before'], [14,'14 days before']]
 export const debtKinds = { loan:'Loan', borrowed:'Money borrowed', lent:'Money lent' }
