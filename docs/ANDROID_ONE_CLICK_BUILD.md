@@ -8,6 +8,8 @@ One-time setup: install GitHub CLI (`winget install --id GitHub.cli --exact`), r
 
 The batch publishes `Budgetly-VERSION.apk` and `update.json` from `android/app/build/outputs/apk/release`, and `Budgetly-Setup-VERSION.exe` and `windows-update.json` from `dist-desktop`. Use `-Bundle` to also build the local Play bundle at `android/app/build/outputs/bundle/release/app-release.aab`. See [Android updates](ANDROID_UPDATES.md) for device testing.
 
+The Windows update dialog offers **Download Windows installer** when manual installation is required. To require a trusted publisher for a release, configure Electron Builder with your Windows signing identity and set `BUDGETLY_REQUIRE_WINDOWS_SIGNING=1` before starting the batch. See [Desktop application](native-apps.md#desktop-application).
+
 Optional PowerShell commands:
 
 ```powershell

@@ -42,6 +42,28 @@ def ready_flow(db):
     return user, row
 
 
+@pytest.mark.parametrize('rejection', ['expired', 'revoked', 'wrong_credentials', 'invalid_token'])
+def test_rejected_account_sessions_have_the_invalid_token_challenge(db, rejection):
+    user = db.query(User).one()
+    session = db.get(AccountSession, 'review-session')
+    token = auth_serializer.dumps({'user_id':user.id, 'sid':session.id,
+                                   'credential':hashlib.sha256(user.password_hash.encode()).hexdigest()})
+    if rejection == 'expired':
+        session.created_at = utc_now() - timedelta(days=2)
+    elif rejection == 'revoked':
+        session.revoked = True
+    elif rejection == 'wrong_credentials':
+        user.password_hash = 'new-hash'
+    else:
+        token = 'invalid'
+    db.commit()
+    request = Request({'type':'http', 'headers':[(b'authorization', f'Bearer {token}'.encode())]})
+    with pytest.raises(HTTPException) as response:
+        current_user(request, db)
+    assert response.value.status_code == 401
+    assert response.value.headers == {'WWW-Authenticate': 'Bearer error="invalid_token"'}
+
+
 @pytest.mark.parametrize('change', ['counter', 'revocation'])
 def test_passkey_login_rejects_credential_changed_during_verification(db, monkeypatch, change):
     from types import SimpleNamespace

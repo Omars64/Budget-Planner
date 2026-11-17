@@ -1,4 +1,14 @@
 {
+  "6.24.2": [
+    {
+      "title": "Sign in again when your session expires",
+      "detail": "Budgetly shows a five-second sign-out notice and then opens the sign-in form on Android, Windows, and in the browser."
+    },
+    {
+      "title": "Download Windows updates directly",
+      "detail": "The Windows update dialog links directly to the official installer when you need to install an update manually."
+    }
+  ],
   "6.24.1": [
     {
       "title": "Manage shared debt spaces",

@@ -17,12 +17,14 @@ $desktopDirectory = Join-Path $root 'dist-desktop'
 $null = New-Item -ItemType Directory -Path $desktopDirectory -Force
 $installer = Join-Path $desktopDirectory 'Budgetly-Setup-1.2.3.exe'
 'Windows installer fixture only' | Set-Content -LiteralPath $installer
-@{
+$windowsManifest = @{
+    schema = 1
     version = '1.2.3'
     size = (Get-Item -LiteralPath $installer).Length
     sha256 = Get-BudgetlyFileSha256 $installer
     url = 'https://github.com/Omars64/Budget-Planner/releases/download/v1.2.3/Budgetly-Setup-1.2.3.exe'
-} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $desktopDirectory 'windows-update.json')
+}
+$windowsManifestPath = Join-Path $desktopDirectory 'windows-update.json'
 $passed = 0
 $hashFixture = Join-Path $root 'sha256-fixture.txt'
 [System.IO.File]::WriteAllText($hashFixture, 'abc')
@@ -46,7 +48,7 @@ $recorded = Get-Content -LiteralPath $logFixture -Raw
 if ($recorded -notmatch 'Synthetic warning' -or $recorded -notmatch 'Synthetic stdout') { throw 'Diagnostic log lost native output' }
 $passed++
 $testSource = ((Get-Content -LiteralPath $PSCommandPath | ForEach-Object { '+' + $_ }) -join "`n")
-foreach ($case in @('success','transient-read','auth-failure','unchanged','check','secret-file','secret-content','release-test-source','push-failure','build-failure','upload-failure','existing-published','draft-retry','bad-hash','deployment-failure','quality-failure')) {
+foreach ($case in @('success','signed-windows','bad-windows-signing-mode','transient-read','auth-failure','unchanged','check','secret-file','secret-content','release-test-source','push-failure','build-failure','upload-failure','existing-published','draft-retry','bad-hash','deployment-failure','quality-failure')) {
     $state = @{Case=$case;Calls=[System.Collections.Generic.List[string]]::new()}
     $runner = {
         param($program,$arguments)
@@ -83,15 +85,17 @@ foreach ($case in @('success','transient-read','auth-failure','unchanged','check
     }.GetNewClosure()
     $manifest.sha256=if($case -eq 'bad-hash'){'bad'}else{Get-BudgetlyFileSha256 $apk}
     $manifest | ConvertTo-Json | Set-Content (Join-Path $directory 'update.json')
+    $windowsManifest.signed = if ($case -eq 'bad-windows-signing-mode') { 'true' } else { $case -eq 'signed-windows' }
+    $windowsManifest | ConvertTo-Json | Set-Content -LiteralPath $windowsManifestPath
     $failed=$false
     $failureMessage=''
     try { Invoke-BudgetlyRelease -Root $root -BuildArguments @('build') -Runner $runner -CheckOnly:($case -eq 'check') }
     catch { $failed=$true; $failureMessage=$_.Exception.Message }
-    $shouldFail=$case -in @('auth-failure','secret-file','secret-content','push-failure','build-failure','upload-failure','existing-published','bad-hash','deployment-failure','quality-failure')
+    $shouldFail=$case -in @('auth-failure','secret-file','secret-content','push-failure','build-failure','upload-failure','existing-published','bad-hash','bad-windows-signing-mode','deployment-failure','quality-failure')
     if($failed -ne $shouldFail){throw "Unexpected outcome: $case. Error: $failureMessage. Calls: $($state.Calls -join '; ')"}
     $calls=$state.Calls -join "`n"
     if($shouldFail -and $calls -match 'release edit'){throw "Published failed case: $case"}
-    if($case -in @('build-failure', 'bad-hash') -and $calls -match 'git.exe (add|commit|push)'){throw 'Failed build validation changed Git or deployed unverified source'}
+    if($case -in @('build-failure', 'bad-hash', 'bad-windows-signing-mode') -and $calls -match 'git.exe (add|commit|push)'){throw 'Failed build validation changed Git or deployed unverified source'}
     if($case -eq 'check' -and $calls -match 'git.exe (add|commit|push)|release (create|edit)'){throw 'CheckOnly caused mutations'}
     if($case -eq 'check' -and ($calls -notmatch 'powershell.exe build -CheckOnly' -or $calls -match 'electron-builder.cmd --win')){throw 'CheckOnly tried to package the app'}
     if($case -eq 'unchanged' -and $calls -match 'git.exe commit'){throw 'Empty commit created'}

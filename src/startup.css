@@ -6,6 +6,12 @@
   background: #101318;
 }
 
+.app-loading.session-expired {
+  background: var(--surface);
+  color: var(--text);
+  text-align: center;
+}
+
 .startup-ring {
   width: 54px;
   aspect-ratio: 1;

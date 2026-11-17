@@ -3,7 +3,7 @@ import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useM
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowLeft, RefreshCw } from 'lucide-react'
-import { api, auth, flushOfflineTransactions, jsonBody } from './lib/api'
+import { api, auth, flushOfflineTransactions, jsonBody, sessionExpiredEvent } from './lib/api'
 import { startReadPolling, startResourcePolicySession } from './lib/resourcePolicy'
 import {installMoneyInputDefaults} from './lib/moneyInputs'
 import { rememberOfflineSession, restoreOfflineSession, setOfflineUser } from './lib/offlineSync'
@@ -227,6 +227,8 @@ export default function App() {
   const currentLocation = useLocation()
   const { confirm, confirmation } = useConfirmation()
   const [session, setSession] = useState({ loading: true, user: null })
+  const [sessionExpiry, setSessionExpiry] = useState(null)
+  const [signInAfterExpiry, setSignInAfterExpiry] = useState(false)
   const [deviceAppearance, setDeviceAppearanceState] = useState(readDeviceAppearance)
   const [accountSettings, setSettings] = useState(() => ({ ...deviceAppearance, logo_style: 'current', currency: 'KWD', display_name: 'Budgetly', week_starts_on: 'sunday', compact_numbers: false }))
   const setDeviceAppearance = useCallback(patch => setDeviceAppearanceState(current => ({ ...current, ...patch })), [])
@@ -245,7 +247,7 @@ export default function App() {
     const data = readGuest()
     setGuestActive(true); setOfflineUser(null)
     setSettings(data.settings); setAppearance({ profile_image: '', wallpaper_image: '' })
-    setGuestSigningIn(false); setSession({ loading: false, user: guestUser })
+    setGuestSigningIn(false); setSignInAfterExpiry(false); setSession({ loading: false, user: guestUser })
   }, [])
   const requestSignIn = useCallback(feature => requestGuestSignIn(feature), [])
   useEffect(() => {
@@ -257,11 +259,12 @@ export default function App() {
   const notify = useCallback((message, type = 'success', action = null) => {
     setToast({ id: Date.now(), message, type, action })
   }, [])
-  const spaceState = useSpaces(session.user, notify, confirm)
+  const activeUser = sessionExpiry ? null : session.user
+  const spaceState = useSpaces(activeUser, notify, confirm)
   const {spaces:debtSpaces, loaded:debtSpacesLoaded, error:debtSpacesError, reload:reloadDebtSpaces,
-    remember:rememberDebtSpace, forget:forgetDeletedDebtSpace, refresh:refreshDebtSpaces} = useDebtSpaces(session.user)
+    remember:rememberDebtSpace, forget:forgetDeletedDebtSpace, refresh:refreshDebtSpaces} = useDebtSpaces(activeUser)
   const { activeSpace } = spaceState
-  const { count:bankInboxCount, latestId:bankInboxLatestId } = usePendingBankAlerts(!isGuest && spaceState.spacesReady ? session.user?.id : null, activeSpace?.id)
+  const { count:bankInboxCount, latestId:bankInboxLatestId } = usePendingBankAlerts(!isGuest && spaceState.spacesReady ? activeUser?.id : null, activeSpace?.id)
   useAppearance(settings)
   const faviconStyle = session.user ? settings.logo_style : 'current'
   useEffect(() => setBrandFavicon(color_palette, faviconStyle), [color_palette, faviconStyle])
@@ -276,11 +279,11 @@ export default function App() {
   }, [toast])
   const refresh = useCallback(() => setRefreshKey(v => v + 1), [])
   useEffect(() => {
-    if (!session.user || isGuest) return
+    if (!activeUser || isGuest) return
     return startResourcePolicySession()
-  }, [session.user?.id, isGuest])
+  }, [activeUser?.id, isGuest])
   useEffect(() => {
-    if (!bankNotificationsAvailable() || session.loading) return
+    if (!bankNotificationsAvailable() || session.loading || sessionExpiry) return
     if (!session.user || isGuest) { void suspendBankCapture().catch(() => {}); return }
     let alive = true
     const sync = async () => {
@@ -296,7 +299,7 @@ export default function App() {
     window.addEventListener('online', changed); window.addEventListener('focus', changed)
     document.addEventListener('visibilitychange', changed); window.addEventListener('budgetly:auth-cleared', logout)
     return () => { alive = false; window.removeEventListener('online', changed); window.removeEventListener('focus', changed); document.removeEventListener('visibilitychange', changed); window.removeEventListener('budgetly:auth-cleared', logout) }
-  }, [session.loading, session.user?.id, isGuest])
+  }, [session.loading, session.user?.id, isGuest, sessionExpiry])
   useEffect(() => {
     const prompt = event => { if (guestActive()) setGuestFeature(event.detail || 'this feature') }
     const changed = () => { if (guestActive()) refresh() }
@@ -307,7 +310,7 @@ export default function App() {
     return () => { window.removeEventListener('budgetly:guest-signin', prompt); window.removeEventListener('budgetly:guest-changed', changed); window.removeEventListener('storage', storage) }
   }, [refresh, notify])
   useEffect(() => {
-    if (!session.user || isGuest) return undefined
+    if (!activeUser || isGuest) return undefined
     const sync = () => { if (document.visibilityState !== 'hidden') void flushOfflineTransactions().catch(console.error) }
     const changed = () => refresh()
     sync()
@@ -317,11 +320,11 @@ export default function App() {
     window.addEventListener('visibilitychange', sync)
     window.addEventListener('budgetly:offline-synced', changed)
     return () => { window.clearInterval(timer); window.removeEventListener('online', sync); window.removeEventListener('focus', sync); window.removeEventListener('visibilitychange', sync); window.removeEventListener('budgetly:offline-synced', changed) }
-  }, [session.user?.id, refresh])
-  useEffect(() => { if (session.user && auth.token) void rememberOfflineSession(session.user, settings, auth.token) }, [session.user, settings])
+  }, [activeUser?.id, refresh, isGuest])
+  useEffect(() => { if (activeUser && auth.token && !auth.expired) void rememberOfflineSession(activeUser, settings, auth.token) }, [activeUser, settings])
   useEffect(() => {
-    if (!session.user || isGuest) return undefined
-    const sync = () => syncPlannedNotifications(session.user.id).catch(console.error)
+    if (!activeUser || isGuest) return undefined
+    const sync = () => syncPlannedNotifications(activeUser.id).catch(error => { if (!error.sessionExpired) console.error(error) })
     const stop = startReadPolling(sync)
     plannedRead.current = stop
     window.addEventListener(notificationSettingsChangedEvent, stop.refresh)
@@ -330,13 +333,12 @@ export default function App() {
       plannedRead.current = null
       window.removeEventListener(notificationSettingsChangedEvent, stop.refresh)
     }
-  }, [session.user?.id, isGuest])
+  }, [activeUser?.id, isGuest])
   useEffect(() => { plannedRead.current?.refresh() }, [refreshKey])
 
   const loadSettings = useCallback(async () => {
     try { setSettings(await api('/api/settings')); return true } catch (err) {
-      if (err.status === 401) auth.clear()
-      else console.error(err)
+      if (err.status !== 401) console.error(err)
       return false
     }
   }, [])
@@ -367,42 +369,7 @@ export default function App() {
     }
   }, [appearance.wallpaper_image, settings.wallpaper_enabled, settings.wallpaper_style])
 
-  useEffect(() => {
-    const resume = async () => {
-      if (!auth.token) { if (guestRemembered()) { try { await enterGuest(); return } catch (error) { console.error(error) } } setSession({ loading: false, user: null }); return }
-      setGuestActive(false)
-      if (navigator.onLine === false) {
-        // A controlled worker/browser can leave an offline fetch pending. Open
-        // the token-bound local session directly rather than waiting for I/O.
-        const token = auth.token
-        const saved = await restoreOfflineSession(token)
-        if (auth.token !== token) return
-        if (saved) {
-          setOfflineUser(saved.user.id)
-          setSettings(saved.settings)
-          setSession({ loading: false, user: saved.user })
-        } else setSession({ loading: false, user: null })
-        return
-      }
-      api('/api/auth/me').then(async user => {
-      setOfflineUser(user.id)
-      await loadSettings()
-      if (!auth.token) { setSession({ loading: false, user: null }); return }
-      setSession({ loading: false, user })
-      void loadAppearance()
-      }).catch(async error => {
-        const temporaryOutage = error.network || [502, 503, 504].includes(error.status)
-        const saved = temporaryOutage ? await restoreOfflineSession(auth.token) : null
-        if (saved) { setOfflineUser(saved.user.id); setSettings(saved.settings); setSession({ loading: false, user: saved.user }); return }
-        if (!temporaryOutage) { auth.clear(); localStorage.removeItem('flowbudget_biometric_session') }
-        setSession({ loading: false, user: null })
-      })
-    }
-    void resume()
-  }, [loadSettings, loadAppearance, enterGuest])
-
-  const finishSignOut = useCallback(() => {
-    void api('/api/account/signout',{method:'POST'}).catch(()=>{})
+  const clearSession = useCallback(() => {
     if (smsAvailable()) void BankSms.configure({enabled:false}).catch(console.error)
     void suspendBankCapture().catch(() => {})
     void cancelReminder().catch(console.error)
@@ -412,15 +379,89 @@ export default function App() {
     setAppearance({ profile_image: '', wallpaper_image: '' })
     setSession({ loading: false, user: null })
     setSignoutRequested(false)
+    setImportGuest(false)
+    setToast(null)
   }, [session.user?.id])
+  useEffect(() => {
+    const expired = () => {
+      const token = auth.token
+      if (token) setSessionExpiry(current => current?.token === token ? current : { token, deadline: Date.now() + 5000 })
+    }
+    window.addEventListener(sessionExpiredEvent, expired)
+    if (auth.expired) expired()
+    return () => window.removeEventListener(sessionExpiredEvent, expired)
+  }, [])
+  useEffect(() => {
+    if (!sessionExpiry) return
+    const finish = () => {
+      if (auth.token === sessionExpiry.token && auth.expired) {
+        clearSession()
+        setSignInAfterExpiry(true)
+      }
+      setSessionExpiry(current => current === sessionExpiry ? null : current)
+    }
+    const finishOnResume = () => { if (Date.now() >= sessionExpiry.deadline) finish() }
+    const timer = window.setTimeout(finish, Math.max(0, sessionExpiry.deadline - Date.now()))
+    document.addEventListener('visibilitychange', finishOnResume)
+    return () => {
+      window.clearTimeout(timer)
+      document.removeEventListener('visibilitychange', finishOnResume)
+    }
+  }, [sessionExpiry, clearSession])
+
+  useEffect(() => {
+    const resume = async () => {
+      const token = auth.token
+      if (!token) { if (guestRemembered()) { try { await enterGuest(); return } catch (error) { console.error(error) } } setSession({ loading: false, user: null }); return }
+      setGuestActive(false)
+      if (navigator.onLine === false) {
+        // A controlled worker/browser can leave an offline fetch pending. Open
+        // the token-bound local session directly rather than waiting for I/O.
+        const saved = await restoreOfflineSession(token)
+        if (auth.token !== token || auth.expired) return
+        if (saved) {
+          setOfflineUser(saved.user.id)
+          setSettings(saved.settings)
+          setSession({ loading: false, user: saved.user })
+        } else setSession({ loading: false, user: null })
+        return
+      }
+      try {
+        const user = await api('/api/auth/me')
+        if (auth.token !== token || auth.expired) return
+        setOfflineUser(user.id)
+        await loadSettings()
+        if (auth.token !== token || auth.expired) return
+        setSession({ loading: false, user })
+        void loadAppearance()
+      } catch (error) {
+        if (error.sessionExpired || auth.token !== token || auth.expired) return
+        const temporaryOutage = error.network || [502, 503, 504].includes(error.status)
+        const saved = temporaryOutage ? await restoreOfflineSession(token) : null
+        if (auth.token !== token || auth.expired) return
+        if (saved) { setOfflineUser(saved.user.id); setSettings(saved.settings); setSession({ loading: false, user: saved.user }); return }
+        if (!temporaryOutage) { auth.clear(); localStorage.removeItem('flowbudget_biometric_session') }
+        setSession({ loading: false, user: null })
+      }
+    }
+    void resume()
+  }, [loadSettings, loadAppearance, enterGuest])
+
+  const finishSignOut = useCallback(() => {
+    void api('/api/account/signout',{method:'POST'}).catch(()=>{})
+    clearSession()
+  }, [clearSession])
   const signOut = useCallback(() => setSignoutRequested(true), [])
 
   const completeLogin = useCallback(async user => {
+    const token = auth.token
     resetSupportPrompt(user.id)
     setApiSpace(null); rememberSpaceSelection(user.id, null)
     setGuestActive(false); setGuestSigningIn(false)
     setOfflineUser(user.id)
     await loadSettings()
+    if (auth.token !== token || auth.expired) return
+    setSignInAfterExpiry(false)
     setSession({ loading: false, user })
     void loadAppearance()
     try { setImportGuest(guestHasRecords()) } catch (error) { notify(error.message, 'error') }
@@ -439,8 +480,9 @@ export default function App() {
     bankInboxCount, bankInboxLatestId, refreshKey, refresh, notify, confirm, reloadSettings: loadSettings, reloadAppearance: loadAppearance, reloadUser, isGuest, requestSignIn, lock: isGuest ? () => setGuestSigningIn(true) : signOut,
   }), [session.user, settings, viewSettings, setDeviceAppearance, spaceState, activeSpace, appearance, debtSpaces, debtSpacesLoaded, debtSpacesError, reloadDebtSpaces, rememberDebtSpace, forgetDeletedDebtSpace, refreshDebtSpaces, bankInboxCount, bankInboxLatestId, refreshKey, refresh, notify, confirm, loadSettings, loadAppearance, reloadUser, signOut, isGuest, requestSignIn])
 
+  if (sessionExpiry) return <div className="app-loading session-expired"><p role="alert">Session expired. Logging out now…</p></div>
   if (session.loading) return <StartupScreen label="Loading Budgetly"/>
-  if (!session.user || guestSigningIn) return <WelcomeScreen onGuest={enterGuest} returningGuest={isGuest} renderAuth={(mode, setWorking) => <LoginScreen initialMode={mode} embedded onBusyChange={setWorking} onLogin={completeLogin} onGuest={enterGuest} returningGuest={isGuest}/>}/>
+  if (!session.user || guestSigningIn) return <WelcomeScreen onGuest={enterGuest} returningGuest={isGuest} openSignIn={signInAfterExpiry} renderAuth={(mode, setWorking) => <LoginScreen initialMode={mode} embedded onBusyChange={setWorking} onLogin={completeLogin} onGuest={enterGuest} returningGuest={isGuest}/>}/>
   if (!spaceState.spacesReady) return <StartupScreen label="Opening workspace"/>
 
   return <AppContext.Provider value={value}>

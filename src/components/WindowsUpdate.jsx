@@ -73,7 +73,9 @@ export default function WindowsUpdate({ settings = false, children }) {
     setCanInstall(null)
     const check = async () => {
       let available = false
-      try { available = await desktop.canInstallUpdate?.() === true } catch { /* The installed publisher could not be confirmed. */ }
+      try {
+        available = typeof desktop.installUpdate === 'function' && await desktop.canInstallUpdate?.() === true
+      } catch { /* The installed publisher could not be confirmed. */ }
       if (alive) setCanInstall(available)
     }
     void check()
@@ -98,20 +100,20 @@ export default function WindowsUpdate({ settings = false, children }) {
   }
   if (!desktop) return null
   const inlineUpdate = signedRelease && canInstall === true
+  const footer = release && (inlineUpdate
+    ? <button type="button" className="button primary release-action" disabled={installing} onClick={() => void install()}><Download size={18}/>{installing ? 'Updating…' : 'Update and restart'}</button>
+    : <a className="button primary release-action" href={release.url} target="_blank" rel="noopener noreferrer"><Download size={18}/>Download Windows installer</a>)
   return <>
     {settings && <section className="update-settings-controls" aria-label="App updates">
       {enabled ? <button type="button" className="button ghost" disabled={checking || installing} onClick={() => void check(true)}><RefreshCw size={17}/>{checking ? 'Checking…' : 'Check updates'}</button> : <p>Microsoft Store manages updates for this installation.</p>}
       {children}
       {message && <p role="status">{message}</p>}
     </section>}
-    <Modal open={open} onClose={close} title="A Windows update is ready" subtitle={release ? `Budgetly ${release.version}` : ''} layerClass="release-popup" slowEntrance
-      footer={release && (inlineUpdate
-        ? <button type="button" className="button primary release-action" disabled={installing} onClick={() => void install()}><Download size={18}/>{installing ? 'Updating…' : 'Update and restart'}</button>
-        : <button type="button" className="button ghost" onClick={close}>Close</button>)}>
+    <Modal open={open} onClose={close} title="A Windows update is ready" subtitle={release ? `Budgetly ${release.version}` : ''} layerClass="release-popup" slowEntrance footer={footer}>
       {inlineUpdate && !installing && <p>Save any work first. Budgetly will verify the installer and reopen after the update.</p>}
-      {release && !signedRelease && <p>This release is missing a verified Windows publisher signature. In-app installation is unavailable for this version.</p>}
+      {release && !signedRelease && <p>This update requires manual installation because it has no verified Windows publisher signature. Download the installer, then open it from your browser’s downloads.</p>}
       {signedRelease && canInstall === null && <p role="status">Checking this installation’s publisher…</p>}
-      {signedRelease && canInstall === false && <p>This installation’s publisher could not be verified. Install a signed copy of Budgetly once to enable future in-app updates.</p>}
+      {signedRelease && canInstall === false && <p>Download and run this signed installer once to enable future in-app updates.</p>}
       {installing && <div className="stack gap-10">
         <p role="status">{phases[progress.phase]}</p>
         {progress.phase === 'downloading' && <progress aria-label="Windows update download" value={progress.percentage} max="100"/>}

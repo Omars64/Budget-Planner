@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { api, auth, money } from './api'
+import { api, apiFile, auth, money, sessionExpiredEvent } from './api'
 
 describe('money formatter', () => {
   it('formats KWD using three fractional digits', () => {
@@ -80,4 +80,49 @@ it('preserves explicit retry keys and does not coalesce distinct logical saves',
     expect(count).toBe(2)
     expect(fetchMock.mock.calls.map(([,options])=>options.headers.get('Idempotency-Key'))).toEqual(['logical-first','logical-second'])
   } finally { vi.unstubAllGlobals() }
+})
+
+it('blocks further requests and reports an expired session once, including on file downloads', async () => {
+  auth.token = 'expired-export-session'
+  const expired = vi.fn()
+  window.addEventListener(sessionExpiredEvent, expired)
+  const fetchMock = vi.fn(async () => globalThis.Response.json({ detail: 'Session rejected' }, {
+    status: 401, headers: { 'WWW-Authenticate': 'Bearer error="invalid_token"' },
+  }))
+  vi.stubGlobal('fetch', fetchMock)
+  try {
+    await expect(apiFile('/api/backup/export')).rejects.toMatchObject({ status: 401, sessionExpired: true })
+    await expect(api('/api/wallets')).rejects.toMatchObject({ status: 401, sessionExpired: true })
+    expect(expired).toHaveBeenCalledOnce()
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(auth.expired).toBe(true)
+  } finally {
+    window.removeEventListener(sessionExpiredEvent, expired)
+    auth.clear()
+    vi.unstubAllGlobals()
+  }
+})
+
+it('keeps a healthy session after an incorrect password or a late response from a previous session', async () => {
+  auth.token = 'original-session'
+  const expired = vi.fn()
+  window.addEventListener(sessionExpiredEvent, expired)
+  let rejectOldSession
+  vi.stubGlobal('fetch', vi.fn()
+    .mockResolvedValueOnce(globalThis.Response.json({ detail: 'Incorrect password' }, { status: 401 }))
+    .mockImplementationOnce(() => new Promise(resolve => { rejectOldSession = resolve })))
+  try {
+    await expect(api('/api/account/confirm', { method: 'POST' })).rejects.toMatchObject({ status: 401, message: 'Incorrect password' })
+    const oldRequest = api('/api/dashboard')
+    auth.token = 'new-session'
+    rejectOldSession(globalThis.Response.json({ detail: 'Session expired' }, { status: 401 }))
+    await expect(oldRequest).rejects.toMatchObject({ staleAuth: true })
+    expect(expired).not.toHaveBeenCalled()
+    expect(auth.expired).toBe(false)
+    expect(auth.token).toBe('new-session')
+  } finally {
+    window.removeEventListener(sessionExpiredEvent, expired)
+    auth.clear()
+    vi.unstubAllGlobals()
+  }
 })

@@ -116,10 +116,16 @@ function Invoke-BudgetlyRelease {
         $windowsManifestPath = Join-Path $windowsDirectory 'windows-update.json'
         $windowsManifest = Get-Content -LiteralPath $windowsManifestPath -Raw | ConvertFrom-Json
         $windowsFile = Get-Item -LiteralPath $installer
-        if ($windowsManifest.version -ne $version -or $windowsManifest.size -ne $windowsFile.Length -or
+        if ($windowsManifest.schema -ne 1 -or $windowsManifest.signed -isnot [bool] -or
+            $windowsManifest.version -ne $version -or $windowsManifest.size -ne $windowsFile.Length -or
             $windowsManifest.sha256 -ne (Get-BudgetlyFileSha256 $installer) -or
             $windowsManifest.url -ne "https://github.com/$repo/releases/download/$tag/Budgetly-Setup-$version.exe") {
             throw 'Windows installer and update manifest do not match. Nothing will be pushed or published.'
+        }
+        if ($windowsManifest.signed) {
+            Write-Host 'Windows update: Verified publisher. Compatible installations can update in the app.'
+        } else {
+            Write-Host 'Windows update: Manual installation. The installer will be included in the GitHub release.'
         }
         $directory = Join-Path $Root 'android/app/build/outputs/apk/release'
         $apk = Join-Path $directory "Budgetly-$version.apk"

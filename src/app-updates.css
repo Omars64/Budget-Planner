@@ -21,6 +21,7 @@
 .budgetly-v2.release-popup .modal-body { padding:4px 24px 24px; overflow:auto; min-height:0; }
 .budgetly-v2.release-popup .modal-footer { padding:0; padding-bottom:0; border-top:0; }
 .budgetly-v2.release-popup .release-action { width:100%; min-height:58px; border-radius:0; margin:0; font-size:14px; white-space:normal; }
+.budgetly-v2.release-popup a.release-action { text-decoration:none; text-align:center; }
 .release-intro { color:var(--muted); font-size:13px; line-height:1.6; margin:0 0 22px; }
 .release-change-list { list-style:none; margin:0; padding:0; display:grid; gap:20px; }
 .release-change-list li { display:grid; grid-template-columns:18px minmax(0,1fr); gap:10px; }

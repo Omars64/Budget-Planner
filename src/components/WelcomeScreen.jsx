@@ -20,8 +20,8 @@ function AndroidWelcomeDownload() {
   return <a className="welcome-install" href={url}><Download size={17} aria-hidden="true"/>Download Budgetly</a>
 }
 
-export default function WelcomeScreen({ onGuest, returningGuest = false, renderAuth }) {
-  const [authMode, setAuthMode] = useState(() => returningGuest || new URLSearchParams(window.location.search).has('reset') ? 'login' : null)
+export default function WelcomeScreen({ onGuest, returningGuest = false, openSignIn = false, renderAuth }) {
+  const [authMode, setAuthMode] = useState(() => returningGuest || openSignIn || new URLSearchParams(window.location.search).has('reset') ? 'login' : null)
   const [working, setWorking] = useState(false)
   const [error, setError] = useState('')
   const [replay, setReplay] = useState(0)
@@ -55,7 +55,9 @@ export default function WelcomeScreen({ onGuest, returningGuest = false, renderA
       </div>
     </main>
     <footer className="welcome-footer">Budgetly by Omar Solanki</footer>
-    <Modal open={Boolean(authMode)} onClose={() => { if (!working) setAuthMode(null) }} title="Your Budgetly account" size="small" layerClass="welcome-auth-layer">
+    <Modal open={Boolean(authMode)} onClose={() => { if (!working) setAuthMode(null) }} title="Your Budgetly account"
+      subtitle={openSignIn && authMode === 'login' ? 'Your session expired. Sign in again to continue.' : undefined}
+      size="small" layerClass="welcome-auth-layer">
       {authMode && <div key={authMode}>{renderAuth(authMode, setWorking)}</div>}
     </Modal>
   </div>

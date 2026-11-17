@@ -10,6 +10,9 @@ const rememberKey = 'flowbudget_remember_session'
 const nativeApiBase = 'https://budget-planner-ecru-seven.vercel.app'
 const apiBase = import.meta.env.VITE_API_BASE_URL || (Capacitor.isNativePlatform() ? nativeApiBase : '')
 export const publicApiUrl = path => apiBase + path
+export const sessionExpiredEvent = 'budgetly:session-expired'
+const legacySessionErrors = new Set(['Session expired', 'Account is inactive', 'Please sign in again', 'Please sign in again. This session has ended.'])
+let expiredToken
 const responseCache = new Map()
 export const readCached = path => {
   path = scopedPath(path)
@@ -30,6 +33,9 @@ export const auth = {
   get token() {
     try { return sessionStorage.getItem(tokenKey) || (auth.remembered ? localStorage.getItem(tokenKey) || '' : '') } catch { return '' }
   },
+  get expired() {
+    return Boolean(expiredToken && auth.token === expiredToken)
+  },
   set token(value) {
     try {
       if (value) {
@@ -43,6 +49,7 @@ export const auth = {
     } catch { throw new Error('Allow site storage to complete sign-in.') }
   },
   clear() {
+    const rejectedToken = auth.expired ? expiredToken : null
     window.dispatchEvent(new Event('budgetly:auth-cleared'))
     setApiSpace(null)
     responseCache.clear()
@@ -51,12 +58,29 @@ export const auth = {
     if (userId) void clearOfflineCache(userId).catch(() => {})
     try { localStorage.removeItem('budgetly_offline_user') } catch { /* Optional offline session. */ }
     sessionStorage.removeItem(tokenKey)
-    localStorage.removeItem(tokenKey)
+    if (!rejectedToken || localStorage.getItem(tokenKey) === rejectedToken) localStorage.removeItem(tokenKey)
+    expiredToken = undefined
     Object.keys(sessionStorage).filter(key => key.startsWith('flowbudget_note_draft_')).forEach(key => sessionStorage.removeItem(key))
     for (const storage of [sessionStorage, localStorage]) {
       Object.keys(storage).filter(key => key !== 'flowbudget_tx_draft_guest' && /^flowbudget_(shared_)?tx_draft_/.test(key)).forEach(key => storage.removeItem(key))
     }
   },
+}
+
+function sessionExpiredError() {
+  return Object.assign(new Error('Session expired. Logging out now…'), { status: 401, sessionExpired: true })
+}
+
+function detectExpiredSession(response, detail, token) {
+  if (!token || token !== auth.token || response.status !== 401) return
+  // Older hosted APIs still return the original messages during rollout.
+  if (response.headers?.get('WWW-Authenticate') !== 'Bearer error="invalid_token"' && !legacySessionErrors.has(detail)) return
+  if (!auth.expired) {
+    expiredToken = token
+    responseCache.clear()
+    window.dispatchEvent(new Event(sessionExpiredEvent))
+  }
+  throw sessionExpiredError()
 }
 
 const pending = new Map()
@@ -67,8 +91,10 @@ function assertRequestIdentity(token, userId) {
   if (auth.token !== token || offlineUser() !== userId) {
     throw Object.assign(new Error('Your account changed while this request was in progress. Reopen this screen before trying again.'), { staleAuth: true })
   }
+  if (auth.expired) throw sessionExpiredError()
 }
 export function api(path, options = {}) {
+  if (auth.expired) return Promise.reject(sessionExpiredError())
   if (guestActive() && !auth.token && !path.startsWith('/api/auth/') && !path.startsWith('/api/passkeys/login/')) return guestApi(path, options)
   path = scopedPath(path)
   if (options.method === 'PUT' && options.body) {
@@ -105,7 +131,7 @@ export function api(path, options = {}) {
     return data
   }).catch(error => {
     if (transaction && error.status >= 400 && error.status < 500) transactionKeys.delete(key)
-    if (mutation && !path.endsWith('/poll')) window.dispatchEvent(new CustomEvent('flowbudget:error', { detail:error.message || 'The request could not be saved. Please try again.' }))
+    if (mutation && !error.sessionExpired && !path.endsWith('/poll')) window.dispatchEvent(new CustomEvent('flowbudget:error', { detail:error.message || 'The request could not be saved. Please try again.' }))
     throw error
   }).finally(() => {
     if (pending.get(key) === request) pending.delete(key)
@@ -165,6 +191,7 @@ async function send(path, options = {}) {
   }
   checkIdentity()
   if (!response.ok) {
+    detectExpiredSession(response, data?.detail, requestToken)
     if ([502, 503, 504].includes(response.status) && (!options.method || options.method === 'GET')) {
       const cached = await readFallback()
       if (cached !== undefined) return cached
@@ -216,15 +243,23 @@ export async function apiFile(path) {
     requestGuestSignIn('account exports')
     throw Object.assign(new Error('Sign in for account exports. Guest CSV and JSON exports are available in Settings.'), { status: 403 })
   }
+  const token = auth.token
+  const userId = offlineUser()
+  assertRequestIdentity(token, userId)
   const headers = new Headers()
-  if (auth.token) headers.set('Authorization', `Bearer ${auth.token}`)
+  if (token) headers.set('Authorization', `Bearer ${token}`)
   let response
   try { response = await fetch(`${apiBase}${path}`, { headers }) }
   catch { throw new Error('Could not reach Budgetly. Check your connection and try again.') }
+  assertRequestIdentity(token, userId)
   if (!response.ok) {
     let detail
     try { detail = (await response.json()).detail } catch { /* Use the status below. */ }
+    assertRequestIdentity(token, userId)
+    detectExpiredSession(response, detail, token)
     throw new Error(typeof detail === 'string' ? detail : `Download failed (${response.status})`)
   }
-  return response.blob()
+  const blob = await response.blob()
+  assertRequestIdentity(token, userId)
+  return blob
 }

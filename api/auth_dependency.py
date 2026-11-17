@@ -10,6 +10,10 @@ from .models import User, utc_now
 from .reliability_models import AccountSession
 
 
+def invalid_session(detail):
+    return HTTPException(401, detail, headers={'WWW-Authenticate': 'Bearer error="invalid_token"'})
+
+
 def current_user(request: Request, db: Session = Depends(get_db)) -> User:
     from .index import auth_serializer
     header = request.headers.get('Authorization', '')
@@ -19,16 +23,16 @@ def current_user(request: Request, db: Session = Depends(get_db)) -> User:
     try:
         data = auth_serializer.loads(token, max_age=86400)
     except (BadSignature, SignatureExpired):
-        raise HTTPException(401, 'Session expired')
+        raise invalid_session('Session expired') from None
     user = db.get(User, data.get('user_id'))
     if not user or not user.active:
-        raise HTTPException(401, 'Account is inactive')
+        raise invalid_session('Account is inactive')
     if not hmac.compare_digest(data.get('credential', ''), hashlib.sha256(user.password_hash.encode()).hexdigest()):
-        raise HTTPException(401, 'Please sign in again')
+        raise invalid_session('Please sign in again')
     session = db.get(AccountSession, data.get('sid', ''))
     if (not session or session.revoked or session.user_id != user.id
             or session.created_at <= utc_now() - timedelta(days=1)):
-        raise HTTPException(401, 'Please sign in again. This session has ended.')
+        raise invalid_session('Please sign in again. This session has ended.')
     request.state.session_id = session.id
     if session.label == 'Browser session' or session.last_seen < utc_now() - timedelta(minutes=5):
         session.label = request.headers.get('user-agent', 'Browser session')[:200]
