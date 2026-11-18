@@ -232,7 +232,13 @@ export default function App() {
   const [deviceAppearance, setDeviceAppearanceState] = useState(readDeviceAppearance)
   const [accountSettings, setSettings] = useState(() => ({ ...deviceAppearance, logo_style: 'current', currency: 'KWD', display_name: 'Budgetly', week_starts_on: 'sunday', compact_numbers: false }))
   const setDeviceAppearance = useCallback(patch => setDeviceAppearanceState(current => ({ ...current, ...patch })), [])
-  const { color_palette, theme } = deviceAppearance
+  const { color_palette, theme, pinned_icon_palette } = deviceAppearance
+  const iconPalette = pinned_icon_palette ?? color_palette
+  const iconFollowsPalette = pinned_icon_palette === null
+  const setIconFollowsPalette = useCallback(follows => setDeviceAppearanceState(current => ({
+    ...current,
+    pinned_icon_palette: follows ? null : current.pinned_icon_palette ?? current.color_palette,
+  })), [])
   const settings = useMemo(() => ({ ...accountSettings, color_palette, theme }), [accountSettings, color_palette, theme])
   const [appearance, setAppearance] = useState({ profile_image: '', wallpaper_image: '' })
   const [refreshKey, setRefreshKey] = useState(0)
@@ -265,10 +271,10 @@ export default function App() {
     remember:rememberDebtSpace, forget:forgetDeletedDebtSpace, refresh:refreshDebtSpaces} = useDebtSpaces(activeUser)
   const { activeSpace } = spaceState
   const { count:bankInboxCount, latestId:bankInboxLatestId } = usePendingBankAlerts(!isGuest && spaceState.spacesReady ? activeUser?.id : null, activeSpace?.id)
-  useAppearance(settings)
+  useAppearance(settings, pinned_icon_palette)
   const faviconStyle = session.user ? settings.logo_style : 'current'
-  useEffect(() => setBrandFavicon(color_palette, faviconStyle), [color_palette, faviconStyle])
-  useEffect(() => applyInstalledBrandIcon(color_palette), [color_palette])
+  useEffect(() => setBrandFavicon(iconPalette, faviconStyle), [iconPalette, faviconStyle])
+  useEffect(() => applyInstalledBrandIcon(iconPalette), [iconPalette])
   const accountPage = ['/settings', '/admin', '/feedback', '/ask-ai'].includes(currentLocation.pathname)
   const viewSettings = activeSpace && !accountPage ? {...settings, currency: activeSpace.currency} : settings
   useEffect(()=>installMoneyInputDefaults(document,viewSettings.currency),[viewSettings.currency])
@@ -473,12 +479,12 @@ export default function App() {
   }, [])
 
   const value = useMemo(() => ({
-    user: session.user, settings: viewSettings, accountSettings: settings, setSettings, setDeviceAppearance, appearance, setAppearance, ...spaceState,
+    user: session.user, settings: viewSettings, accountSettings: settings, setSettings, setDeviceAppearance, iconPalette, iconFollowsPalette, setIconFollowsPalette, appearance, setAppearance, ...spaceState,
     spaceKey: activeSpace ? `space:${activeSpace.id}` : 'personal',
     canAdd: !activeSpace || ['owner', 'edit'].includes(activeSpace.role), canManage: !activeSpace || ['owner', 'edit'].includes(activeSpace.role),
     debtSpaces, debtSpacesLoaded, debtSpacesError, reloadDebtSpaces, rememberDebtSpace, forgetDeletedDebtSpace, refreshDebtSpaces,
     bankInboxCount, bankInboxLatestId, refreshKey, refresh, notify, confirm, reloadSettings: loadSettings, reloadAppearance: loadAppearance, reloadUser, isGuest, requestSignIn, lock: isGuest ? () => setGuestSigningIn(true) : signOut,
-  }), [session.user, settings, viewSettings, setDeviceAppearance, spaceState, activeSpace, appearance, debtSpaces, debtSpacesLoaded, debtSpacesError, reloadDebtSpaces, rememberDebtSpace, forgetDeletedDebtSpace, refreshDebtSpaces, bankInboxCount, bankInboxLatestId, refreshKey, refresh, notify, confirm, loadSettings, loadAppearance, reloadUser, signOut, isGuest, requestSignIn])
+  }), [session.user, settings, viewSettings, setDeviceAppearance, iconPalette, iconFollowsPalette, setIconFollowsPalette, spaceState, activeSpace, appearance, debtSpaces, debtSpacesLoaded, debtSpacesError, reloadDebtSpaces, rememberDebtSpace, forgetDeletedDebtSpace, refreshDebtSpaces, bankInboxCount, bankInboxLatestId, refreshKey, refresh, notify, confirm, loadSettings, loadAppearance, reloadUser, signOut, isGuest, requestSignIn])
 
   if (sessionExpiry) return <div className="app-loading session-expired"><p role="alert">Session expired. Logging out now…</p></div>
   if (session.loading) return <StartupScreen label="Loading Budgetly"/>

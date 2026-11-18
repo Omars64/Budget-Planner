@@ -25,8 +25,8 @@ vi.mock('./components/RouteMotion', async () => {
   return {default:({children})=>children(useLocation())}
 })
 vi.mock('./pages/Overview', () => ({default:()=>{
-  const {refresh,settings,setDeviceAppearance}=useApp()
-  return <><button onClick={refresh}>Refresh data</button><button onClick={()=>setDeviceAppearance({color_palette:'pine'})}>{settings.theme} {settings.color_palette}</button></>
+  const {refresh,settings,setDeviceAppearance,iconFollowsPalette,setIconFollowsPalette}=useApp()
+  return <><button onClick={refresh}>Refresh data</button><button onClick={()=>setDeviceAppearance({color_palette:'pine'})}>{settings.theme} {settings.color_palette}</button><label><input type="checkbox" role="switch" checked={iconFollowsPalette} onChange={event=>setIconFollowsPalette(event.target.checked)}/>Match icon to color palette</label></>
 }}))
 
 const tick = async ms => { await act(async()=>vi.advanceTimersByTimeAsync(ms)) }
@@ -63,6 +63,28 @@ test('account settings cannot replace the device palette or reset the launcher o
   expect(screen.getByRole('button',{name:'dark pine'})).toBeInTheDocument()
   expect(setPaletteIcon.mock.calls).toEqual([['burgundy'],['pine']])
   expect(api.mock.calls.some(([path,options])=>path==='/api/settings'&&options?.method==='PUT')).toBe(false)
+})
+
+test('pinning keeps the browser and launcher icon until matching is re-enabled',async()=>{
+  readDeviceAppearance.mockReturnValueOnce({theme:'dark',color_palette:'burgundy',pinned_icon_palette:null})
+  const setPaletteIcon=vi.fn()
+  vi.stubGlobal('budgetlyDesktop',{setPaletteIcon})
+  const favicon=document.createElement('link')
+  favicon.rel='icon'
+  document.head.append(favicon)
+  try {
+    await openApp()
+    const match=screen.getByRole('switch',{name:'Match icon to color palette'})
+    fireEvent.click(match)
+    fireEvent.click(screen.getByRole('button',{name:'dark burgundy'}))
+    expect(favicon.getAttribute('href')).toBe('/brand/wallet-burgundy.png')
+    expect(setPaletteIcon.mock.calls).toEqual([['burgundy']])
+
+    fireEvent.click(match)
+    expect(favicon.getAttribute('href')).toBe('/brand/wallet-pine.png')
+    expect(setPaletteIcon.mock.calls).toEqual([['burgundy'],['pine']])
+    expect(api.mock.calls.some(([path,options])=>path==='/api/settings'&&options?.method==='PUT')).toBe(false)
+  } finally { favicon.remove() }
 })
 
 test('planned notification polling follows policy, pauses hidden/offline and cleans up events',async()=>{

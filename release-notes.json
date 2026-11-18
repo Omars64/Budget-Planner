@@ -1,4 +1,14 @@
 {
+  "6.24.3": [
+    {
+      "title": "Smooth matte wallet icons",
+      "detail": "Each of Budgetly’s 11 palettes has a matte wallet icon with a dark background."
+    },
+    {
+      "title": "Keep your current icon",
+      "detail": "In Settings → Look & feel → App logo, turn off Match icon to color palette to keep the current wallet icon on this device when you change palettes."
+    }
+  ],
   "6.24.2": [
     {
       "title": "Sign in again when your session expires",

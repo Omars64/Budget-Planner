@@ -3,8 +3,8 @@
   "description": "Budgetly personal finance and shared spaces",
   "author": "Omar Solanki",
   "private": true,
-  "version": "6.24.2",
-  "androidVersionCode": 136,
+  "version": "6.24.3",
+  "androidVersionCode": 137,
   "type": "module",
   "main": "desktop/main.cjs",
   "scripts": {
@@ -71,7 +71,7 @@
     "win": {
       "target": "nsis",
       "icon": "desktop/icon.ico",
-      "extraResources": [{ "from": "desktop/brand", "to": "palette-icons", "filter": ["*.ico"] }],
+      "extraResources": [{ "from": "desktop/brand", "to": "palette-icons/matte", "filter": ["*.ico"] }],
       "artifactName": "Budgetly-Setup-${version}.${ext}"
     },
     "nsis": {

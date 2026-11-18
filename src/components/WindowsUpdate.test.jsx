@@ -32,7 +32,7 @@ test('an older unsigned installation can download the first signed update', asyn
   vi.stubGlobal('budgetlyDesktop', { version: '8.0.0', canInstallUpdate: async () => false, installUpdate })
   render(<WindowsUpdate/>)
   expect(await screen.findByRole('link', { name: 'Download Windows installer' })).toHaveAttribute('href', installer)
-  expect(screen.getByText(/run this signed installer once/)).toBeVisible()
+  await waitFor(() => expect(screen.getByText(/run this signed installer once/)).toBeVisible())
   expect(screen.queryByRole('button', { name: 'Update and restart' })).toBeNull()
   expect(installUpdate).not.toHaveBeenCalled()
 })

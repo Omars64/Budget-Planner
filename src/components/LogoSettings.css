@@ -6,4 +6,5 @@
 .logo-choice strong{flex:1;min-width:0}
 .logo-choice-indicator{width:17px;height:17px;border:2px solid var(--muted);border-radius:50%;flex:none}
 .logo-choice[aria-pressed="true"] .logo-choice-indicator{border:5px solid var(--accent)}
+.logo-follow{margin-top:12px}
 @media(max-width:560px){.logo-choices{grid-template-columns:1fr}}

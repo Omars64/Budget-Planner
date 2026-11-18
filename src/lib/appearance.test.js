@@ -15,7 +15,7 @@ it('retains visual preferences after logout/unmount and restores them on a fresh
   const {unmount}=renderHook(()=>useAppearance({theme:'dark',accent_color:'#123456',email:'not-stored@example.com'}))
   unmount()
   expect(document.documentElement.dataset.theme).toBe('dark')
-  expect(readDeviceAppearance()).toEqual({theme:'dark',color_palette:'navy',font_family:'system',text_color:'ink'})
+  expect(readDeviceAppearance()).toEqual({theme:'dark',color_palette:'navy',pinned_icon_palette:null,font_family:'system',text_color:'ink'})
   expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#8fd8f5')
   document.documentElement.dataset.theme='light'
   applyAppearance(readDeviceAppearance())
@@ -35,9 +35,22 @@ it('tracks changes to the local appearance and system theme',()=>{
 it('falls back safely if cached appearance is malformed',()=>{
   localStorage.setItem('budgetly_device_appearance','invalid json')
   expect(readDeviceAppearance().theme).toBe('light')
-  localStorage.setItem('budgetly_device_appearance',JSON.stringify({theme:'bad',accent_color:'bad'}))
+  localStorage.setItem('budgetly_device_appearance',JSON.stringify({theme:'bad',accent_color:'bad',pinned_icon_palette:'bad'}))
   expect(readDeviceAppearance().theme).toBe('light')
   expect(readDeviceAppearance().color_palette).toBe('navy')
+  expect(readDeviceAppearance().pinned_icon_palette).toBeNull()
+})
+
+it('persists the pinned icon independently of the current theme',()=>{
+  const {rerender,unmount} = renderHook(
+    ({palette,pinned}) => useAppearance({color_palette:palette},pinned),
+    {initialProps:{palette:'burgundy',pinned:'burgundy'}},
+  )
+  rerender({palette:'pine',pinned:'burgundy'})
+  expect(readDeviceAppearance()).toMatchObject({color_palette:'pine',pinned_icon_palette:'burgundy'})
+  rerender({palette:'pine',pinned:null})
+  unmount()
+  expect(readDeviceAppearance()).toMatchObject({color_palette:'pine',pinned_icon_palette:null})
 })
 
 it('keeps the personal palette in a shared workspace and on the welcome screen',()=>{

@@ -1,13 +1,13 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="wallet_launcher_aubergine_background">#150929</color>
-    <color name="wallet_launcher_burgundy_background">#321622</color>
-    <color name="wallet_launcher_pine_background">#132B25</color>
-    <color name="wallet_launcher_graphite_background">#20232C</color>
-    <color name="wallet_launcher_porcelain_background">#F5EEE4</color>
-    <color name="wallet_launcher_voltage_background">#CAFF36</color>
-    <color name="wallet_launcher_lagoon_background">#E79CCA</color>
-    <color name="wallet_launcher_ultramarine_background">#2945DB</color>
-    <color name="wallet_launcher_lilac_background">#DDD1FF</color>
-    <color name="wallet_launcher_papaya_background">#FFAE70</color>
+    <color name="wallet_launcher_aubergine_background">#081224</color>
+    <color name="wallet_launcher_burgundy_background">#281520</color>
+    <color name="wallet_launcher_pine_background">#0e211c</color>
+    <color name="wallet_launcher_graphite_background">#181b21</color>
+    <color name="wallet_launcher_porcelain_background">#191615</color>
+    <color name="wallet_launcher_voltage_background">#111611</color>
+    <color name="wallet_launcher_lagoon_background">#112e2b</color>
+    <color name="wallet_launcher_ultramarine_background">#161933</color>
+    <color name="wallet_launcher_lilac_background">#132b23</color>
+    <color name="wallet_launcher_papaya_background">#241512</color>
 </resources>

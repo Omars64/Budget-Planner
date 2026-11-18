@@ -13,6 +13,7 @@ function preferences(value = {}) {
   return {
     theme:['light','dark','system'].includes(value?.theme) ? value.theme : 'light',
     color_palette:paletteKey(value?.color_palette),
+    pinned_icon_palette:Object.hasOwn(colorPalettes,value?.pinned_icon_palette) ? value.pinned_icon_palette : null,
     font_family:Object.hasOwn(fonts,value?.font_family) ? value.font_family : 'system',
     text_color:Object.hasOwn(colours,value?.text_color) ? value.text_color : 'ink',
   }
@@ -62,9 +63,9 @@ export function applyAppearance(value, systemDark = window.matchMedia?.('(prefer
   root.style.setProperty('--accent-soft',`rgba(${bytes.join(', ')}, .10)`)
 }
 
-export function useAppearance(settings) {
+export function useAppearance(settings, pinnedIconPalette = null) {
   useLayoutEffect(()=>{
-    const prefs = preferences(settings)
+    const prefs = preferences({ ...settings, pinned_icon_palette:pinnedIconPalette })
     const media = window.matchMedia('(prefers-color-scheme: dark)')
     const update = () => applyAppearance(prefs,media.matches)
     update()
@@ -72,5 +73,5 @@ export function useAppearance(settings) {
     try { localStorage.setItem(storageKey,JSON.stringify(prefs)) } catch { /* Storage is optional. */ }
     media.addEventListener('change',update)
     return () => media.removeEventListener('change',update)
-  },[settings.theme,settings.font_family,settings.text_color,settings.color_palette])
+  },[settings.theme,settings.font_family,settings.text_color,settings.color_palette,pinnedIconPalette])
 }

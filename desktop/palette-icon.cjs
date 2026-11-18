@@ -5,7 +5,8 @@ const palettes = require('../src/lib/colorPalettes.json')
 
 const appId = 'com.flowbudget.desktop'
 const windows = process.platform === 'win32'
-const iconDirectory = app.isPackaged ? path.join(process.resourcesPath, 'palette-icons') : path.join(__dirname, 'brand')
+// Give Windows a new resource path so existing shortcuts pick up the matte artwork.
+const iconDirectory = app.isPackaged ? path.join(process.resourcesPath, 'palette-icons', 'matte') : path.join(__dirname, 'brand')
 const shortcutName = 'Budgetly.lnk'
 let palette
 

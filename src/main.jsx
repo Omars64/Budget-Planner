@@ -53,7 +53,7 @@ import { installClientDiagnostics } from './lib/diagnostics'
 
 const deviceAppearance = readDeviceAppearance()
 applyAppearance(deviceAppearance)
-setBrandFavicon(deviceAppearance.color_palette)
+setBrandFavicon(deviceAppearance.pinned_icon_palette ?? deviceAppearance.color_palette)
 const removeNumberWheelGuard=installNumberWheelGuard()
 const removeClientDiagnostics=installClientDiagnostics()
 if(import.meta.hot)import.meta.hot.dispose(removeClientDiagnostics)

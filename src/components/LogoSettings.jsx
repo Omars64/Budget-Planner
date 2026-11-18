@@ -12,7 +12,7 @@ const choices = [
 ]
 
 export default function LogoSettings() {
-  const { accountSettings, settings, setSettings, notify } = useApp()
+  const { accountSettings, settings, setSettings, notify, iconPalette, iconFollowsPalette, setIconFollowsPalette } = useApp()
   const selected = (accountSettings || settings).logo_style || 'current'
   const [saving, setSaving] = useState(false)
 
@@ -28,14 +28,18 @@ export default function LogoSettings() {
   }
 
   return <SettingsSection title="App logo" className="logo-settings" help={<SettingsHelp title="About the app logo">
-    <p>The wallet logo follows your color palette. Choose Legacy blue to use the original logo inside Budgetly.</p>
+    <p>Turn off matching to keep your current wallet icon on this device when you change palettes. Choose Legacy blue to use the original logo inside Budgetly.</p>
   </SettingsHelp>}>
     <div className="logo-choices" role="group" aria-label="App logo">
       {choices.map(choice => <button key={choice.value} type="button" className="logo-choice" aria-pressed={selected === choice.value} disabled={saving} onClick={() => choose(choice.value)}>
-        <BrandLogo style={choice.value} palette={(accountSettings || settings).color_palette} alt=""/>
+        <BrandLogo style={choice.value} palette={iconPalette} alt=""/>
         <strong>{choice.title}</strong>
         <span aria-hidden="true" className="logo-choice-indicator" />
       </button>)}
     </div>
+    <label className="check-row logo-follow">
+      <input type="checkbox" role="switch" checked={iconFollowsPalette} onChange={event => setIconFollowsPalette(event.target.checked)}/>
+      <span>Match icon to color palette</span>
+    </label>
   </SettingsSection>
 }

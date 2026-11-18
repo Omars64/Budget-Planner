@@ -86,7 +86,7 @@ export default function AppShell({ children }) {
     return () => window.removeEventListener('keydown', quickFind)
   }, [navSearch, nativeAndroid, navigate, debtRouteActive])
   useContainedScroll(sidebar)
-  const { user, settings, appearance, refresh, refreshKey, notify, lock, isGuest, requestSignIn, activeSpace, spaceKey, canAdd, debtSpaces = [], bankInboxCount = 0, bankInboxLatestId = 0 } = useApp()
+  const { user, settings, iconPalette, appearance, refresh, refreshKey, notify, lock, isGuest, requestSignIn, activeSpace, spaceKey, canAdd, debtSpaces = [], bankInboxCount = 0, bankInboxLatestId = 0 } = useApp()
   const seen = useNotificationReads(isGuest ? null : user?.id, spaceKey)
   const [preferences] = useWorkspacePreferences(user?.id)
   const keyboardOpen = useKeyboardViewport()
@@ -153,7 +153,7 @@ export default function AppShell({ children }) {
     {!nativeAndroid && !isDebt && <aside ref={sidebar} className="sidebar glass">
       <div className="sidebar-head">
         <div className="brand">
-          <BrandLogo style={settings.logo_style} palette={settings.color_palette} />
+          <BrandLogo style={settings.logo_style} palette={iconPalette} />
           <div><strong>Budgetly</strong><small>Personal finance</small></div>
         </div>
         <button className="icon-button sidebar-toggle" onClick={toggleSidebar} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed}>{collapsed ? <ChevronRight size={22}/> : <ChevronLeft size={22}/>}</button>
