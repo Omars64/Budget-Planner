@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { debtAmount, extraPaymentChange, makeSchedule, paymentStatus, payoffMonth } from './debtWorkspace'
+import { debtAmount, extraPaymentChange, makeSchedule, paymentStatus, payoffMonth, preserveDebtPayments } from './debtWorkspace'
 
 test('keeps the payment month distinct from a month-end due date',()=>{
   const items = makeSchedule({opening:30000,monthly:10000,apr:0,month:'2027-01',due:'2027-02-28'},'KWD')
@@ -26,4 +26,15 @@ test('uses only outgoing debt in payoff estimates and tracks partial receipts',(
   expect(payoffMonth([outgoing,receipt],10000,'2027-01-01')).toBe('2027-02')
   expect(debtAmount('1.025','KWD')).toBe(1025)
   expect(debtAmount('1.025','USD')).toBeNaN()
+})
+
+test('editing repayment terms keeps recorded payments attached to their original month',()=>{
+  const terms = {opening:30000,monthly:10000,apr:0,month:'2027-01',due:'2027-01-09'}
+  const old = makeSchedule(terms,'KWD')
+  old[0].payments.push({id:'payment',amount:8000,transaction_id:14})
+  const build = values => makeSchedule({...terms,...values},'KWD')
+  const revised = preserveDebtPayments(old,build({monthly:15000}))
+  expect(revised[0]).toMatchObject({id:old[0].id,amount:15000,payments:old[0].payments})
+  expect(()=>preserveDebtPayments(old,build({monthly:7000}))).toThrow(/recorded payments/)
+  expect(()=>preserveDebtPayments(old,build({month:'2027-02'}))).toThrow(/January/)
 })

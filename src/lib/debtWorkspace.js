@@ -60,6 +60,20 @@ export function makeSchedule({ opening, monthly, apr, month, due }, currency, cr
   if (principal > 0) throw new Error('Choose a monthly payment that covers the balance within 120 instalments.')
   return items
 }
+export function preserveDebtPayments(previous, schedule) {
+  const byMonth = new Map(schedule.map(item => [item.month,item]))
+  for (const old of previous) {
+    const next = byMonth.get(old.month)
+    if (old.payments.length && (!next || next.amount < paid(old))) {
+      throw new Error(`Keep ${monthLabel(old.month)} in the schedule with enough to cover its recorded payments.`)
+    }
+    if (next) {
+      next.id = old.id
+      next.payments = old.payments
+    }
+  }
+  return schedule
+}
 export const allItems = records => records.flatMap(record => record.items.map(item => ({ record, item })))
 export const openItems = records => allItems(records).filter(({item}) => left(item) > 0)
   .sort((a,b) => a.item.due.localeCompare(b.item.due))

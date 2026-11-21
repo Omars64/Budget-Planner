@@ -42,6 +42,19 @@ function Get-BudgetlyReleaseGate([object]$Status, [object[]]$Runs) {
         $quality.Count -gt 0 -and $quality[0].status -eq 'completed' -and $quality[0].conclusion -eq 'success')
 }
 
+function Build-BudgetlyWindows([string]$Root, [scriptblock]$Runner) {
+    Push-Location $Root
+    try {
+        $env:NODE_USE_SYSTEM_CA = '1'
+        $builder = Join-Path $Root 'node_modules/.bin/electron-builder.cmd'
+        if (!(Test-Path -LiteralPath $builder)) { throw 'Windows installer tools are missing. Run npm ci or remove -SkipInstall.' }
+        $result = & $Runner $builder @('--win', 'nsis', '--x64', '--publish', 'never')
+        if ($result.ExitCode -ne 0) { throw 'Windows installer build failed.' }
+        $result = & $Runner node.exe @('scripts/windows-release-manifest.mjs')
+        if ($result.ExitCode -ne 0) { throw 'Windows update manifest generation failed.' }
+    } finally { Pop-Location }
+}
+
 function Invoke-BudgetlyRelease {
     param(
         [string]$Root,
@@ -106,11 +119,7 @@ function Invoke-BudgetlyRelease {
         Write-Host 'Building and testing locally before making any Git or production changes...' -ForegroundColor Cyan
         $null = Run powershell.exe $BuildArguments
         Write-Host 'Packaging Windows with the tested web build...' -ForegroundColor Cyan
-        $env:NODE_USE_SYSTEM_CA = '1'
-        $desktopBuilder = Join-Path $Root 'node_modules/.bin/electron-builder.cmd'
-        if (!(Test-Path -LiteralPath $desktopBuilder)) { throw 'Windows installer tools are missing. Run npm ci or remove -SkipInstall.' }
-        $null = Run $desktopBuilder @('--win', 'nsis', '--x64', '--publish', 'never')
-        $null = Run node.exe @('scripts/windows-release-manifest.mjs')
+        Build-BudgetlyWindows $Root $Runner
         $windowsDirectory = Join-Path $Root 'dist-desktop'
         $installer = Join-Path $windowsDirectory "Budgetly-Setup-$version.exe"
         $windowsManifestPath = Join-Path $windowsDirectory 'windows-update.json'
@@ -188,6 +197,15 @@ function Invoke-BudgetlyRelease {
         } else {
             $null = Run gh.exe @('release', 'create', $tag, $apk, $manifestPath, $installer, $windowsManifestPath, '--repo', $repo,
                 '--target', $commit, '--title', "Budgetly $version", '--generate-notes', '--draft')
+        }
+        $draftAssets = (Run gh.exe @('release', 'view', $tag, '--repo', $repo, '--json', 'assets') | ConvertFrom-Json).assets
+        foreach ($path in @($installer, $windowsManifestPath)) {
+            $local = Get-Item -LiteralPath $path
+            $asset = @($draftAssets | Where-Object name -eq $local.Name)
+            if ($asset.Count -ne 1 -or $asset[0].size -ne $local.Length -or
+                $asset[0].digest -ne ('sha256:' + (Get-BudgetlyFileSha256 $path))) {
+                throw "Draft Windows attachment missing or incomplete: $($local.Name). Rerun to repair the draft."
+            }
         }
         $null = Run gh.exe @('release', 'edit', $tag, '--repo', $repo, '--draft=false', '--latest')
         Write-Host "RELEASE PUBLISHED: https://github.com/$repo/releases/tag/$tag" -ForegroundColor Green

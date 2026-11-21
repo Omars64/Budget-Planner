@@ -118,7 +118,7 @@ function DebtScreen({spaceId,tab,requestedPreview}) {
   const show = (type,record,target) => {
     setEdit(type==='due'?target.due:'')
     setFormError('');setExpanded(false)
-    setModal({type,record:record?.id,item:target?.id})
+    setModal({type,revision:workspace?.revision,record:record?.id,item:target?.id})
   }
 
   async function submit(save,message) {
@@ -156,6 +156,13 @@ function DebtScreen({spaceId,tab,requestedPreview}) {
       if (!draft.records.some(entry=>entry.id===record.id)) draft.records.push(record)
     },'Debt added')
     setDirection(incoming(record)?'lent':'owe');navigate(url('debts'))
+  }
+  const saveEdits = async record => {
+    await update(draft=>{
+      if (draft.revision !== modal.revision) throw new Error('Debts changed. Reopen this debt to edit the latest version.')
+      modifyRecord(draft,record.id,current=>Object.assign(current,record))
+    },'Debt updated')
+    setDirection(incoming(record)?'lent':'owe')
   }
   const savePayment = (recordId,itemId,payment) => {
     const term = records.find(record=>record.id===recordId)?.items.find(term=>term.id===itemId)
@@ -267,12 +274,13 @@ function DebtScreen({spaceId,tab,requestedPreview}) {
         <p className="muted">Add a debt to record a payment.</p>}
     </Modal>
 
-    {canEdit&&(modal?.type==='add'||(modal?.type==='payment'&&selected)) && <DebtEntryForm key={`${modal.type}:${modal.record}:${modal.item}`}
-      mode={modal.type} direction={direction} record={selected} item={item} onClose={close} busy={busy} currency={currency} canLink={!spaceId&&!preview&&currency===personalCurrency} previewOnly={Boolean(preview)} onCreate={create} onPayment={savePayment}/>}
+    {canEdit&&(modal?.type==='add'||(['payment','edit'].includes(modal?.type)&&selected)) && <DebtEntryForm key={`${modal.type}:${modal.record}:${modal.item}`}
+      mode={modal.type} direction={direction} record={selected} item={item} onClose={close} busy={busy} currency={currency} canLink={!spaceId&&!preview&&currency===personalCurrency} previewOnly={Boolean(preview)} onCreate={modal.type==='edit'?saveEdits:create} onPayment={savePayment}/>}
     <Modal open={modal?.type==='record'&&Boolean(selected)} onClose={close} title={selected?.name || 'Debt'} subtitle={selected&&[selected.person,debtKinds[selected.kind]].filter(Boolean).join(' · ')}>
       {selected && <div className="stack gap-12">
         <div className="debt-record-balance"><small>{incoming(selected)?'Still to receive':'Still to pay'}</small><strong>{fmt(remaining(selected))}</strong>
           <progress aria-label="Repayment progress" value={sum(selected.items,paid)} max={sum(selected.items,term=>term.amount)}/></div>
+         {canEdit&&!preview&&<button type="button" className="button secondary" onClick={()=>show('edit',selected)}>Edit debt</button>}
         <h3>Instalments</h3>{selected.note&&<p className="muted">{selected.note}</p>}
         <ul className="debt-list">{selected.items.slice(0,expanded?selected.items.length:5).map(term=><Row key={term.id} icon={CalendarDays} name={monthLabel(term.month)}
           description={`Due ${dayLabel(term.due)}`} amount={fmt(term.covered_by?0:left(term)||term.amount)} status={paymentStatus(selected,term,today)} onClick={()=>show('instalment',selected,term)}/>)}</ul>

@@ -1,4 +1,10 @@
 {
+  "6.24.4": [
+    {
+      "title": "Edit a recorded debt",
+      "detail": "Open a debt and select Edit debt to update its details or repayment schedule. Your recorded payments and linked transactions stay with the debt."
+    }
+  ],
   "6.24.3": [
     {
       "title": "Smooth matte wallet icons",

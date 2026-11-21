@@ -7,7 +7,7 @@ import InfoButton from './InfoButton'
 import { api, money } from '../lib/api'
 import { currencyPlaceholder } from '../lib/currency'
 import { dateKey } from '../lib/time'
-import { debtAmount, debtPath, extraPaymentChange, incoming, left, makeSchedule, monthLabel, reminderLeads, sum } from '../lib/debtWorkspace'
+import { debtAmount, debtPath, extraPaymentChange, incoming, left, makeSchedule, monthLabel, preserveDebtPayments, reminderLeads, sum } from '../lib/debtWorkspace'
 
 const kinds = [['borrowed','Money I borrowed'],['loan','A loan'],['lent','Money I lent']]
 const readReminder = value => value === '' ? null : Number(value)
@@ -18,11 +18,15 @@ export function DebtReminderField({value,onChange,disabled,label='Remind me',hid
 }
 
 export default function DebtEntryForm({mode, record, item, direction, currency, canLink, busy, previewOnly, onClose, onCreate, onPayment}) {
-  const adding = mode === 'add'
+  const editing = mode === 'edit'
+  const adding = mode !== 'payment'
+  const [original] = useState(()=>editing ? record : null)
+  const firstTerm = original?.items[0]
+  const monthlyTerms = original && (original.items.length > 1 || original.apr > 0)
   const choices = record?.items.filter(row=>left(row)>0) || []
   const first = choices.find(row=>row.id===item?.id) || choices[0]
-  const [form,setForm] = useState(()=>({kind:direction==='lent'?'lent':'borrowed',name:'',person:'',amount:'',
-    date:dateKey(),due:dateKey(),month:'',frequency:'once',monthly:'',apr:'0',note:'',reminder:null,item:first?.id || '',transaction:''}))
+  const [form,setForm] = useState(()=>({kind:original?.kind || (direction==='lent'?'lent':'borrowed'),name:original?.name || '',person:original?.person || '',amount:original ? String(original.opening/1000) : '',
+    date:dateKey(),due:firstTerm?.due || dateKey(),month:firstTerm?.month || '',frequency:monthlyTerms?'monthly':'once',monthly:firstTerm?String(firstTerm.amount/1000):'',apr:String(original?.apr || 0),note:original?.note || '',reminder:original?.reminder ?? null,item:first?.id || '',transaction:''}))
   const [error,setError] = useState('')
   const [help,setHelp] = useState(false)
   const [matches,setMatches] = useState(null)
@@ -34,16 +38,19 @@ export default function DebtEntryForm({mode, record, item, direction, currency, 
   const selection = choices.find(row=>row.id===form.item)
   const rawAmount = debtAmount(form.amount,currency)
   const fmt = amount => money(amount/1000,currency)
-  const extra = selection && extraPaymentChange(record,selection,rawAmount,currency)
+  const extra = !adding && selection && extraPaymentChange(record,selection,rawAmount,currency)
   const extraError = extra?.precisionError ? 'This balance does not match the currency’s precision.' : extra?.limit != null
     ? `Enter ${fmt(extra.limit)} or less for ${monthLabel(selection.month)}${extra.hasLater ? ' and later' : ''}.` : ''
   const monthlyPlan = form.frequency === 'monthly'
   const apr = monthlyPlan && form.kind === 'loan' ? Number(form.apr || 0) : 0
   const monthly = monthlyPlan ? debtAmount(form.monthly,currency) : rawAmount
   const scheduleInput = {opening:rawAmount, monthly, apr, month:form.month||form.due.slice(0,7), due:form.due}
+  const sameTerms = original && rawAmount === original.opening && apr === original.apr &&
+    form.due === firstTerm.due && scheduleInput.month === firstTerm.month && monthlyPlan === monthlyTerms &&
+    (!monthlyPlan || monthly === firstTerm.amount)
   let proposedSchedule
   if (adding && rawAmount > 0 && monthly > 0 && apr >= 0 && apr <= 100 && form.due) {
-    try { proposedSchedule = makeSchedule(scheduleInput,currency,false) } catch { /* A field-specific error appears on save. */ }
+    try { proposedSchedule = sameTerms ? original.items : makeSchedule(scheduleInput,currency,false) } catch { /* A field-specific error appears on save. */ }
   }
   const set = (key,value) => {
     setForm(current=>({...current,[key]:value,...(['amount','date'].includes(key)?{transaction:''}:{})}))
@@ -70,8 +77,11 @@ export default function DebtEntryForm({mode, record, item, direction, currency, 
         if (!form.name.trim() || !form.due) throw new Error('Enter a name and the first due date.')
         if (!(monthly>0)) throw new Error('Enter a monthly payment greater than zero.')
         if (!Number.isFinite(apr) || apr<0 || apr>100) throw new Error('Enter an interest rate from 0% to 100%.')
-        const items = makeSchedule(scheduleInput,currency)
-        await onCreate({id:entryId,kind:form.kind,name:form.name.trim(),person:form.person.trim(),opening:rawAmount,apr,items,note:form.note.trim(),reminder:form.reminder})
+        if (original && incoming(original) !== (form.kind === 'lent') && original.items.some(term=>term.payments.length)) {
+          throw new Error('Recorded payments must keep their original direction.')
+        }
+        const items = sameTerms ? original.items : preserveDebtPayments(original?.items || [],makeSchedule(scheduleInput,currency))
+        await onCreate({id:original?.id || entryId,kind:form.kind,name:form.name.trim(),person:form.person.trim(),opening:rawAmount,apr,items,note:form.note.trim(),reminder:form.reminder})
       } else {
         if (!selection) throw new Error('Choose a month that still has a payment due.')
         if (extraError) throw new Error(extraError)
@@ -80,14 +90,14 @@ export default function DebtEntryForm({mode, record, item, direction, currency, 
       }
     } catch (failure) { setError(failure.message) }
   }
-  const heading = adding?'Add debt':receipt?'Record money received':'Record payment'
+  const heading = editing?'Edit debt':adding?'Add debt':receipt?'Record money received':'Record payment'
   const futureAmounts = extra?.amounts || []
   const lowest = Math.min(...futureAmounts), highest = Math.max(...futureAmounts)
   const futureAmount = futureAmounts.length === 0 ? '' : lowest === highest ? fmt(highest) : `${fmt(lowest)} or ${fmt(highest)}`
   return <>
     <Modal open onClose={()=>!busy && onClose()} protectChanges size="small" title={heading} layerClass="debt-entry-layer debt-transaction-layer"
       footer={close=><div className="modal-actions"><button type="button" className="button ghost" disabled={busy} onClick={close}>Cancel</button>
-        <button className="button primary" form={formId} type="submit" disabled={busy || previewOnly}>{busy?'Saving…':adding?'Save debt':'Save payment'}</button></div>}>
+        <button className="button primary" form={formId} type="submit" disabled={busy || previewOnly}>{busy?'Saving…':editing?'Save changes':adding?'Save debt':'Save payment'}</button></div>}>
       <form id={formId} onSubmit={save} className="stack gap-18 transaction-form">
         <fieldset className="debt-entry-fields stack gap-16" disabled={busy}>
           <label className="field"><span>{adding?'Total amount now':'Amount'}</span><span className="amount-input debt-amount-input">

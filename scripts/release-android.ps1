@@ -33,6 +33,9 @@ try {
     Write-Host "Build diagnostics: $log"
     if ($BuildOnly -or $Debug) {
         $result = Invoke-BudgetlyNativeCommand powershell.exe $buildArgs
+        if ($result.ExitCode -eq 0 -and $BuildOnly -and !$CheckOnly) {
+            Build-BudgetlyWindows $root ${function:Invoke-BudgetlyNativeCommand}
+        }
         exit $result.ExitCode
     }
     if ($SkipTests -and !$CheckOnly) { throw 'Publishing requires tests. Use -BuildOnly -SkipTests for local experiments.' }
