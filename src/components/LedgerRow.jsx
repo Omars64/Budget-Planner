@@ -24,7 +24,7 @@ export default function LedgerRow({ tx, fmt, shared = false, showDate = false, c
   const title = tx.description?.trim() || tx.category_name || 'Unnamed transaction'
   const walletLabel = tx.type === 'transfer' ? `${tx.wallet_name || 'Wallet'} → ${tx.transfer_wallet_name || 'Wallet'}` : tx.wallet_name || tx.shared_wallet_names?.join(' / ')
   const category = tx.is_opening_balance ? (tx.type === 'income' ? 'Starting funds' : 'Starting debt') : tx.category_name || (tx.type === 'transfer' ? 'Wallet transfer' : 'Uncategorized')
-  if (compact) return <button type="button" className={`poc-line compact-ledger-entry${saved === tx.id ? ' just-saved' : ''}`} onClick={onOpen} aria-label={`View ${title}`}>
+  if (compact) return <button type="button" data-ledger-row={tx.id} className={`poc-line compact-ledger-entry${saved === tx.id ? ' just-saved' : ''}`} onClick={onOpen} aria-label={`View ${title}`}>
     <span className={`poc-marker tx-symbol ${tx.type}`}><Icon size={18} aria-hidden="true"/></span>
     <span><strong>{title}</strong><small>{[category,walletLabel].filter(Boolean).join(' · ')}</small></span>
     <strong className={`tx-amount ${tx.type}`}>{tx.type === 'income' ? '+' : tx.type === 'expense' ? '−' : ''}{fmt(tx.amount)}</strong>

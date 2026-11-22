@@ -38,22 +38,18 @@ afterEach(() => {
   else delete window.HTMLElement.prototype.animate
 })
 
-test('one route stays live through exit, enters directionally, and POP reverses', async () => {
+test('the destination mounts immediately, enters directionally, and POP reverses', () => {
   setup()
   fireEvent.change(screen.getByLabelText('Draft'), { target: { value: 'Unsent' } })
   act(() => navigate('/wallets'))
   expect(screen.getAllByLabelText('Draft')).toHaveLength(1)
-  expect(screen.getByText('/')).toBeInTheDocument()
-  expect(mounts).toBe(1)
-  await act(async () => animations[0].finish())
   expect(screen.getByText('/wallets')).toBeInTheDocument()
   expect(mounts).toBe(2)
-  expect(animations[1].frames[0].clipPath).toBe('inset(0 0 0 1%)')
-  expect(animations[0].options.duration + animations[1].options.duration).toBe(460)
+  expect(animations[0].frames[0].clipPath).toBe('inset(0 0 0 1%)')
+  expect(animations[0].options.duration).toBe(160)
   expect(animations.flatMap(animation => animation.frames).every(frame => !('transform' in frame))).toBe(true)
   act(() => navigate(-1))
-  await act(async () => animations[2].finish())
-  expect(animations[3].frames[0].clipPath).toBe('inset(0 1% 0 0)')
+  expect(animations[1].frames[0].clipPath).toBe('inset(0 1% 0 0)')
 })
 
 test('query, hash, state and comfort changes preserve the current form and do not animate or scroll', () => {
@@ -70,19 +66,20 @@ test('query, hash, state and comfort changes preserve the current form and do no
   expect(scroll).not.toHaveBeenCalled()
 })
 
-test('rapid navigation cancels stale exits; switching motion off releases a pending route', async () => {
+test('rapid navigation cancels stale animations and motion off keeps the current screen', async () => {
   setup()
   act(() => navigate('/wallets'))
   act(() => navigate('/notes'))
   expect(animations[0].cancel).toHaveBeenCalled()
   await act(async () => animations[0].finish())
-  expect(screen.getByText('/')).toBeInTheDocument()
+  expect(screen.getByText('/notes')).toBeInTheDocument()
   act(() => saveComfort({ motion: 'off' }))
+  expect(animations[1].cancel).toHaveBeenCalled()
   expect(screen.getByText('/notes')).toBeInTheDocument()
   expect(screen.getAllByLabelText('Draft')).toHaveLength(1)
 })
 
-test('scroll memory saves the outgoing page and restores the destination only at the switch', async () => {
+test('scroll memory saves the outgoing page and restores its destination on navigation', () => {
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
   const scroll = vi.spyOn(window, 'scrollTo').mockImplementation(({ top }) => {
     Object.defineProperty(window, 'scrollY', { configurable: true, value: top })
@@ -93,22 +90,17 @@ test('scroll memory saves the outgoing page and restores the destination only at
   fireEvent.scroll(window)
   scroll.mockClear()
   act(() => navigate('/wallets'))
-  expect(scroll).not.toHaveBeenCalled()
-  expect(window.scrollY).toBe(640)
-  await act(async () => animations[0].finish())
   expect(readView('scroll:motion:/', 0)).toBe(640)
   expect(scroll).toHaveBeenLastCalledWith({ top: 280, behavior: 'instant' })
   expect(window.scrollY).toBe(280)
 })
 
-test('returning to the displayed route during exit cancels it and preserves the draft', () => {
+test('back navigation replaces the destination animation without duplicating the page', () => {
   setup()
-  const draft = screen.getByLabelText('Draft')
-  fireEvent.change(draft, { target: { value: 'Still here' } })
   act(() => navigate('/wallets'))
   act(() => navigate(-1))
   expect(animations[0].cancel).toHaveBeenCalled()
-  expect(screen.getByLabelText('Draft')).toBe(draft)
-  expect(draft).toHaveValue('Still here')
-  expect(mounts).toBe(1)
+  expect(screen.getByText('/')).toBeInTheDocument()
+  expect(screen.getAllByLabelText('Draft')).toHaveLength(1)
+  expect(mounts).toBe(3)
 })

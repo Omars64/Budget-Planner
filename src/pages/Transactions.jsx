@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Wallet } from 'lucide-react'
 import { format } from 'date-fns'
 import { dateInput, displayDate } from '../lib/time'
 import { duplicateDraft, writeDraft } from '../lib/transactionDraft'
-import { api, money } from '../lib/api'
+import { api, money, readCached } from '../lib/api'
 import { useApp } from '../App'
 import TransactionModal from '../components/TransactionModal'
 import EmptyState from '../components/EmptyState'
@@ -19,6 +19,7 @@ import AnimatedMoney from '../components/AnimatedMoney'
 import OfflinePending from '../components/OfflinePending'
 import TransactionSaveState from '../components/TransactionSaveState'
 import LedgerRow, { LedgerDateHeader, TransactionDetails } from '../components/LedgerRow'
+import { transactionRecordedEvent } from '../lib/savedFeedback'
 
 export default function Transactions() {
   const location = useLocation()
@@ -26,7 +27,8 @@ export default function Transactions() {
   const [walletBalancesOpen, setWalletBalancesOpen] = useState(false)
   const [filters, setFilters] = useViewState(`${spaceKey}:${user?.id}:filters`, defaultLedgerFilters, location.state?.aiFilters ? {...defaultLedgerFilters,...location.state.aiFilters} : undefined)
   useEffect(() => { if (location.state?.aiFilters) setFilters({...defaultLedgerFilters,...location.state.aiFilters}) }, [location.key])
-  const ledger = useLedger('/api/transactions', { ...filters, scope: 'personal' }, refreshKey, false, `${spaceKey}:${user?.id}`)
+  const [recordsRevision, setRecordsRevision] = useState(0)
+  const ledger = useLedger('/api/transactions', { ...filters, scope: 'personal' }, `${refreshKey}:${recordsRevision}`, false, `${spaceKey}:${user?.id}`)
   const { rows, loading } = ledger
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState(null)
@@ -36,6 +38,36 @@ export default function Transactions() {
   const [wallets, setWallets] = useState([])
   const activeWallets = wallets.filter(wallet => !wallet.archived)
   const [categories, setCategories] = useState([])
+  const list = useRef(null)
+  const anchor = useRef(null)
+  const updateRecent = useRef(ledger.showRecent)
+  updateRecent.current = ledger.showRecent
+
+  useEffect(() => {
+    const recorded = ({ detail }) => {
+      if (detail.spaceKey !== spaceKey) return
+      if (window.scrollY > 0 && list.current) {
+        const row = Array.from(list.current.querySelectorAll('[data-ledger-row]')).find(node => node.getBoundingClientRect().bottom > 0)
+        if (row) anchor.current = { id: row.dataset.ledgerRow, top: row.getBoundingClientRect().top, scrollY: window.scrollY }
+      }
+      if (detail.created) updateRecent.current(detail.transaction)
+      setRecordsRevision(count => count + 1)
+    }
+    window.addEventListener(transactionRecordedEvent, recorded)
+    return () => window.removeEventListener(transactionRecordedEvent, recorded)
+  }, [spaceKey])
+
+  useLayoutEffect(() => {
+    const current = anchor.current
+    if (!current) return
+    const row = list.current?.querySelector(`[data-ledger-row="${current.id}"]`)
+    if (row && Math.abs(window.scrollY - current.scrollY) < 12) {
+      const drift = row.getBoundingClientRect().top - current.top
+      if (Math.abs(drift) > 1) window.scrollTo({ top: window.scrollY + drift, behavior: 'instant' })
+      current.scrollY = window.scrollY
+    }
+    if (!ledger.busy) anchor.current = null
+  }, [rows, ledger.busy])
 
   useEffect(() => {
     if (location.state?.aiDraft || location.state?.resumeSchedule) {
@@ -44,7 +76,16 @@ export default function Transactions() {
     }
   }, [location.key])
 
-  useEffect(() => { const controller = new AbortController(); api('/api/wallets', {signal:controller.signal}).then(rows => setWallets(rows.filter(w => activeSpace || !w.is_shared))).catch(() => {}); api('/api/categories', {signal:controller.signal}).then(setCategories).catch(() => {}); return () => controller.abort() }, [refreshKey, activeSpace?.id])
+  useEffect(() => {
+    let active = true
+    Promise.resolve(readCached('/api/wallets') ?? api('/api/wallets')).then(rows => {
+      if (active) setWallets(rows.filter(w => activeSpace || !w.is_shared))
+    }).catch(() => {})
+    Promise.resolve(readCached('/api/categories') ?? api('/api/categories')).then(rows => {
+      if (active) setCategories(rows)
+    }).catch(() => {})
+    return () => { active = false }
+  }, [refreshKey, recordsRevision, activeSpace?.id])
 
   const fmt = v => money(v, settings.currency, settings.compact_numbers)
   const grouped = useMemo(() => rows.reduce((acc, tx) => { const key = format(displayDate(tx.date), 'yyyy-MM-dd'); (acc[key] ||= []).push(tx); return acc }, {}), [rows])
@@ -65,7 +106,7 @@ export default function Transactions() {
     {ledger.error && ledger.updatedAt && <small className="muted">Showing records last updated at {new Date(ledger.updatedAt).toLocaleTimeString()}.</small>}
 
 
-    <section className="ledger-list" aria-label="Recorded transactions">
+    <section ref={list} className="ledger-list" aria-label="Recorded transactions">
       {ledger.error && !ledger.updatedAt ? <EmptyState title="Saved records unavailable" text="Reconnect to load this view. Any entries waiting to sync are shown above." action={<button className="button ghost" onClick={ledger.retry}>Retry loading</button>}/> : loading && !rows.length ? <div className="list-skeleton"><i/><i/><i/><i/></div> : !rows.length ? <EmptyState title="No matching transactions" text="Try another filter or add a transaction." action={<div className="button-row"><button className="button ghost" onClick={() => setFilters({...defaultLedgerFilters})}>Clear filters</button><button className="button primary" disabled={!canAdd} onClick={() => {setEditing(null);setModal(true)}}>Add transaction</button></div>}/> : <div className="date-groups">
         {Object.entries(grouped).map(([day, txs]) => <div className="date-group" key={day}>
           <LedgerDateHeader day={day} compact/>
@@ -82,6 +123,6 @@ export default function Transactions() {
       </div>
     </Modal>
     <TransactionDetails tx={selected} fmt={fmt} shared={Boolean(activeSpace)} permission={activeSpace?.role === 'owner' ? 'edit' : activeSpace?.role || 'edit'} onClose={() => setSelected(null)} onEdit={canManage ? () => {setEditing(selected);setSelected(null);setModal(true)} : null} onDelete={canManage ? () => remove(selected) : null} onDuplicate={canAdd ? () => {writeDraft(`flowbudget_tx_draft_${user.id}${activeSpace ? `_space_${activeSpace.id}` : ''}`,duplicateDraft(selected,dateInput()));setSelected(null);setEditing(null);setModal(true)} : null}/>
-    <TransactionModal open={modal} editing={editing} onClose={() => setModal(false)} onSaved={saved => {setModal(false);setSaveResult({queued:Boolean(saved.queued)});refresh();notify(saved.queued ? 'Saved on this device. Will sync when connected.' : editing?'Transaction updated':'Transaction added')}} />
+    <TransactionModal open={modal} editing={editing} onClose={() => setModal(false)} onSaved={(saved, scheduled) => {setModal(false);setSaveResult({queued:Boolean(saved.queued)});if (scheduled || isGuest) refresh();notify(saved.queued ? 'Saved on this device. Will sync when connected.' : editing?'Transaction updated':'Transaction added')}} />
   </div>
 }

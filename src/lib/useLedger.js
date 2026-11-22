@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api, readCached } from './api'
 import { readView, writeView } from './viewState'
 import { startReadPolling } from './resourcePolicy'
@@ -50,7 +50,8 @@ export default function useLedger(endpoint, filters, refreshKey, poll = false, v
         if (!controller.signal.aborted) setBusy(false)
       }
     }
-    const stop = startReadPolling(sync, { initialDelay: 180, recurring: poll })
+    const stop = startReadPolling(sync, { recurring: poll })
+    if (navigator.onLine === false) void sync()
     return () => {
       controller.abort()
       stop()
@@ -59,8 +60,9 @@ export default function useLedger(endpoint, filters, refreshKey, poll = false, v
 
   const sameView = result.path === path && result.viewKey === viewKey
   const current = sameView ? result : { rows: readCached(path), error: '' }
+  const rows = useMemo(() => (current.rows || []).slice(0, PAGE_SIZE), [current.rows])
   return {
-    rows: (current.rows || []).slice(0, PAGE_SIZE),
+    rows,
     loading: !current.rows && !current.error,
     busy: busy || !sameView,
     error: current.error,
@@ -69,6 +71,21 @@ export default function useLedger(endpoint, filters, refreshKey, poll = false, v
     page: offset / PAGE_SIZE + 1,
     previous: () => setPagination({ key: filterKey, offset: Math.max(0, offset - PAGE_SIZE) }),
     next: () => setPagination({ key: filterKey, offset: offset + PAGE_SIZE }),
+    showRecent: transaction => setResult(previous => {
+      if (previous.path !== path || previous.viewKey !== viewKey || !previous.rows || offset !== 0 ||
+          filters.sort !== 'newest' || filters.type !== 'all' || filters.search || filters.wallet || filters.category ||
+          filters.month || filters.date_from || filters.date_to || filters.reporting_from || filters.reporting_to ||
+          filters.exclude_opening || !transaction.date) return previous
+      // Only insert if it belongs in the loaded window. The following server read
+      // reconciles the page size, recurring entries and totals.
+      const incomingDate = Date.parse(transaction.date)
+      const remaining = previous.rows.filter(row => row.id !== transaction.id)
+      const before = remaining.findIndex(row => incomingDate > Date.parse(row.date) ||
+        (incomingDate === Date.parse(row.date) && transaction.id > row.id))
+      if (before === -1 && remaining.length >= PAGE_SIZE) return previous
+      remaining.splice(before === -1 ? remaining.length : before, 0, transaction)
+      return { ...previous, rows: remaining.slice(0, PAGE_SIZE + 1) }
+    }),
     retry: () => setRetry(value => value + 1),
   }
 }

@@ -222,7 +222,7 @@ export default function AppShell({ children }) {
         <Link className="notification-inbox-link" to="/upcoming" onClick={() => setNotificationsOpen(false)}><strong>Upcoming reminders</strong><ChevronRight size={17} aria-hidden="true"/></Link>
       </div>
     </Modal>
-    <TransactionModal open={txModal} onClose={() => setTxModal(false)} onSaved={(saved, scheduled) => { setTxModal(false); refresh(); notify(saved.queued ? 'Saved on this device. Will sync when connected.' : scheduled ? 'Transaction scheduled' : 'Transaction saved') }} />
+    <TransactionModal open={txModal} onClose={() => setTxModal(false)} onSaved={(saved, scheduled) => { setTxModal(false); if (scheduled || isGuest || !isLedger) refresh(); notify(saved.queued ? 'Saved on this device. Will sync when connected.' : scheduled ? 'Transaction scheduled' : 'Transaction saved') }} />
     <SupportPrompt userId={user?.id} guest={isGuest} popupEnabled={settings.support_popup_enabled !== false} suppressed={isDebt || notificationsOpen || keyboardOpen || txModal}/>
     {!isGuest && <><AppTutorial request={tutorialRequest}/><Milestone/></>}
   </div>

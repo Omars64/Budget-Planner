@@ -1,6 +1,9 @@
 import {expect,test} from 'vitest'
 import ExcelJS from 'exceljs'
-import {calculate,formatted,loadWorkbook} from './workbook'
+import {loadWorkbook} from './workbook'
+import {formatted} from './workbookCells'
+import {calculate, calculateSnapshot} from './workbookCalc'
+import {applyWorkbookResult, workbookSnapshot} from './workbookCalculation'
 
 test('updates cross-sheet totals, arithmetic and conditional formulas, and flags stale dependencies',async()=>{
   const wb=new ExcelJS.Workbook()
@@ -35,4 +38,22 @@ test('keeps Excel shared formulas editable when the original master cell is repl
   expect(calculate(book).issues.size).toBe(0)
   expect(sheet.getCell('B2').formula).toBe('A2*2')
   expect(sheet.getCell('B2').result).toBe(16)
+})
+
+test('calculates an isolated edit and can roll back both the value and its cross-sheet result', () => {
+  const wb = new ExcelJS.Workbook()
+  const expenses = wb.addWorksheet('Expenses')
+  const summary = wb.addWorksheet('Summary')
+  expenses.getCell('A1').value = 2
+  summary.getCell('B1').value = {formula:'Expenses!A1*3',result:6}
+  const edit = {sheetId:expenses.id,address:'A1',row:1,col:1,value:5}
+  const result = calculateSnapshot(workbookSnapshot(wb, edit))
+  expect(expenses.getCell('A1').value).toBe(2)
+  const { report, rollback } = applyWorkbookResult(wb, result, edit)
+  expect(report.issues.size).toBe(0)
+  expect(expenses.getCell('A1').value).toBe(5)
+  expect(summary.getCell('B1').result).toBe(15)
+  rollback()
+  expect(expenses.getCell('A1').value).toBe(2)
+  expect(summary.getCell('B1').result).toBe(6)
 })

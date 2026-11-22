@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useDeferredValue, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, SlidersHorizontal } from 'lucide-react'
 import AppMonthField from '../components/AppMonthField'
@@ -9,7 +9,7 @@ import WalletCardArt from '../components/WalletCardArt'
 import OverviewCardManager from '../components/OverviewCardManager'
 import InfoButton from '../components/InfoButton'
 import Modal from '../components/Modal'
-import { api, money } from '../lib/api'
+import { api, money, readCached } from '../lib/api'
 import { dateInput } from '../lib/time'
 import { useViewState } from '../lib/viewState'
 import { readWorkspacePreferences, useWorkspacePreferences } from '../lib/workspacePreferences'
@@ -20,9 +20,11 @@ export default function Overview() {
   const { user, settings, refreshKey, activeSpace, spaceKey = 'personal', notify } = useApp()
   const [preferences, savePreferences] = useWorkspacePreferences(user?.id)
   const [managedCards, setManagedCards] = useState(null)
-  const [data, setData] = useState(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [month, setMonth] = useViewState(`overview:${user?.id}:month`, dateInput().slice(0, 7))
+  const path = `/api/dashboard?month=${month}&view=overview`
+  const [data, setData] = useState(() => readCached(path) || null)
+  const summary = useDeferredValue(data)
   const [error, setError] = useState('')
   const [selected, setSelected] = useState(null)
   const [retry, setRetry] = useState(0)
@@ -30,11 +32,11 @@ export default function Overview() {
   useEffect(() => {
     const controller = new window.AbortController()
     setError('')
-    api(`/api/dashboard?month=${month}`, { signal: controller.signal })
+    api(path, { signal: controller.signal })
       .then(value => { if (!controller.signal.aborted) setData(value) })
       .catch(e => { if (!controller.signal.aborted) setError(e.message) })
     return () => controller.abort()
-  }, [month, refreshKey, retry])
+  }, [path, refreshKey, retry])
 
   const fmt = value => money(value, settings.currency, settings.compact_numbers)
   const displayedMonth = data?.month || month
@@ -76,8 +78,8 @@ export default function Overview() {
       <section className="overview-focus-month" aria-label="Selected month summary">
         <div className="overview-focus-month-head"><div className="overview-month-title"><h2>Monthly activity</h2><InfoButton label="Balance & month details" onClick={() => setDetailsOpen(true)}/></div><label className="field"><span className="sr-only">Month</span><AppMonthField min="1000-01" max="9999-12" value={month} onChange={event => event.target.value && setMonth(event.target.value)}/></label></div>
         <div className="overview-focus-metrics">
-          <Link to="/transactions" state={{ aiFilters: { month: displayedMonth, type: 'income' } }}><span>Money in</span><strong className="tx-amount income">{fmt(data.income)}</strong></Link>
-          <Link to="/transactions" state={{ aiFilters: { month: displayedMonth, type: 'expense', exclude_opening: true } }}><span>Spent</span><strong className="tx-amount expense">{fmt(data.expense)}</strong></Link>
+          <Link to="/transactions" state={{ aiFilters: { month: displayedMonth, type: 'income' } }}><span>Money in</span><strong className="tx-amount income">{summary?.month === data.month ? fmt(summary.income) : '–'}</strong></Link>
+          <Link to="/transactions" state={{ aiFilters: { month: displayedMonth, type: 'expense', exclude_opening: true } }}><span>Spent</span><strong className="tx-amount expense">{summary?.month === data.month ? fmt(summary.expense) : '–'}</strong></Link>
         </div>
       </section>
       <section className="overview-section overview-recent">

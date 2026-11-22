@@ -434,11 +434,15 @@ export default function App() {
         return
       }
       try {
-        const user = await api('/api/auth/me')
+        const [sessionResult, settingsResult] = await Promise.allSettled([
+          api('/api/auth/me'), api('/api/settings'),
+        ])
         if (auth.token !== token || auth.expired) return
+        if (sessionResult.status === 'rejected') throw sessionResult.reason
+        const user = sessionResult.value
         setOfflineUser(user.id)
-        await loadSettings()
-        if (auth.token !== token || auth.expired) return
+        if (settingsResult.status === 'fulfilled') setSettings(settingsResult.value)
+        else if (settingsResult.reason.status !== 401) console.error(settingsResult.reason)
         setSession({ loading: false, user })
         void loadAppearance()
       } catch (error) {
@@ -452,7 +456,7 @@ export default function App() {
       }
     }
     void resume()
-  }, [loadSettings, loadAppearance, enterGuest])
+  }, [loadAppearance, enterGuest])
 
   const finishSignOut = useCallback(() => {
     void api('/api/account/signout',{method:'POST'}).catch(()=>{})

@@ -5,10 +5,12 @@ let saved = null
 let timer
 const listeners = new Set()
 const emit = () => listeners.forEach(listener => listener())
-export function transactionSaved(transaction) {
+export const transactionRecordedEvent = 'budgetly:transaction-recorded'
+export function transactionSaved(transaction, context) {
   if (!transaction?.id) return
   saved = transaction.id
   emit()
+  if (context) window.dispatchEvent(new CustomEvent(transactionRecordedEvent, { detail: { transaction, ...context } }))
   successHaptic()
   window.clearTimeout(timer)
   timer = window.setTimeout(() => { saved = null; emit() }, 4500)

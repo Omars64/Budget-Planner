@@ -5,23 +5,34 @@ import { runInNewContext } from 'node:vm'
 
 const source = await readFile(new URL('../dist/budgetly-push-sw.js', import.meta.url), 'utf8')
 const legacy = await readFile(new URL('../dist/sw.js', import.meta.url), 'utf8')
+const manifest = JSON.parse(await readFile(new URL('../dist/.vite/manifest.json', import.meta.url), 'utf8'))
+const home = 'https://synthetic.invalid'
+const initialAsset = '/'+manifest['index.html'].file
+const workbookAsset = '/'+manifest['src/lib/workbook.js'].file
 for (const entry of [source, legacy]) {
   const handlers = new Map()
   const notifications = []
   const shell = { syntheticShell: true }
   const asset = { syntheticAsset: true }
+  const installed = new Set()
+  const runtime = new Map()
   const self = {
     location: { origin: 'https://synthetic.invalid' },
     addEventListener(type, callback) {
       handlers.set(type, [...(handlers.get(type) || []), callback])
     },
     caches: { open: async () => ({ match: async () => undefined }) },
+    skipWaiting() {},
     registration: { showNotification: async (...args) => notifications.push(args) },
   }
   const context = { self, URL, Response,
     caches: {
-      open: async () => ({ match: async path => path === '/index.html' ? shell : undefined }),
-      match: async path => path === 'https://synthetic.invalid/assets/public.js' ? asset : undefined,
+      open: async () => ({
+        match: async path => path === '/index.html' ? shell : undefined,
+        addAll: paths => paths.forEach(path=>installed.add(path)),
+        put: (path,value) => { runtime.set(path,value) },
+      }),
+      match: async path => path === home+initialAsset ? asset : runtime.get(path),
     },
     fetch: async () => { throw new Error('Synthetic offline network') },
     importScripts(path) {
@@ -33,6 +44,12 @@ for (const entry of [source, legacy]) {
   assert.ok(handlers.has('push'), 'Push handler survives offline registration')
   assert.ok(handlers.has('message'), 'Notification preferences survive offline registration')
   assert.ok(handlers.has('fetch'), 'Offline handler survives push registration')
+  let install
+  handlers.get('install').forEach(callback=>callback({waitUntil(task){install=task}}))
+  await install
+  assert.ok(installed.has(initialAsset), 'The shell entry is precached')
+  assert.ok(installed.has('/'+manifest['src/pages/Transactions.jsx'].file), 'Transactions work on first offline reopen')
+  assert.ok(!installed.has(workbookAsset), 'The spreadsheet engine stays out of the essential cache')
   let response
   for (const callback of handlers.get('fetch')) callback({
     request: { method: 'GET', url: 'https://synthetic.invalid/', mode: 'navigate' },
@@ -40,10 +57,24 @@ for (const entry of [source, legacy]) {
   })
   assert.equal(await response, shell, 'Offline navigation uses the cached shell')
   for (const callback of handlers.get('fetch')) callback({
-    request: { method: 'GET', url: 'https://synthetic.invalid/assets/public.js', mode: 'cors', destination: 'script' },
+    request: { method: 'GET', url: home+initialAsset, mode: 'cors', destination: 'script' },
     respondWith(value) { response = value },
   })
   assert.equal(await response, asset, 'Public module requests use the precached URL key')
+  const optionalTasks=[]
+  const fetchAsset=async ()=>{
+    handlers.get('fetch').forEach(callback=>callback({
+      request:{method:'GET',url:home+workbookAsset,mode:'cors',destination:'script'},
+      respondWith(value){response=value},
+      waitUntil(value){optionalTasks.push(value)},
+    }))
+    return (await response).text()
+  }
+  context.fetch=async ()=>new Response('Workbook module')
+  assert.equal(await fetchAsset(),'Workbook module')
+  await Promise.all(optionalTasks)
+  context.fetch=async ()=>{throw new Error('Synthetic offline network')}
+  assert.equal(await fetchAsset(),'Workbook module','Optional modules are available after they are used online')
   let cachedFinancialRequest = false
   for (const callback of handlers.get('fetch')) callback({
     request: { method: 'GET', url: 'https://synthetic.invalid/api/transactions', mode: 'cors' },
@@ -58,4 +89,4 @@ for (const entry of [source, legacy]) {
   await Promise.all(tasks)
   assert.equal(notifications.length, 1, 'Update push still displays a notification')
 }
-console.log('PASS: canonical and legacy workers support offline navigation and push; API reads stay uncached')
+console.log('PASS: essential shell, on-demand assets, offline navigation, and push; API reads stay uncached')

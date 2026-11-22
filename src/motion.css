@@ -2,7 +2,6 @@
 @property --budgetly-route-opacity { syntax:'<number>'; inherits:false; initial-value:1; }
 .route-motion-root { display:contents; }
 .route-motion-root .page-wrap { transform:none!important; opacity:var(--budgetly-route-opacity)!important; }
-.route-motion-root[data-route-exiting] .page-wrap { pointer-events:none; }
 .modal-layer[data-closing] { pointer-events:none; }
 
 @keyframes budgetly-fade {

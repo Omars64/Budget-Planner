@@ -1,14 +1,18 @@
 import { zipSync, strToU8 } from 'fflate'
-import { cellValue, formatted } from './workbook'
+import { cellValue, formatted } from './workbookCells'
 import { saveDownload } from './download'
+import { workbookCellStyle, workbookMerges } from './workbookSheet'
 
-export const exportFormats={xlsx:'Excel · all sheets',ods:'OpenDocument · all sheets as values',csv:'CSV · current sheet',tsv:'TSV · current sheet',pdf:'PDF · current sheet',html:'HTML · current sheet',json:'JSON · all sheets as values'}
 const escape = v=>String(v).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;')
 function rows(ws,fn){
-  return Array.from({length:ws.rowCount},(_,r)=>Array.from({length:ws.columnCount},(_,c)=>{
-    const cell=ws.getCell(r+1,c+1)
-    return cell.master===cell?fn(cell):''
-  }))
+  const columns=ws.columnCount
+  return Array.from({length:ws.rowCount},(_,r)=>{
+    const row=ws.findRow(r+1)
+    return Array.from({length:columns},(_,c)=>{
+      const cell=row?.findCell(c+1)
+      return cell && cell.master===cell ? fn(cell) : ''
+    })
+  })
 }
 function values(c){const v=cellValue(c);return v?.error ?? v}
 function ods(wb){
@@ -28,7 +32,37 @@ function ods(wb){
     'content.xml':strToU8('<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" office:version="1.2"><office:body><office:spreadsheet>'+sheets+'</office:spreadsheet></office:body></office:document-content>')
   })
 }
-export async function exportBook(type,wb,ws,name,table){
+function exportTable(sheet) {
+  const table=document.createElement('table')
+  const columns=sheet.columnCount
+  const merges=workbookMerges(sheet)
+  const widths=table.appendChild(document.createElement('colgroup'))
+  for(let column=1;column<=columns;column++)
+    widths.appendChild(document.createElement('col')).style.width=(sheet.getColumn(column).width||14)*8+'px'
+  const body=table.createTBody()
+  for(let index=1;index<=sheet.rowCount;index++){
+    const row=sheet.findRow(index)
+    const output=body.insertRow()
+    output.style.height=(row?.height||24)*4/3+'px'
+    for(let column=1;column<=columns;column++){
+      const cell=row?.findCell(column)
+      if(cell && cell.master!==cell)continue
+      const target=output.insertCell()
+      if(!cell)continue
+      target.textContent=formatted(cell)
+      for(const [key,value] of Object.entries(workbookCellStyle(cell)))
+        if(value)target.style[key]=value
+      const merge=merges.get(cell.address)
+      if(merge){
+        target.rowSpan=merge.rowSpan
+        target.colSpan=merge.colSpan
+      }
+    }
+  }
+  return table
+}
+
+export async function exportBook(type,wb,ws,name){
   let data,mime
   if(type==='xlsx'){data=await wb.xlsx.writeBuffer();mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}
   if(type==='ods'){data=ods(wb);mime='application/vnd.oasis.opendocument.spreadsheet'}
@@ -42,10 +76,7 @@ export async function exportBook(type,wb,ws,name,table){
     mime=type==='csv'?'text/csv':'text/tab-separated-values'
   }
   if(type==='html'||type==='pdf'){
-    const clean=table.cloneNode(true)
-    clean.querySelector('thead')?.remove();clean.querySelector('col')?.remove()
-    clean.querySelectorAll('th').forEach(node=>node.remove())
-    clean.querySelectorAll('[data-padding]').forEach(node=>node.remove())
+    const clean=exportTable(ws)
     if(type==='html'){data='<!doctype html><meta charset="utf-8"><title>'+escape(ws.name)+'</title><style>table{border-collapse:collapse}td{padding:6px;border:1px solid #ddd}</style>'+clean.outerHTML;mime='text/html'}
     else{
       const [{jsPDF},{autoTable}]=await Promise.all([import('jspdf'),import('jspdf-autotable')])

@@ -6,7 +6,7 @@ import { rememberEntry } from '../lib/workspacePreferences'
 
 const context = vi.hoisted(() => ({ activeSpace: null }))
 vi.mock('../App', () => ({useApp:() => ({user:{id:9},settings:{currency:'KWD'}, ...context})}))
-vi.mock('../lib/api', () => ({api:vi.fn(),jsonBody:data=>({body:JSON.stringify(data)}),money:n=>'KWD '+Number(n||0).toFixed(3)}))
+vi.mock('../lib/api', () => ({api:vi.fn(),readCached:vi.fn(),jsonBody:data=>({body:JSON.stringify(data)}),money:n=>'KWD '+Number(n||0).toFixed(3)}))
 vi.mock('../lib/receiptImage',()=>({receiptImage:vi.fn(async()=>({name:'reference.jpg',image:'data:image/jpeg;base64,AA=='}))}))
 afterEach(cleanup)
 beforeAll(() => {

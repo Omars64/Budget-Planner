@@ -14,6 +14,19 @@ export const sessionExpiredEvent = 'budgetly:session-expired'
 const legacySessionErrors = new Set(['Session expired', 'Account is inactive', 'Please sign in again', 'Please sign in again. This session has ended.'])
 let expiredToken
 const responseCache = new Map()
+let cacheRevision = 0
+const pathName = path => path.split('?')[0]
+const isEntryWrite = path => /^\/api\/(?:shared\/)?transactions(?:\/\d+)?$/.test(pathName(path))
+const memoryRead = path => path.startsWith('/api/shared/') || ['/api/wallets','/api/categories','/api/transactions','/api/dashboard'].includes(pathName(path))
+
+function invalidateReads(path = '') {
+  cacheRevision += 1
+  if (!isEntryWrite(path)) responseCache.clear()
+  else for (const key of responseCache.keys()) {
+    // Recording an entry changes balances and ledger rows, but not categories.
+    if (pathName(key) !== '/api/categories' && !/^\/api\/shared\/wallets\/\d+\/categories$/.test(pathName(key))) responseCache.delete(key)
+  }
+}
 export const readCached = path => {
   path = scopedPath(path)
   const value = responseCache.get(path)
@@ -52,7 +65,7 @@ export const auth = {
     const rejectedToken = auth.expired ? expiredToken : null
     window.dispatchEvent(new Event('budgetly:auth-cleared'))
     setApiSpace(null)
-    responseCache.clear()
+    invalidateReads()
     const userId = offlineUser()
     setOfflineUser(null)
     if (userId) void clearOfflineCache(userId).catch(() => {})
@@ -77,7 +90,7 @@ function detectExpiredSession(response, detail, token) {
   if (response.headers?.get('WWW-Authenticate') !== 'Bearer error="invalid_token"' && !legacySessionErrors.has(detail)) return
   if (!auth.expired) {
     expiredToken = token
-    responseCache.clear()
+    invalidateReads()
     window.dispatchEvent(new Event(sessionExpiredEvent))
   }
   throw sessionExpiredError()
@@ -101,7 +114,8 @@ export function api(path, options = {}) {
     try { const data = JSON.parse(options.body); if (data.revision) { const headers = new Headers(options.headers); headers.set('If-Match', data.revision); options = {...options, headers} } } catch { /* Non-JSON requests do not carry revisions. */ }
   }
   const suppliedKey = new Headers(options.headers).get('Idempotency-Key')
-  const key = JSON.stringify([auth.token, offlineUser(), path, options.method || 'GET', options.body || '', suppliedKey])
+  const mutation = options.method && options.method !== 'GET'
+  const key = JSON.stringify([auth.token, offlineUser(), path, options.method || 'GET', options.body || '', suppliedKey, mutation ? null : cacheRevision])
   if (!options.signal && pending.has(key)) return pending.get(key)
   const transaction = options.method === 'POST' && !path.startsWith('/api/auth/') && !path.startsWith('/api/passkeys/') && path !== '/api/account/confirm'
   if (transaction) {
@@ -110,7 +124,6 @@ export function api(path, options = {}) {
     headers.set('Idempotency-Key', suppliedKey || transactionKeys.get(key))
     options = { ...options, headers }
   }
-  const mutation = options.method && options.method !== 'GET'
   const requestUser = offlineUser()
   const requestToken = auth.token
   if (mutation) window.dispatchEvent(new CustomEvent('flowbudget:pending', { detail: ++writes }))
@@ -144,6 +157,7 @@ export function api(path, options = {}) {
 async function send(path, options = {}) {
   const requestToken = auth.token
   const requestUser = offlineUser()
+  const startedAtRevision = cacheRevision
   const checkIdentity = () => assertRequestIdentity(requestToken, requestUser)
   const readFallback = async () => {
     checkIdentity()
@@ -179,7 +193,7 @@ async function send(path, options = {}) {
     throw error
   } finally { window.clearTimeout(limit) }
   checkIdentity()
-  if (response.status === 204) { responseCache.clear(); return null }
+  if (response.status === 204) { invalidateReads(path); return null }
   let data = null
   try { data = await response.json() } catch {
     checkIdentity()
@@ -191,6 +205,7 @@ async function send(path, options = {}) {
   }
   checkIdentity()
   if (!response.ok) {
+    if ([401, 403].includes(response.status)) responseCache.delete(path)
     detectExpiredSession(response, data?.detail, requestToken)
     if ([502, 503, 504].includes(response.status) && (!options.method || options.method === 'GET')) {
       const cached = await readFallback()
@@ -204,9 +219,15 @@ async function send(path, options = {}) {
     throw error
   }
   if (!options.method || options.method === 'GET') {
-    if (path.startsWith('/api/shared/') || path.split('?')[0] === '/api/wallets') responseCache.set(path, { token: requestToken, userId: requestUser, time: Date.now(), data })
-    await cacheOfflineResponse(path, data)
-  } else responseCache.clear()
+    if (startedAtRevision === cacheRevision) {
+      if (requestToken && memoryRead(path)) {
+        responseCache.delete(path)
+        if (responseCache.size >= 64) responseCache.delete(responseCache.keys().next().value)
+        responseCache.set(path, { token: requestToken, userId: requestUser, time: Date.now(), data })
+      }
+      await cacheOfflineResponse(path, data)
+    }
+  } else if (!path.endsWith('/poll')) invalidateReads(path)
   checkIdentity()
   window.dispatchEvent(new Event('budgetly:service-available'))
   return data

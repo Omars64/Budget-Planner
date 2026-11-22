@@ -28,7 +28,16 @@ export async function cacheOfflineResponse(path, data) {
 
 export async function readOfflineResponse(path) {
   if (!canCacheOffline(path)) return undefined
-  const record = await readOffline(`cache:${activeUserId}:${path}`)
+  const userId = activeUserId
+  let record = await readOffline(`cache:${userId}:${path}`)
+  if (!record && path.startsWith('/api/dashboard?')) {
+    const query = new URLSearchParams(path.split('?')[1])
+    if (query.get('view') === 'overview') {
+      query.delete('view')
+      record = await readOffline(`cache:${userId}:/api/dashboard?${query}`)
+    }
+  }
+  if (userId !== activeUserId) return undefined
   if (record) window.dispatchEvent(new Event('budgetly:offline-data'))
   return record?.data
 }

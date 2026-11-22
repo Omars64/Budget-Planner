@@ -97,6 +97,9 @@ def test_personal_and_space_balances_and_writes_are_isolated(spaces):
     assert [row['id'] for row in wallets] == [ids['wallet']]
     assert wallets[0]['balance'] == 23.75
     assert client.get(f"/api/dashboard?space_id={ids['space']}").json()['total_balance'] == 23.75
+    overview = client.get(f"/api/dashboard?space_id={ids['space']}&view=overview").json()
+    assert overview['total_balance'] == 23.75
+    assert [row['id'] for row in overview['wallets']] == [ids['wallet']]
     created = client.post(f"/api/transactions?space_id={ids['space']}", json=transaction(ids['wallet']))
     assert created.status_code == 201, created.text
     assert client.post(f"/api/transactions?space_id={ids['space']}", json=transaction(ids['private'])).status_code == 400

@@ -19,9 +19,9 @@ from typing import Optional
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy import extract, func, inspect as sa_inspect, or_, text
+from sqlalchemy import case, extract, func, inspect as sa_inspect, or_, text
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from .database import Base, IS_EPHEMERAL_VERCEL_SQLITE, SessionLocal, engine, get_db
@@ -41,7 +41,7 @@ from .reliability_models import AccountSession
 from .timekeeping import ledger_iso, now as ledger_now, today as ledger_today
 from .ledger_filters import ledger_options, filter_ledger
 from ._version import VERSION
-from .ledger_accounting import personal_wallet_ids, personal_records, opening_amount, set_opening_balance, migrate_opening_balances, require_regular_transaction
+from .ledger_accounting import personal_wallet_ids, personal_records, set_opening_balance, migrate_opening_balances, require_regular_transaction
 from .spaces import workspace_user, router as spaces_router, attach_wallet_members
 from .auth_dependency import current_user
 from .coordination import lock_owners, snapshot_session
@@ -514,6 +514,27 @@ def wallet_balance(db: Session, wallet: Wallet) -> float:
     return float(round(wallet.initial_balance + income - expense - transfers_out + transfers_in, 3))
 
 
+def wallet_totals(db: Session, wallets):
+    """Batch ledger totals for a set of already-authorized wallets."""
+    ids = [wallet.id for wallet in wallets]
+    if not ids:
+        return {}, {}
+    signed = case((Transaction.type == 'income', Transaction.amount), else_=-Transaction.amount)
+    source = {wallet_id: (delta, opening) for wallet_id, delta, opening in db.query(
+        Transaction.wallet_id, func.sum(signed),
+        func.sum(case((Transaction.is_opening_balance.is_(True), signed), else_=0)),
+    ).filter(Transaction.wallet_id.in_(ids)).group_by(Transaction.wallet_id)}
+    incoming = dict(db.query(Transaction.transfer_wallet_id, func.sum(Transaction.amount)).filter(
+        Transaction.type == 'transfer', Transaction.transfer_wallet_id.in_(ids)
+    ).group_by(Transaction.transfer_wallet_id).all())
+    balances, openings = {}, {}
+    for wallet in wallets:
+        delta, opening = source.get(wallet.id, (0, 0))
+        balances[wallet.id] = float(round(wallet.initial_balance + delta + incoming.get(wallet.id, 0), 3))
+        openings[wallet.id] = float(wallet.initial_balance + opening)
+    return balances, openings
+
+
 def budget_period_start(db: Session, budget: Budget, today: date) -> date:
     if budget.period == "weekly":
         week_starts_on = setting(db, budget.user_id, "week_starts_on", "sunday")
@@ -821,39 +842,58 @@ def _seasonal_tint_value(raw):
 
 @app.get("/api/settings")
 def get_settings(user: User = Depends(current_user), db: Session = Depends(get_db)):
-    display_name = setting(db, user.id, "display_name", "Budgetly")
+    keys = (
+        'display_name', 'logo_style', 'bank_duplicate_window_minutes', 'quiet_hours_enabled',
+        'support_popup_enabled', 'support_sidebar_enabled', 'quiet_start', 'quiet_end',
+        'reminder_topics', 'phone', 'font_family', 'text_color',
+        'theme', 'color_palette', 'seasonal_mode', 'seasonal_theme',
+        'seasonal_hemisphere', 'seasonal_effects', 'seasonal_tint', 'seasonal_speed',
+        'wallpaper_enabled', 'wallpaper_style', 'reminder_interval_hours', 'accent_color',
+        'reminders_enabled', 'reminder_time', 'currency', 'week_starts_on',
+        'compact_numbers',
+    )
+    values = dict(db.query(AppSetting.key, AppSetting.value).filter(
+        AppSetting.user_id == user.id, AppSetting.key.in_(keys),
+    ).all())
+    wallpaper_style = values.get('wallpaper_style')
+    if wallpaper_style is None:
+        has_wallpaper = db.query(AppSetting.user_id).filter(
+            AppSetting.user_id == user.id, AppSetting.key == 'wallpaper_image', AppSetting.value != '',
+        ).first()
+        wallpaper_style = 'custom' if has_wallpaper else 'none'
+    display_name = values.get("display_name", "Budgetly")
     if display_name in {"FlowBudget", "Flow Budget"}:
         display_name = "Budgetly"
     return {
-        'logo_style': setting(db, user.id, 'logo_style', 'current'),
-        'bank_duplicate_window_minutes': int(setting(db, user.id, 'bank_duplicate_window_minutes', '5')),
-        'quiet_hours_enabled': setting(db,user.id,'quiet_hours_enabled','false') == 'true',
-        'support_popup_enabled': setting(db, user.id, 'support_popup_enabled', 'true') == 'true',
-        **({'support_sidebar_enabled': setting(db, user.id, 'support_sidebar_enabled', 'true') == 'true'} if user.role == 'admin' else {}),
-        'quiet_start': setting(db,user.id,'quiet_start','22:00'),
-        'quiet_end': setting(db,user.id,'quiet_end','08:00'),
-        'reminder_topics': json.loads(setting(db,user.id,'reminder_topics','["daily"]')),
-        'phone': setting(db, user.id, 'phone', ''),
-        'font_family': setting(db, user.id, 'font_family', 'system'),
-        'text_color': setting(db, user.id, 'text_color', 'ink'),
-        'theme': setting(db, user.id, 'theme', 'light'),
-        'color_palette': setting(db, user.id, 'color_palette', 'navy'),
-        'seasonal_mode': setting(db, user.id, 'seasonal_mode', 'off'),
-        'seasonal_theme': setting(db, user.id, 'seasonal_theme', 'winter'),
-        'seasonal_hemisphere': setting(db, user.id, 'seasonal_hemisphere', 'north'),
-        'seasonal_effects': setting(db, user.id, 'seasonal_effects', 'subtle'),
-        'seasonal_tint': _seasonal_tint_value(setting(db, user.id, 'seasonal_tint', '7')),
-        'seasonal_speed': setting(db, user.id, 'seasonal_speed', 'normal'),
-        'wallpaper_enabled': setting(db, user.id, 'wallpaper_enabled', 'true') == 'true',
-        'wallpaper_style': setting(db, user.id, 'wallpaper_style', 'custom' if setting(db, user.id, 'wallpaper_image', '') else 'none'),
-        'reminder_interval_hours': int(setting(db, user.id, 'reminder_interval_hours', '4')),
-        'accent_color': setting(db, user.id, 'accent_color', '#0a4173'),
-        'reminders_enabled': setting(db, user.id, 'reminders_enabled', 'false') == 'true',
-        'reminder_time': setting(db, user.id, 'reminder_time', '20:00'),
-        "currency": setting(db, user.id, "currency", "KWD"),
+        'logo_style': values.get('logo_style', 'current'),
+        'bank_duplicate_window_minutes': int(values.get('bank_duplicate_window_minutes', '5')),
+        'quiet_hours_enabled': values.get('quiet_hours_enabled','false') == 'true',
+        'support_popup_enabled': values.get('support_popup_enabled', 'true') == 'true',
+        **({'support_sidebar_enabled': values.get('support_sidebar_enabled', 'true') == 'true'} if user.role == 'admin' else {}),
+        'quiet_start': values.get('quiet_start','22:00'),
+        'quiet_end': values.get('quiet_end','08:00'),
+        'reminder_topics': json.loads(values.get('reminder_topics','["daily"]')),
+        'phone': values.get('phone', ''),
+        'font_family': values.get('font_family', 'system'),
+        'text_color': values.get('text_color', 'ink'),
+        'theme': values.get('theme', 'light'),
+        'color_palette': values.get('color_palette', 'navy'),
+        'seasonal_mode': values.get('seasonal_mode', 'off'),
+        'seasonal_theme': values.get('seasonal_theme', 'winter'),
+        'seasonal_hemisphere': values.get('seasonal_hemisphere', 'north'),
+        'seasonal_effects': values.get('seasonal_effects', 'subtle'),
+        'seasonal_tint': _seasonal_tint_value(values.get('seasonal_tint', '7')),
+        'seasonal_speed': values.get('seasonal_speed', 'normal'),
+        'wallpaper_enabled': values.get('wallpaper_enabled', 'true') == 'true',
+        'wallpaper_style': wallpaper_style,
+        'reminder_interval_hours': int(values.get('reminder_interval_hours', '4')),
+        'accent_color': values.get('accent_color', '#0a4173'),
+        'reminders_enabled': values.get('reminders_enabled', 'false') == 'true',
+        'reminder_time': values.get('reminder_time', '20:00'),
+        "currency": values.get("currency", "KWD"),
         "display_name": display_name,
-        "week_starts_on": setting(db, user.id, "week_starts_on", "sunday"),
-        "compact_numbers": setting(db, user.id, "compact_numbers", "false") == "true",
+        "week_starts_on": values.get("week_starts_on", "sunday"),
+        "compact_numbers": values.get("compact_numbers", "false") == "true",
     }
 
 
@@ -876,7 +916,8 @@ def wallets(user: User = Depends(workspace_user), db: Session = Depends(get_db))
     materialize_recurring_for_user(db, user.id)
     rows = db.query(Wallet).filter(Wallet.user_id == user.id).order_by(Wallet.archived, Wallet.created_at).all()
     shared = {r[0] for r in db.query(WalletShare.wallet_id).filter_by(owner_id=user.id).all()}
-    return [{"id": w.id, "name": w.name, "type": w.type, "initial_balance": float(opening_amount(db, w)), "icon": w.icon, "color": w.color, "card_network": w.card_network or ("visa" if w.type in {"bank", "card"} else None), "card_finish": w.card_finish, "archived": w.archived, "balance": wallet_balance(db, w), "is_shared": w.id in shared, "space_id": w.space_id} for w in rows]
+    balances, openings = wallet_totals(db, rows)
+    return [{"id": w.id, "name": w.name, "type": w.type, "initial_balance": openings[w.id], "icon": w.icon, "color": w.color, "card_network": w.card_network or ("visa" if w.type in {"bank", "card"} else None), "card_finish": w.card_finish, "archived": w.archived, "balance": balances[w.id], "is_shared": w.id in shared, "space_id": w.space_id} for w in rows]
 
 
 @app.post("/api/wallets", status_code=201)
@@ -978,7 +1019,9 @@ def transactions(
     if category_id is not None: q = q.filter(Transaction.category_id.is_(None) if category_id == 0 else Transaction.category_id == category_id)
     if date_from: q = q.filter(Transaction.date >= date_from)
     if date_to: q = q.filter(Transaction.date <= date_to)
-    return [tx_payload(t) for t in filter_ledger(q, options).limit(limit).all()]
+    page = filter_ledger(q, options).options(joinedload(Transaction.wallet), joinedload(Transaction.transfer_wallet),
+                                             joinedload(Transaction.category)).limit(limit)
+    return [tx_payload(t) for t in page]
 
 
 def validate_transaction_references(db: Session, user_id: int, payload: TransactionIn) -> None:
@@ -1191,7 +1234,7 @@ def delete_debt(item_id: int, user: User = Depends(workspace_user), db: Session 
 
 
 @app.get("/api/dashboard")
-def dashboard(month: Optional[str] = None, user: User = Depends(workspace_user), db: Session = Depends(get_db)):
+def dashboard(month: Optional[str] = None, user: User = Depends(workspace_user), db: Session = Depends(get_db), view: Optional[str] = None):
     materialize_recurring_for_user(db, user.id)
     try:
         current = datetime.strptime(month, "%Y-%m") if month else ledger_now()
@@ -1201,19 +1244,44 @@ def dashboard(month: Optional[str] = None, user: User = Depends(workspace_user),
     next_month = datetime(current.year + (current.month == 12), 1 if current.month == 12 else current.month + 1, 1)
     personal = personal_records(db, user.id)
     report_month = current.strftime("%Y-%m")
-    month_txs = personal.filter(Transaction.reporting_month == report_month).all()
+    period = personal.filter(Transaction.reporting_month == report_month)
+    wallets_rows = db.query(Wallet).filter(Wallet.id.in_(personal_wallet_ids(db, user.id)), Wallet.archived.is_(False)).all()
+    balances, _ = wallet_totals(db, wallets_rows)
+    overview = {
+        "month": report_month, "total_balance": round(sum(balances.values()), 3),
+        "wallets": [{"id": w.id, "name": w.name, "type": w.type, "color": w.color, "card_network": w.card_network,
+                     "card_finish": w.card_finish, "balance": balances[w.id]} for w in wallets_rows],
+    }
+    recent = period.options(joinedload(Transaction.wallet), joinedload(Transaction.transfer_wallet),
+                            joinedload(Transaction.category)).order_by(Transaction.date.desc(), Transaction.id.desc())
+    if view == 'overview':
+        income = expense = opening = opening_debt = 0
+        for kind, is_opening, amount in period.with_entities(
+            Transaction.type, Transaction.is_opening_balance, func.sum(Transaction.amount)
+        ).group_by(Transaction.type, Transaction.is_opening_balance):
+            if kind == 'income':
+                income += amount
+                if is_opening:
+                    opening = amount
+            elif kind == 'expense':
+                if is_opening:
+                    opening_debt = amount
+                else:
+                    expense = amount
+        return {**overview, **dashboard_money(income, expense, opening, opening_debt),
+                "recent_transactions": [tx_payload(t) for t in recent.limit(3)]}
+    month_txs = period.all()
     income = sum(float(t.amount) for t in month_txs if t.type == "income")
     opening = sum(float(t.amount) for t in month_txs if t.type == 'income' and t.is_opening_balance)
     opening_debt = sum(float(t.amount) for t in month_txs if t.type == 'expense' and t.is_opening_balance)
     expense = sum(float(t.amount) for t in month_txs if t.type == "expense" and not t.is_opening_balance)
-    wallets_rows = db.query(Wallet).filter(Wallet.id.in_(personal_wallet_ids(db, user.id)), Wallet.archived.is_(False)).all()
-    total_balance = sum(wallet_balance(db, w) for w in wallets_rows)
     from .extensions import shared_wallet_ids
     shared_ids = shared_wallet_ids(db, user)
     shared_rows = db.query(Wallet).filter(Wallet.id.in_(shared_ids), Wallet.archived.is_(False)).all() if shared_ids else []
     for owner_id in {w.user_id for w in shared_rows} - {user.id}:
         materialize_recurring_for_user(db, owner_id)
-    shared_balance = round(sum(wallet_balance(db, w) for w in shared_rows), 3)
+    shared_balances, _ = wallet_totals(db, shared_rows)
+    shared_balance = round(sum(shared_balances.values()), 3)
     category_map = {}
     for t in month_txs:
         if t.type == "expense" and not t.is_opening_balance:
@@ -1229,7 +1297,6 @@ def dashboard(month: Optional[str] = None, user: User = Depends(workspace_user),
         if day == 1:
             day_rows.extend(t for t in month_txs if (t.date.year, t.date.month) != (current.year, current.month))
         days.append({"day": str(day), "income": round(sum(float(t.amount) for t in day_rows if t.type == "income"), 3), "expense": round(sum(float(t.amount) for t in day_rows if t.type == "expense" and not t.is_opening_balance), 3)})
-    recent = personal.filter(Transaction.reporting_month == report_month).order_by(Transaction.date.desc(), Transaction.id.desc()).limit(5).all()
     bdata = []
     as_of = today if (current.year, current.month) == (today.year, today.month) else (next_month - timedelta(days=1)).date()
     for b in db.query(Budget).filter(Budget.user_id == user.id).all():
@@ -1254,12 +1321,17 @@ def dashboard(month: Optional[str] = None, user: User = Depends(workspace_user),
     weekly['upcoming']={'count':len(future),'amount':round(sum(float(item.amount) for item in future),3),'next':{'description':future[0].description,'due_at':future[0].due_at.isoformat()} if future else None}
     return {
         "weekly": weekly,
-        "month": current.strftime("%Y-%m"), "total_balance": round(total_balance, 3), "income": round(income, 3), "expense": round(expense, 3), "net": round(income - expense - opening_debt, 3),
-        "opening_funds": round(opening, 3), "opening_debt": round(opening_debt, 3), "earned_income": round(income - opening, 3),
-        "wallets": [{"id": w.id, "name": w.name, "type": w.type, "color": w.color, "card_network": w.card_network, "card_finish": w.card_finish, "balance": wallet_balance(db, w)} for w in wallets_rows],
+        **overview, **dashboard_money(income, expense, opening, opening_debt),
         "shared": {"balance": shared_balance, "wallet_count": len(shared_rows)},
         "cashflow": days, "category_spending": sorted(category_map.values(), key=lambda x: x["value"], reverse=True),
-        "recent_transactions": [tx_payload(t) for t in recent], "budgets": bdata,
+        "recent_transactions": [tx_payload(t) for t in recent.limit(5)], "budgets": bdata,
+    }
+
+
+def dashboard_money(income, expense, opening, opening_debt):
+    return {
+        "income": float(round(income, 3)), "expense": float(round(expense, 3)), "net": float(round(income - expense - opening_debt, 3)),
+        "opening_funds": float(round(opening, 3)), "opening_debt": float(round(opening_debt, 3)), "earned_income": float(round(income - opening, 3)),
     }
 
 

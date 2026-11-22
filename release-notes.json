@@ -1,4 +1,10 @@
 {
+  "6.25.1": [
+    {"title":"Faster startup and navigation","detail":"Budgetly loads your Overview sooner and shows recently viewed transactions immediately while refreshing them in the background."},
+    {"title":"Smoother transaction saves","detail":"The entry form reuses wallet and category choices, and the transaction list keeps its position after a save."},
+    {"title":"More responsive workbooks","detail":"Large sheets render only the rows around your current view, while formulas recalculate in the background."},
+    {"title":"Smaller browser updates","detail":"Budgetly caches essential screens first and downloads optional tools when you open them."}
+  ],
   "6.25.0": [
     {"title":"Personal workbooks","detail":"Open More → Workbooks to import an Excel file or Google Sheet, review formula compatibility, edit the Budgetly copy and export it."}
   ],

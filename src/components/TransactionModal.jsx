@@ -10,7 +10,7 @@ import { readDraft, writeDraft, clearDraft } from '../lib/transactionDraft'
 import { useApp } from '../App'
 import Modal from './Modal'
 import DateTimeField, { DateField } from './DateTimeField'
-import { api, jsonBody, money } from '../lib/api'
+import { api, jsonBody, money, readCached } from '../lib/api'
 import VoiceInputButton from './VoiceInputButton'
 import { applyVoiceTransaction } from '../lib/voiceInput'
 import BalancePreview from './BalancePreview'
@@ -52,7 +52,8 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
     const resumeSchedule = !editing && !isGuest && sessionStorage.getItem(`budgetly_schedule_resume_${user.id}`) === 'true'
     setSchedule(resumeSchedule)
     const controller = new window.AbortController()
-    Promise.all([api('/api/wallets', {signal: controller.signal}), api('/api/categories', {signal: controller.signal})]).then(([w,c]) => {
+    const load = path => readCached(path) ?? api(path)
+    Promise.all([load('/api/wallets'), load('/api/categories')]).then(([w,c]) => {
       if (controller.signal.aborted) return
       w = w.filter(x => activeSpace || !x.is_shared || x.id === editing?.wallet_id || x.id === editing?.transfer_wallet_id)
       setWallets(w.filter(x => !x.archived || x.id === editing?.wallet_id || x.id === editing?.transfer_wallet_id)); setCategories(c)
@@ -129,7 +130,7 @@ export default function TransactionModal({ open, onClose, onSaved, editing = nul
     }
       const saved = await api(schedule ? '/api/planned-transactions' : editing ? `/api/transactions/${editing.id}` : '/api/transactions', { method: editing ? 'PUT' : 'POST', ...jsonBody(schedule ? {transaction: payload, status: 'scheduled', reminder_enabled: true} : payload) })
       if (!editing) { rememberEntry(user.id,spaceKey,payload); clearDraft(draftKey) }
-      if (!schedule && !saved.queued) transactionSaved(saved)
+      if (!schedule && !saved.queued) transactionSaved(saved, { spaceKey, created: !editing })
       onSaved?.(saved, schedule)
     } catch (err) {
       setError(err.status === 409 ? 'This entry changed on another device. Your edits are still in this form. Review the current entry before trying again.' : err.message)

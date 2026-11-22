@@ -239,6 +239,13 @@ def test_validation_guards_and_boundaries():
         assert client.delete(f"/api/wallets/{wallets[0]['id']}", headers=headers).status_code == 409
         feb = client.get('/api/dashboard?month=2026-02', headers=headers).json()
         assert len(feb['cashflow']) == 28
+        full = client.get('/api/dashboard?month=2026-09', headers=headers).json()
+        lean = client.get('/api/dashboard?month=2026-09&view=overview', headers=headers).json()
+        assert lean['recent_transactions'] == full['recent_transactions'][:3]
+        assert {key: value for key, value in lean.items() if key != 'recent_transactions'} == {
+            key: full[key] for key in ('month', 'total_balance', 'wallets', 'income', 'expense', 'net',
+                                      'opening_funds', 'opening_debt', 'earned_income')
+        }
 
 
 def test_transaction_retry_and_preferences():
