@@ -3,8 +3,8 @@
   "description": "Budgetly personal finance and shared spaces",
   "author": "Omar Solanki",
   "private": true,
-  "version": "6.24.4",
-  "androidVersionCode": 138,
+  "version": "6.25.0",
+  "androidVersionCode": 139,
   "type": "module",
   "main": "desktop/main.cjs",
   "scripts": {
@@ -41,12 +41,18 @@
     "@capacitor/share": "^8.0.2",
     "date-fns": "^4.1.0",
     "driver.js": "^1.8.0",
+    "exceljs": "^4.4.0",
+    "fast-formula-parser": "^1.0.19",
+    "fflate": "^0.8.3",
     "framer-motion": "^13.1.1",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.9",
     "lucide-react": "^1.39.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.2",
-    "recharts": "^3.10.1"
+    "recharts": "^3.10.1",
+    "ssf": "^0.11.2"
   },
   "overrides": {
     "xcode": {

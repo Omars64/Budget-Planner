@@ -65,6 +65,15 @@ else app.whenReady().then(() => {
     event.returnValue = { version: app.getVersion(), updateChannel: process.windowsStore ? 'store' : 'installer' }
   })
   if (!process.windowsStore) registerWindowsUpdates(origin, isBudgetlyFrame)
+  ipcMain.handle('budgetly:open-google-picker', (event, value) => {
+    if (!isBudgetlyFrame(event) || typeof value !== 'string') throw new Error('Invalid Google picker request')
+    const url = new URL(value)
+    if (url.origin !== 'https://accounts.google.com' || url.username || url.password ||
+        url.pathname !== '/o/oauth2/v2/auth' || url.searchParams.get('trigger_onepick') !== 'true') {
+      throw new Error('Invalid Google picker URL')
+    }
+    return shell.openExternal(url.href)
+  })
   ipcMain.on('budgetly:palette-icon', (event, palette) => {
     if (isBudgetlyFrame(event) && applyPalette(mainWindow, palette)) showOnPaletteReady?.()
   })

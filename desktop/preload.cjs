@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron')
 contextBridge.exposeInMainWorld('budgetlyDesktop', Object.freeze({
   ...ipcRenderer.sendSync('budgetly:desktop-info'),
   setPaletteIcon: palette => ipcRenderer.send('budgetly:palette-icon', palette),
+  openGooglePicker: url => ipcRenderer.invoke('budgetly:open-google-picker', url),
   canInstallUpdate: () => ipcRenderer.invoke('budgetly:can-install-update'),
   installUpdate: version => ipcRenderer.invoke('budgetly:install-update', version),
   onUpdateProgress: callback => {

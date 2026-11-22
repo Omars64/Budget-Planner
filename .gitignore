@@ -17,3 +17,7 @@ pytest-cache-files-*/
 .android-signing/
 *.pfx
 browser-layout-evidence.json
+
+# Local workbook design previews
+/poc/workbook-preview/
+/poc/google-sheets-preview.html

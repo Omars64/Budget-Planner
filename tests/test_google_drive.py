@@ -1,5 +1,8 @@
+import base64
 import hashlib
+import io
 import json
+from uuid import uuid4
 from datetime import timedelta
 from urllib.parse import parse_qs, urlsplit
 
@@ -12,6 +15,7 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
+from api import workbooks
 from api import google_drive as drive
 from api.database import Base, get_db
 from api.models import User, utc_now
@@ -38,6 +42,7 @@ def setup(monkeypatch):
     db.commit()
     app = FastAPI()
     app.include_router(drive.router)
+    app.include_router(workbooks.router)
     def user(request: Request):
         token = request.headers.get('Authorization')
         if token not in ('Bearer one', 'Bearer two'):
@@ -63,6 +68,61 @@ def setup(monkeypatch):
 
 HEADERS = {'Authorization': 'Bearer one'}
 OTHER = {'Authorization': 'Bearer two'}
+
+
+@pytest.mark.parametrize('android', [False, True])
+def test_google_sheet_import_and_private_workbook_revisions(setup, android):
+    from openpyxl import Workbook
+
+    client, db, _, _, set_handler = setup
+    workbook = Workbook()
+    workbook.active['A1'] = 'Personal expenses'
+    stream = io.BytesIO()
+    workbook.save(stream)
+    data = base64.b64encode(stream.getvalue()).decode()
+
+    def google(request):
+        if str(request.url) == drive.TOKEN_URL:
+            return httpx.Response(200, json={'access_token': 'sheet-only', 'scope': drive.SCOPE})
+        assert request.headers['Authorization'] == 'Bearer sheet-only'
+        if request.url.path.endswith('/file_1/export'):
+            assert request.url.params['mimeType'] == workbooks.MIME
+            return httpx.Response(200, content=stream.getvalue())
+        assert request.url.path.endswith('/file_1')
+        return httpx.Response(200, json={'name': 'Personal expenses', 'mimeType': 'application/vnd.google-apps.spreadsheet'})
+
+    set_handler(google)
+    flow_response = client.post('/api/workbooks/google/start', headers=HEADERS, json={'android': android})
+    assert flow_response.status_code == 200
+    flow = flow_response.json()
+    query = parse_qs(urlsplit(flow['authorization_url']).query)
+    assert query['trigger_onepick'] == ['true']
+    assert query['scope'] == [drive.SCOPE]
+    poll = {k: flow[k] for k in ('flow_id', 'poll_secret')}
+    assert client.post('/api/workbooks/google/poll', headers=HEADERS, json=poll).json() == {'status': 'pending'}
+    callback = client.get('/api/google-drive/callback', follow_redirects=False, params={
+        'state': query['state'][0], 'code': 'picked-code', 'picked_file_ids': 'file_1'})
+    assert callback.status_code == (303 if android else 200)
+    if android:
+        assert callback.headers['location'].endswith('/api/auth/google/return')
+    assert client.post('/api/workbooks/google/poll', headers=OTHER, json=poll).status_code == 404
+    result = client.post('/api/workbooks/google/poll', headers=HEADERS, json=poll)
+    assert result.json() == {'status': 'ready', 'name': 'Personal expenses', 'data': data}
+    assert result.headers['cache-control'] == 'no-store'
+    assert db.get(drive.GoogleDriveConnection, 1) is None
+
+    book_id = str(uuid4())
+    path = '/api/workbooks/' + book_id
+    book = {'name': 'Personal expenses', 'revision': 0, 'data': data}
+    assert client.put(path, headers=HEADERS, json=book).json()['revision'] == 1
+    assert client.get('/api/workbooks', headers=OTHER).json() == []
+    assert client.get(path, headers=OTHER).status_code == 404
+    assert client.get(path, headers=HEADERS).json()['data'] == data
+    assert client.put(path, headers=OTHER, json={**book, 'revision': 1}).status_code == 409
+    assert client.put(path, headers=HEADERS, json={**book, 'revision': 1}).json()['revision'] == 2
+    assert client.put(path, headers=HEADERS, json={**book, 'revision': 1}).status_code == 409
+    assert client.delete(path, headers=HEADERS, params={'revision': 2}).json() == {'deleted': True}
+    assert client.get(path, headers=HEADERS).status_code == 404
 
 
 def start(client):

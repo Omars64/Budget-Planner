@@ -1,0 +1,93 @@
+.workbooks,
+.workbook-paper,
+.workbook-scroll {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.workbook-paper {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.workbook-bar,
+.workbook-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+}
+
+.workbook-bar label,
+.workbook-tabs button {
+  white-space: nowrap;
+}
+
+.workbook-bar input {
+  min-width: 0;
+  flex: 1;
+}
+
+.workbook-scroll {
+  overflow: auto;
+  max-height: 58vh;
+  background: white;
+  color: #1e302b;
+}
+
+.workbook-scroll table {
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+  width: max-content;
+  min-width: 100%;
+  font: 14px Arial, sans-serif;
+}
+
+.workbook-scroll td,
+.workbook-scroll th {
+  padding: 8px;
+  border: solid #d7dfdc;
+  border-width: 0 1px 1px 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.workbook-scroll th {
+  background: #edf1ef;
+  color: #405b51;
+  font-size: 12px;
+}
+
+.workbook-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.workbook-scroll td {
+  cursor: cell;
+}
+
+.workbook-scroll td[data-selected=true] {
+  outline: 2px solid #127858;
+  outline-offset: -2px;
+}
+
+.workbook-tabs {
+  overflow: auto;
+}
+
+.workbook-tabs button {
+  flex-shrink: 0;
+}
+
+.workbook-tabs [aria-pressed=true] {
+  border-color: currentColor;
+}
+
+.workbooks h2 {
+  overflow-wrap: anywhere;
+}

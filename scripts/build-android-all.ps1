@@ -36,9 +36,12 @@ try {
     $ErrorActionPreference = 'Stop'
     if ($LASTEXITCODE -ne 0 -or ($javaVersion -join ' ') -notmatch 'version "21[.\"]') { throw 'This Android project requires JDK 21. Pass -JdkHome with the correct installation.' }
     if (!$SdkHome) {
-        $SdkHome = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } elseif ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } else { Join-Path $env:LOCALAPPDATA 'Android/Sdk' }
+        $sdkCandidates = @($env:ANDROID_HOME, $env:ANDROID_SDK_ROOT,
+            (Join-Path $env:LOCALAPPDATA 'Android/Sdk'),
+            (Join-Path $env:USERPROFILE 'AppData/Local/Android/Sdk'))
+        $SdkHome = $sdkCandidates | Where-Object { $_ -and (Test-Path -LiteralPath (Join-Path $_ 'platform-tools')) } | Select-Object -First 1
     }
-    if (!(Test-Path -LiteralPath (Join-Path $SdkHome 'platform-tools'))) { throw 'Android SDK platform-tools were not found. Install the Android SDK or pass -SdkHome.' }
+    if (!$SdkHome -or !(Test-Path -LiteralPath (Join-Path $SdkHome 'platform-tools'))) { throw 'Android SDK platform-tools were not found. Install the Android SDK or pass -SdkHome.' }
     $SdkHome = (Resolve-Path -LiteralPath $SdkHome).Path.TrimEnd('\')
     if (!$Debug) {
         foreach ($file in @('flowbudget-upload.p12', 'password.clixml')) {

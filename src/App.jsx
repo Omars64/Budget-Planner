@@ -26,6 +26,7 @@ const DebtWorkspace = lazy(() => import('./pages/DebtWorkspace'))
 const Wallets = lazy(() => import('./pages/Wallets'))
 const Settings = lazy(() => import('./pages/Settings'))
 const Admin = lazy(() => import('./pages/Admin'))
+const Workbooks = lazy(() => import('./pages/Workbooks'))
 const Notes = lazy(() => import('./pages/Notes'))
 const Feedback = lazy(() => import('./pages/Feedback'))
 const Upcoming = lazy(() => import('./pages/Upcoming'))
@@ -513,6 +514,7 @@ export default function App() {
         <Route path="/more" element={<More />} />
         <Route path="/spaces" element={<Spaces />} />
         <Route path="/wallets" element={<Wallets />} />
+        <Route path="/workbooks" element={activeSpace ? <Navigate to="/more" replace /> : <Workbooks key={session.user?.id} />} />
         <Route path="/notes" element={<Notes />} />
         <Route path="/feedback" element={<Feedback />} />
         <Route path="/settings" element={isGuest ? <GuestSettings /> : <Settings />} />

@@ -97,7 +97,7 @@ export default function AppShell({ children }) {
     lastVisit.current = visit
     recordPageVisit(user?.id, location.pathname)
   }, [user?.id, location.pathname, preferences.personalizedShortcuts])
-  const pages = activeSpace ? nav.filter(([path]) => path !== '/ask-ai') : nav
+  const pages = activeSpace ? nav.filter(([path]) => path !== '/ask-ai' && path !== '/workbooks') : nav
   const visibleNav = user?.role === 'admin' ? [...pages, ['/admin', 'Admin', ShieldCheck, 'Account']] : pages
   const orderedNav = [...visibleNav].sort((a,b) => { const ia=preferences.navOrder.indexOf(a[0]), ib=preferences.navOrder.indexOf(b[0]); return ia < 0 || ib < 0 ? 0 : ia-ib })
   const matchingNav = orderedNav.filter(([, label]) => label.toLowerCase().includes(navSearch.trim().toLowerCase()))

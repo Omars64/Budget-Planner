@@ -1,4 +1,4 @@
-import { BarChart3, BellDot, CalendarClock, CalendarDays, Gauge, Landmark, LayoutDashboard, ReceiptText, Target, WalletCards, CircleHelp, MessageSquare, NotebookPen, Settings, Users, Menu } from 'lucide-react'
+import { Sheet, BarChart3, BellDot, CalendarClock, CalendarDays, Gauge, Landmark, LayoutDashboard, ReceiptText, Target, WalletCards, CircleHelp, MessageSquare, NotebookPen, Settings, Users, Menu } from 'lucide-react'
 
 export const workspaceNavigation = [
   ['/', 'Overview', LayoutDashboard, 'Every day', 'Balances, recent activity and what needs attention'],
@@ -16,6 +16,7 @@ export const workspaceNavigation = [
   ['/analytics', 'Analytics', BarChart3, 'Planning & insights', 'Understand spending and income trends'],
   ['/spending', 'Spending tracker', BarChart3, 'Planning & insights', 'See where your money goes'],
   ['/ask-ai', 'Ask Budgetly', CircleHelp, 'Tools & support', 'Guidance and conversations'],
+  ['/workbooks', 'Workbooks', Sheet, 'Tools & support', 'Import and edit personal spreadsheets'],
   ['/notes', 'Notes', NotebookPen, 'Tools & support', 'Personal and shared notes'],
   ['/feedback', 'Feedback', MessageSquare, 'Tools & support', 'Send suggestions or report a problem'],
   ['/settings', 'Settings', Settings, 'Account', 'Appearance, notifications, backup and security'],

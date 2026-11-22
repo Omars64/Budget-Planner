@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Boolean, CheckConstraint, Column, Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import LargeBinary, Boolean, CheckConstraint, Column, Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 from .database import Base
 
@@ -16,6 +16,16 @@ def transaction_month_default(context):
     if value:
         return str(value)[:7]
     return datetime.now().strftime("%Y-%m")
+
+
+class Workbook(Base):
+    __tablename__ = 'workbooks'
+    id = Column(String(36), primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    name = Column(String(120), nullable=False)
+    revision = Column(Integer, nullable=False)
+    content = Column(LargeBinary, nullable=False)
+    updated = Column(DateTime, nullable=False, default=utc_now)
 
 
 class Wallet(Base):

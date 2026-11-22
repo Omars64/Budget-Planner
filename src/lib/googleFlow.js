@@ -10,15 +10,15 @@ function pause(signal) {
     if (signal?.aborted) abort()
   })
 }
-export function reserveGoogleWindow() {
-  if (Capacitor.isNativePlatform()) return null
+export function reserveGoogleWindow({ external } = {}) {
+  if (Capacitor.isNativePlatform() || external) return null
   const popup = window.open('about:blank', '_blank', 'popup,width=520,height=700')
   if (!popup) throw new Error('Allow pop-ups for Budgetly to continue with Google.')
   popup.opener = null
   return popup
 }
 
-export async function openGoogleFlow(flow, {popup, signal, pollPath, pollBody}) {
+export async function openGoogleFlow(flow, {popup, signal, pollPath, pollBody, external}) {
   const url = new URL(flow.authorization_url)
   if (url.protocol !== 'https:' || url.hostname !== 'accounts.google.com' || url.username || url.password || url.port) {
     popup?.close(); throw new Error('Google sign-in is unavailable. Please try again later.')
@@ -31,6 +31,7 @@ export async function openGoogleFlow(flow, {popup, signal, pollPath, pollBody}) 
     window.addEventListener('budgetly:oauth-return', authTabReturn)
     if (Capacitor.isNativePlatform() && browser.addListener) returnListener = await browser.addListener('returnToApp', () => { returned = true })
     if (Capacitor.isNativePlatform()) await browser.open({url:url.href})
+    else if (external) await external(url.href)
     else {
       if (!popup || popup.closed) throw new Error('Google sign-in window was closed.')
       popup.location.replace(url.href)

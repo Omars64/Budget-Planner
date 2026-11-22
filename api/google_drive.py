@@ -23,7 +23,7 @@ import httpx
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, case, or_
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -118,46 +118,54 @@ def decrypt(cipher, value):
 
 @router.post('/start')
 def start(request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    return start_authorization(request, user, db)
+
+
+def start_authorization(request, user, db, *, workbook=False, android=False):
     (client_id, _, redirect_uri), cipher = configuration()
     limit(db, f'google-drive-start:{user.id}', 10, 3600)
     sid = getattr(request.state, 'session_id', None)
     session = db.get(AccountSession, sid) if sid else None
     if not session or session.user_id != user.id or session.revoked or session.created_at <= utc_now()-timedelta(days=1):
         raise HTTPException(401, 'Sign in again before connecting Drive')
-    connection = db.query(GoogleDriveConnection).filter_by(user_id=user.id).with_for_update().first()
-    if connection is None:
-        try:
-            with db.begin_nested():
-                connection = GoogleDriveConnection(user_id=user.id)
-                db.add(connection)
-                db.flush()
-        except IntegrityError:
-            connection = db.query(GoogleDriveConnection).filter_by(user_id=user.id).with_for_update().one()
-    db.query(GoogleDriveConnection).filter_by(user_id=user.id).update(
-        {'generation': GoogleDriveConnection.generation}, synchronize_session=False)
-    db.refresh(connection)
-    if revocations.pending(db, user.id) or db.query(GoogleDriveOAuthAttempt.id).filter_by(
-            user_id=user.id).filter(GoogleDriveOAuthAttempt.status.in_(['processing', 'cancelling']),
-            GoogleDriveOAuthAttempt.expires_at > utc_now()).first():
-        db.rollback()
-        raise HTTPException(409, 'Previous Drive authorization or revocation is still pending')
-    db.query(GoogleDriveOAuthAttempt).filter(
-        GoogleDriveOAuthAttempt.user_id == user.id,
-        GoogleDriveOAuthAttempt.status.in_(['pending', 'processing']),
-    ).update({'status': 'cancelled', 'verifier': None}, synchronize_session=False)
+    if not workbook:
+        connection = db.query(GoogleDriveConnection).filter_by(user_id=user.id).with_for_update().first()
+        if connection is None:
+            try:
+                with db.begin_nested():
+                    connection = GoogleDriveConnection(user_id=user.id)
+                    db.add(connection)
+                    db.flush()
+            except IntegrityError:
+                connection = db.query(GoogleDriveConnection).filter_by(user_id=user.id).with_for_update().one()
+        db.query(GoogleDriveConnection).filter_by(user_id=user.id).update(
+            {'generation': GoogleDriveConnection.generation}, synchronize_session=False)
+        db.refresh(connection)
+        if revocations.pending(db, user.id) or db.query(GoogleDriveOAuthAttempt.id).filter_by(
+                user_id=user.id).filter(GoogleDriveOAuthAttempt.status.in_(['processing', 'cancelling']),
+                GoogleDriveOAuthAttempt.expires_at > utc_now()).first():
+            db.rollback()
+            raise HTTPException(409, 'Previous Drive authorization or revocation is still pending')
+        db.query(GoogleDriveOAuthAttempt).filter(
+            GoogleDriveOAuthAttempt.user_id == user.id,
+            GoogleDriveOAuthAttempt.status.in_(['pending', 'processing']),
+        ).update({'status': 'cancelled', 'verifier': None}, synchronize_session=False)
     state, verifier, poll_secret = secrets.token_urlsafe(32), secrets.token_urlsafe(64), secrets.token_urlsafe(32)
+    if workbook and android:
+        state = 'android-workbook.' + state
     attempt = GoogleDriveOAuthAttempt(id=secrets.token_hex(32), user_id=user.id,
         state_hash=hashlib.sha256(state.encode()).hexdigest(),
         poll_hash=hashlib.sha256(poll_secret.encode()).hexdigest(),
         verifier=cipher.encrypt(verifier.encode()).decode(), expires_at=utc_now() + timedelta(minutes=10),
         session_id=sid, credential_digest=hashlib.sha256(user.password_hash.encode()).hexdigest(),
-        connection_generation=connection.generation)
+        connection_generation=0 if workbook else connection.generation, status="sheet_pending" if workbook else "pending")
     db.add(attempt)
     db.commit()
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip('=')
     return private({'flow_id': attempt.id, 'poll_secret': poll_secret, 'authorization_url': 'https://accounts.google.com/o/oauth2/v2/auth?' + urlencode({
         'client_id': client_id, 'redirect_uri': redirect_uri, 'response_type': 'code',
-        'scope': SCOPE, 'access_type': 'offline', 'prompt': 'consent',
+        **({'trigger_onepick': 'true', 'mimetypes': 'application/vnd.google-apps.spreadsheet'} if workbook else {}),
+        'scope': SCOPE, 'access_type': 'online' if workbook else 'offline', 'prompt': 'consent',
         'include_granted_scopes': 'false', 'state': state,
         'code_challenge': challenge, 'code_challenge_method': 'S256'})})
 
@@ -211,7 +219,8 @@ def cancel(payload: PollIn, user: User = Depends(current_user), db: Session = De
 @router.get('/callback', response_class=HTMLResponse)
 async def callback(state: str = Query(..., min_length=20, max_length=200),
                    code: str | None = Query(None, max_length=4096),
-                   error: str | None = Query(None, max_length=200), db: Session = Depends(get_db)):
+                   error: str | None = Query(None, max_length=200), db: Session = Depends(get_db),
+                   picked_file_ids: str | None = Query(None, max_length=200)):
     (client_id, client_secret, redirect_uri), cipher = configuration()
     digest = hashlib.sha256(state.encode()).hexdigest()
     attempt = db.query(GoogleDriveOAuthAttempt).filter_by(state_hash=digest).first()
@@ -224,6 +233,29 @@ async def callback(state: str = Query(..., min_length=20, max_length=200),
             {'status': 'cancelled', 'verifier': None}, synchronize_session=False)
         db.commit()
         raise HTTPException(400, 'Authorization session ended')
+    if attempt.status == 'sheet_pending':
+        claimed = db.query(GoogleDriveOAuthAttempt).filter_by(id=attempt_id, status='sheet_pending').update(
+            {'status': 'sheet_exchange', 'verifier': None}, synchronize_session=False)
+        db.commit()
+        if not claimed:
+            raise HTTPException(400, 'Import already claimed')
+        grant = None
+        if code and not error and isinstance(picked_file_ids, str) and re.fullmatch(r'[A-Za-z0-9_-]{1,200}', picked_file_ids):
+            try:
+                tokens = object_json(await google_request('POST', TOKEN_URL, data={
+                    'client_id': client_id, 'client_secret': client_secret, 'redirect_uri': redirect_uri,
+                    'grant_type': 'authorization_code', 'code': code, 'code_verifier': decrypt(cipher, verifier)}))
+                if tokens.get('scope') == SCOPE and tokens.get('access_token'):
+                    grant = cipher.encrypt(json.dumps([tokens['access_token'], picked_file_ids]).encode()).decode()
+            except HTTPException:
+                pass
+        db.query(GoogleDriveOAuthAttempt).filter_by(id=attempt_id, status='sheet_exchange').update(
+            {'status': 'sheet_ready' if grant else 'cancelled', 'verifier': grant}, synchronize_session=False)
+        db.commit()
+        from .google_return import RETURN_URL, completion_page
+        if state.startswith('android-workbook.'):
+            return RedirectResponse(RETURN_URL, status_code=303, headers=PRIVATE)
+        return completion_page(successful=bool(grant))
     claimed = db.query(GoogleDriveOAuthAttempt).filter_by(id=attempt_id, status='pending').filter(
         GoogleDriveOAuthAttempt.expires_at > utc_now()).update(
         {'status': 'processing', 'verifier': None}, synchronize_session=False)
