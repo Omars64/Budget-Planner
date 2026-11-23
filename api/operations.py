@@ -146,8 +146,10 @@ def daily_snapshots(db, *, force_external=True):
     db.query(RateBucket).filter(RateBucket.started<utc_now()-timedelta(days=2)).delete()
     from .google_auth import GoogleAuthState
     from .google_drive import GoogleDriveOAuthAttempt
+    from .models import WorkbookTransfer
     db.query(GoogleAuthState).filter(GoogleAuthState.expires_at<utc_now()).delete(synchronize_session=False)
     db.query(GoogleDriveOAuthAttempt).filter(GoogleDriveOAuthAttempt.expires_at<utc_now()).delete(synchronize_session=False)
+    db.query(WorkbookTransfer).filter(WorkbookTransfer.expires_at<utc_now()).delete(synchronize_session=False)
     db.add(ServiceEvent(area='daily-recovery',status=200));db.commit()
     external = 0
     if external_backup_ready():

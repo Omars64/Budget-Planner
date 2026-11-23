@@ -3,20 +3,21 @@ import {Capacitor} from '@capacitor/core'
 import {ArrowLeft, FileSpreadsheet, Upload, Download, Trash2} from 'lucide-react'
 import {api,jsonBody} from '../lib/api'
 import {openGoogleFlow,reserveGoogleWindow} from '../lib/googleFlow'
-import {decode,editedValue,encode,fileLimit,inputValue} from '../lib/workbookCells'
+import {editedValue,fileLimit,inputValue} from '../lib/workbookCells'
+import {downloadWorkbook, saveWorkbook, workbookPath as path} from '../lib/workbookTransfer'
 import {applyWorkbookResult, createWorkbookCalculator, workbookSnapshot} from '../lib/workbookCalculation'
 import Modal from '../components/Modal'
 import InfoButton from '../components/InfoButton'
 import WorkbookGrid from '../components/WorkbookGrid'
 import './Workbooks.css'
 
-const path='/api/workbooks'
 const exportFormats={xlsx:'Excel · all sheets',ods:'OpenDocument · all sheets as values',csv:'CSV · current sheet',tsv:'TSV · current sheet',pdf:'PDF · current sheet',html:'HTML · current sheet',json:'JSON · all sheets as values'}
 export default function Workbooks(){
   const [books,setBooks]=useState([]),[doc,setDoc]=useState(null),[review,setReview]=useState(null)
   const [tab,setTab]=useState(0),[address,setAddress]=useState('A1'),[raw,setRaw]=useState('')
   const [modal,setModal]=useState(''),[type,setType]=useState('xlsx'),[error,setError]=useState(''),[busy,setBusy]=useState(false)
   const [pickerOpen,setPickerOpen]=useState(false)
+  const [progress,setProgress]=useState('')
   const [copyHelp,setCopyHelp]=useState(false)
   const [formulasVisible,setFormulasVisible]=useState(false)
   const [formulaLimit,setFormulaLimit]=useState(30)
@@ -37,17 +38,20 @@ export default function Workbooks(){
     if(lock.current)return
     lock.current=true;setBusy(true);setError('')
     try{await fn()}catch(e){if(!controller.current.signal.aborted)setError(e.message || 'Workbook operation failed.')}
-    finally{lock.current=false;setBusy(false)}
+    finally{lock.current=false;setBusy(false);setProgress('')}
   }
   const choose=c=>{setAddress(c.address);setRaw(inputValue(c))}
   function open(value){
     setDoc(value);setTab(0);choose(value.wb.worksheets[0].getCell('A1'));setModal('');setReview(null)
   }
-  async function parse(bytes){
+  async function parse(bytes,signal=controller.current.signal){
+    setProgress('Opening workbook…')
     const {loadWorkbook}=await import('../lib/workbook')
     let omittedFeatures=[]
     const wb=await loadWorkbook(bytes,{reportOmissions:features=>{omittedFeatures=features}})
+    signal.throwIfAborted()
     const result=await recalculate(wb)
+    signal.throwIfAborted()
     return {wb,omittedFeatures,report:applyWorkbookResult(wb,result).report}
   }
   async function recalculate(wb,edit){
@@ -61,19 +65,23 @@ export default function Workbooks(){
     return result
   }
   async function read(record){
-    return {...record,data:undefined,...await parse(decode(record.data))}
+    const signal=controller.current.signal
+    const bytes=await downloadWorkbook(record,part=>`${path}/${record.id}/parts/${part}?revision=${record.revision}`,signal,
+      percent=>setProgress(`Downloading workbook… ${percent}%`))
+    return {...record,data:undefined,...await parse(bytes)}
   }
-  async function prepare(bytes,name){
+  async function prepare(bytes,name,signal){
     setFormulasVisible(false);setFormulaLimit(30)
-    setReview({name:name.replace(/\.xlsx$/i,'').slice(0,120)||'Workbook',revision:0,id:crypto.randomUUID(),...await parse(bytes)})
+    setReview({name:name.replace(/\.xlsx$/i,'').slice(0,120)||'Workbook',revision:0,id:crypto.randomUUID(),...await parse(bytes,signal)})
     setModal('review')
   }
   async function persist(d){
     const {signal}=controller.current
+    setProgress('Preparing workbook…')
     const bytes=new Uint8Array(await d.wb.xlsx.writeBuffer())
     signal.throwIfAborted()
-    if(bytes.length>fileLimit)throw Error('The saved workbook exceeds 2 MB.')
-    const meta=await api(path+'/'+d.id,{method:'PUT', signal, ...jsonBody({name:d.name,revision:d.revision,data:encode(bytes)})})
+    if(bytes.length>fileLimit)throw Error('The saved workbook exceeds 24 MB. Split it into smaller workbooks.')
+    const meta=await saveWorkbook(d,bytes,signal,percent=>setProgress(percent===100?'Saving workbook…':`Uploading workbook… ${percent}%`))
     setBooks(list=>[meta,...list.filter(b=>b.id!==meta.id)])
     return {...d,...meta}
   }
@@ -104,9 +112,15 @@ export default function Workbooks(){
     try{
       const flow=await api(path+'/google/start',{method:'POST',signal,...jsonBody({android:Capacitor.getPlatform()==='android'})})
       if (signal.aborted) return
-      const result=await openGoogleFlow(flow,{popup,external,signal,pollPath:path+'/google/poll',pollBody:{flow_id:flow.flow_id,poll_secret:flow.poll_secret}})
-      if(result.status!=='ready')throw Error('Google import ended. Choose your sheet again.')
-      await prepare(decode(result.data),result.name)
+      const result=await openGoogleFlow(flow,{
+        popup,external,signal,pollPath:path+'/google/poll',pollBody:{flow_id:flow.flow_id,poll_secret:flow.poll_secret},
+        onProcessing:()=>setProgress('Google is preparing your workbook…'),
+      })
+      if(result.status!=='ready')throw Error(result.status==='expired'?'Google import expired. Choose your sheet again.':'Google import ended. Choose your sheet again.')
+      const data=await downloadWorkbook(result,part=>`${path}/google/${flow.flow_id}/parts/${part}`,signal,
+        percent=>setProgress(`Downloading Google Sheet… ${percent}%`))
+      signal.throwIfAborted()
+      await prepare(data,result.name,signal)
     }catch(error){
       if(!signal.aborted)throw error
     }finally{
@@ -120,21 +134,29 @@ export default function Workbooks(){
   return <section className="workbooks stack gap-16" aria-busy={busy}>
     {!doc?<><div className="button-row"><h2>Your library</h2><button className="button primary" disabled={busy} onClick={()=>{setError('');setModal('import')}}><Upload/> Import workbook</button></div>
       {!books.length && !error && <p className="muted">No saved workbooks.</p>}
-      {books.map(b=><button disabled={busy} className="more-tool glass" key={b.id} onClick={()=>act(async()=>open(await read(await api(path+'/'+b.id))))}><FileSpreadsheet/><strong>{b.name}</strong></button>)}</>:
+      {books.map(b=><button disabled={busy} className="more-tool glass" key={b.id} onClick={()=>act(async()=>open(await read(await api(path+'/'+b.id,{signal:controller.current.signal}))))}><FileSpreadsheet/><strong>{b.name}</strong></button>)}</>:
       <><div className="button-row"><button className="button ghost" disabled={busy} onClick={()=>act(async()=>{await commit();setDoc(null);setBooks(await api(path))})}><ArrowLeft/> Library</button>
       <button className="button ghost" disabled={busy} onClick={()=>act(async()=>{await commit();setModal('export')})}><Download/> Export</button><button className="icon-button" aria-label="Delete workbook" disabled={busy} onClick={()=>setModal('delete')}><Trash2/></button></div>
       <div><h2>{doc.name}</h2><small role="status">{busy?'Working…':dirty?'Unsaved cell edit':'Saved in your Personal workspace'}</small></div>
       {doc.report.issues.size>0 && <button className="button ghost" onClick={()=>{setFormulaLimit(30);setModal('issues')}}>Review formulas ({doc.report.issues.size})</button>}
       <div className="workbook-paper"><form className="workbook-bar" onSubmit={e=>{e.preventDefault();void act(commit)}}><label htmlFor="wb-value">{address} · ƒx</label><input id="wb-value" disabled={busy} value={raw} onChange={e=>setRaw(e.target.value)} aria-label="Cell value or formula"/><button className="button primary" disabled={busy||!dirty}>Save</button></form>
       <div onClick={selectCell} onKeyDown={event=>{if(event.key==='Enter')selectCell(event)}}>
-        <WorkbookGrid key={doc.id+':'+sheet.id} sheet={sheet} address={address} issues={doc.report.issues}/>
+        <WorkbookGrid key={doc.id+':'+sheet.id} sheet={sheet} address={address} issues={doc.report.issues} revision={doc.revision}/>
       </div>
       <div className="workbook-tabs">{doc.wb.worksheets.map((s,i)=><button className="button ghost" aria-pressed={tab===i} disabled={busy} key={s.id} onClick={()=>act(async()=>{await commit();setTab(i);choose(s.getCell('A1'))})}>{s.name}</button>)}</div></div>
       {dirty&&error&&<button className="button ghost" onClick={()=>{choose(cell);setError('')}}>Discard cell edit</button>}</>}
     {!modal&&message}
-    <input type="file" ref={file} hidden accept=".xlsx" onChange={e=>{const f=e.target.files[0];e.target.value='';if(f)void act(async()=>{if(f.size>fileLimit)throw Error('Choose a workbook up to 2 MB.');await prepare(await f.arrayBuffer(),f.name)})}}/>
+    {!modal&&progress&&<p role="status">{progress}</p>}
+    <input type="file" ref={file} hidden accept=".xlsx" onChange={e=>{const f=e.target.files[0];e.target.value='';if(f)void act(async()=>{if(f.size>fileLimit)throw Error('Choose an XLSX workbook up to 24 MB.');await prepare(await f.arrayBuffer(),f.name)})}}/>
     <Modal open={!!modal} title={{import:'Import workbook',review:'Review workbook',issues:'Formula compatibility',export:'Export a copy',delete:'Delete workbook'}[modal]} onClose={()=>{if(!busy){setModal('');setReview(null)}}}>
-    <div className="stack gap-16">{modal==='import'&&<><div className="button-row"><button className="button primary" disabled={busy} onClick={google}>Choose a Google Sheet</button><InfoButton label="About workbook copies" onClick={()=>setCopyHelp(true)}/></div><button className="button ghost" disabled={busy} onClick={()=>file.current.click()}>Choose an Excel file (.xlsx)</button>{pickerOpen&&<><p role="status">Choose a sheet in Google, then return to Budgetly.</p><button className="button ghost" onClick={()=>picker.current?.abort()}>Cancel Google import</button></>}</>}
+    <div className="stack gap-16">{modal==='import'&&<>
+      <div className="workbook-import-options">
+        <button type="button" className="button primary" aria-label="Choose a Google Sheet" disabled={busy} onClick={google}>Google Sheets</button>
+        <button type="button" className="button primary" aria-label="Choose an Excel file (.xlsx)" disabled={busy} onClick={()=>file.current.click()}>Excel file (.xlsx)</button>
+        <InfoButton label="About workbook copies" onClick={()=>setCopyHelp(true)}/>
+      </div>
+      {pickerOpen&&<>{!progress&&<p role="status">Choose a sheet in Google, then return to Budgetly.</p>}<button type="button" className="button ghost" onClick={()=>picker.current?.abort()}>Cancel Google import</button></>}
+    </>}
     {modal==='review'&&review&&<>
       <div className="button-row"><h3>{review.name}</h3><InfoButton label="About workbook copies" onClick={()=>setCopyHelp(true)}/></div>
       <p>{review.wb.worksheets.length} {review.wb.worksheets.length===1?'sheet':'sheets'}{report.issues.size>0 && ` · ${report.issues.size} ${report.issues.size===1?'formula needs':'formulas need'} review`}</p>
@@ -149,9 +171,11 @@ export default function Workbooks(){
     {modal==='review'&&review&&<button className="button primary" disabled={busy} onClick={()=>act(async()=>open(await persist(review)))}>Import copy</button>}
     {modal==='export'&&<><label className="field">Format<select value={type} onChange={e=>setType(e.target.value)}>{Object.entries(exportFormats).map(([k,label])=><option key={k} value={k}>{label}</option>)}</select></label><button className="button primary" disabled={busy} onClick={()=>act(async()=>{const {exportBook}=await import('../lib/workbookExport');await exportBook(type,doc.wb,sheet,doc.name);setModal('')})}>Export file</button></>}
     {modal==='delete'&&<><p>Delete “{doc.name}” from your Budgetly account?</p><button className="button danger" disabled={busy} onClick={()=>act(async()=>{await api(path+'/'+doc.id+'?revision='+doc.revision,{method:'DELETE'});setBooks(list=>list.filter(b=>b.id!==doc.id));setDoc(null);setModal('')})}>Delete workbook</button></>}
+    {progress&&<p role="status">{progress}</p>}
     {message}</div></Modal>
     <Modal open={copyHelp} title="Workbook copies" size="small" onClose={()=>setCopyHelp(false)}>
       <p>Budgetly imports a copy into your Personal workspace and saves future edits there. Your original Google Sheet or Excel file stays in place.</p>
+      <p>Import up to 24 MB, with up to 32 sheets, 50,000 rows and 512 columns per sheet, and 250,000 cells total. Large Google Sheets may take longer to prepare.</p>
     </Modal>
   </section>
 }

@@ -5,6 +5,7 @@ import json
 from uuid import uuid4
 from datetime import timedelta
 from urllib.parse import parse_qs, urlsplit
+from zipfile import ZipFile
 
 import httpx
 import pytest
@@ -123,6 +124,90 @@ def test_google_sheet_import_and_private_workbook_revisions(setup, android):
     assert client.put(path, headers=HEADERS, json={**book, 'revision': 1}).status_code == 409
     assert client.delete(path, headers=HEADERS, params={'revision': 2}).json() == {'deleted': True}
     assert client.get(path, headers=HEADERS).status_code == 404
+
+
+@pytest.mark.parametrize('long_running', [False, True])
+def test_large_google_sheet_can_be_saved_and_reopened_in_parts(setup, long_running):
+    from openpyxl import Workbook
+
+    client, db, _, requests, set_handler = setup
+    stream = io.BytesIO()
+    book = Workbook()
+    book.active['AZ1501'] = 42
+    book.save(stream)
+    with ZipFile(stream, 'a') as archive:
+        archive.writestr('test-padding.bin', bytes(workbooks.LIMITS['googleBytes'] if long_running else workbooks.PART_BYTES))
+    raw = stream.getvalue()
+    assert len(raw) > workbooks.PART_BYTES
+
+    def google(request):
+        requests.append(request)
+        if str(request.url) == drive.TOKEN_URL:
+            return httpx.Response(200, json={'access_token': 'sheet-only', 'scope': drive.SCOPE})
+        if request.url.host == 'sheet-export.googleusercontent.com':
+            assert 'authorization' not in request.headers
+            return httpx.Response(200, content=raw)
+        assert request.headers['authorization'] == 'Bearer sheet-only'
+        if request.url.path.endswith('/export'):
+            if long_running:
+                return httpx.Response(403, json={'error': {'errors': [{'reason': 'exportSizeLimitExceeded'}]}})
+            return httpx.Response(200, content=raw)
+        if request.url.path.endswith('/file_1/download'):
+            assert request.method == 'POST'
+            assert request.url.params['mimeType'] == workbooks.MIME
+            return httpx.Response(200, json={'name': 'operations/workbook-export', 'done': False})
+        if request.url.path.endswith('/operations/workbook-export'):
+            return httpx.Response(200, json={
+                'done': True, 'response': {'downloadUri': 'https://sheet-export.googleusercontent.com/file.xlsx'},
+            })
+        return httpx.Response(200, json={'name': 'Large sheet', 'mimeType': 'application/vnd.google-apps.spreadsheet'})
+
+    set_handler(google)
+    prefix = '/api/workbooks'
+    flow = client.post(prefix + '/google/start', headers=HEADERS, json={}).json()
+    state = parse_qs(urlsplit(flow['authorization_url']).query)['state'][0]
+    assert client.get('/api/google-drive/callback', params={
+        'state': state, 'code': 'picked-code', 'picked_file_ids': 'file_1',
+    }).status_code == 200
+    poll = {key: flow[key] for key in ('flow_id', 'poll_secret')}
+    if long_running:
+        for _ in range(2):
+            assert client.post(prefix + '/google/poll', headers=HEADERS, json=poll).json() == {'status': 'processing'}
+    result = client.post(prefix + '/google/poll', headers=HEADERS, json=poll)
+    assert result.json() == {'status': 'ready', 'name': 'Large sheet', 'size': len(raw), 'transfer_id': flow['flow_id']}
+    assert client.post(prefix + '/google/poll', headers=HEADERS, json=poll).json() == result.json()
+    assert sum(request.url.path.endswith('/export') for request in requests) == 1
+
+    parts = prefix + '/google/' + flow['flow_id'] + '/parts/'
+    assert client.get(parts + '0', headers=OTHER).status_code == 404
+    chunks = []
+    for index in range((len(raw) + workbooks.PART_BYTES - 1) // workbooks.PART_BYTES):
+        response = client.get(parts + str(index), headers=HEADERS)
+        assert response.headers['cache-control'] == 'no-store'
+        chunks.append(response.json())
+    assert b''.join(base64.b64decode(part['data']) for part in chunks) == raw
+
+    book_id = str(uuid4())
+    upload = prefix + '/uploads/' + str(uuid4())
+    assert client.put(upload, headers=HEADERS, json={
+        'book_id': book_id, 'name': 'Large sheet', 'revision': 0, 'size': len(raw),
+    }).json() == {'received': 0}
+    assert client.put(upload + '/parts/1', headers=HEADERS, json=chunks[1]).status_code == 409
+    db.rollback()
+    for index, chunk in enumerate(chunks):
+        received = min((index + 1) * workbooks.PART_BYTES, len(raw))
+        assert client.put(upload + '/parts/' + str(index), headers=HEADERS, json=chunk).json() == {'received': received}
+    assert client.put(upload + '/parts/0', headers=HEADERS, json=chunks[0]).json() == {'received': len(raw)}
+    saved = {'id': book_id, 'name': 'Large sheet', 'revision': 1}
+    assert client.post(upload + '/finish', headers=HEADERS).json() == saved
+    assert client.post(upload + '/finish', headers=HEADERS).json() == saved
+    assert client.get(prefix + '/' + book_id, headers=HEADERS).json() == {**saved, 'size': len(raw)}
+    saved_parts = prefix + '/' + book_id + '/parts/'
+    assert client.get(saved_parts + '0?revision=2', headers=HEADERS).status_code == 404
+    assert client.get(saved_parts + '0?revision=1', headers=OTHER).status_code == 404
+    assert client.get(saved_parts + '0?revision=1', headers=HEADERS).json() == chunks[0]
+    assert client.get(saved_parts + '1?revision=1', headers=HEADERS).json() == chunks[1]
+    assert client.delete(upload, headers=HEADERS).status_code == 204
 
 
 def start(client):

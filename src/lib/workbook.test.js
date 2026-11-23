@@ -80,3 +80,23 @@ test('calculates an isolated edit and can roll back both the value and its cross
   expect(expenses.getCell('A1').value).toBe(2)
   expect(summary.getCell('B1').result).toBe(6)
 })
+
+test('round-trips sparse sheets beyond the former row and column limits', async () => {
+  const original = new ExcelJS.Workbook()
+  const sheet = original.addWorksheet('Expenses')
+  sheet.getCell('AZ1500').value = 17
+  sheet.getCell('AZ1500').numFmt = '0.000'
+  sheet.mergeCells('BA1500:BB1500')
+  sheet.getCell('BA1500').value = 'Year end'
+  sheet.getCell('A1').value = {formula:'SUM(AZ1500:AZ1501)'}
+
+  const book = await loadWorkbook(await original.xlsx.writeBuffer())
+  const imported = book.getWorksheet('Expenses')
+  const edit = {sheetId:imported.id,address:'AZ1501',row:1501,col:52,value:8}
+  applyWorkbookResult(book, calculateSnapshot(workbookSnapshot(book, edit)), edit)
+  const reopened = await loadWorkbook(await book.xlsx.writeBuffer())
+  const result = reopened.getWorksheet('Expenses')
+  expect(result.getCell('A1').result).toBe(25)
+  expect(formatted(result.getCell('AZ1500'))).toBe('17.000')
+  expect(result.getCell('BB1500').master.address).toBe('BA1500')
+})

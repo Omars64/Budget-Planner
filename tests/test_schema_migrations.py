@@ -9,7 +9,7 @@ from api.database import Base
 from api.index import ensure_note_columns
 from api.schema_migrations import apply_migrations
 
-LATEST_REVISION = 'b1db85db20c7'
+LATEST_REVISION = 'ce7fd969ab1b'
 
 
 def test_feedback_conversation_upgrade_keeps_existing_reply_and_status():

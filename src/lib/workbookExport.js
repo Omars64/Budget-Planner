@@ -54,8 +54,8 @@ function exportTable(sheet) {
         if(value)target.style[key]=value
       const merge=merges.get(cell.address)
       if(merge){
-        target.rowSpan=merge.rowSpan
-        target.colSpan=merge.colSpan
+        target.rowSpan=merge.last-merge.first
+        target.colSpan=merge.right-merge.left
       }
     }
   }

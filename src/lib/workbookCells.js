@@ -1,12 +1,18 @@
 import { format } from 'ssf'
+import limits from '../../workbook-limits.json'
 
-export const fileLimit = 2 * 1024 * 1024
+export const fileLimit = limits.fileBytes
 export function encode(bytes) {
   const pieces = []
   for (let i=0;i<bytes.length;i+=8192) pieces.push(String.fromCharCode(...bytes.subarray(i,i+8192)))
   return btoa(pieces.join(''))
 }
-export const decode = data => Uint8Array.from(atob(data), ch=>ch.charCodeAt(0))
+export function decode(data) {
+  const text = atob(data)
+  const bytes = new Uint8Array(text.length)
+  for (let i=0;i<bytes.length;i++) bytes[i]=text.charCodeAt(i)
+  return bytes
+}
 
 export function cellValue(cell) {
   if(cell.formula)return cell.result ?? ''

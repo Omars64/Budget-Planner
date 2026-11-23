@@ -5,17 +5,22 @@ export function workbookSnapshot(workbook, edit) {
   return {
     date1904: workbook.properties.date1904,
     sheets: workbook.worksheets.map(sheet => {
+      const change = sheet.id === edit?.sheetId ? edit : null
       const cells = []
       sheet.eachRow(row => row.eachCell(cell => {
-        if (cell.address === edit?.address && sheet.id === edit.sheetId) return
+        if (cell.address === change?.address) return
         cells.push({
           address: cell.address, row: cell.row, col: cell.col,
           value: cell.formula ? cell.value : cellValue(cell),
           merged: cell.master !== cell,
         })
       }))
-      if (sheet.id === edit?.sheetId) cells.push(edit)
-      return {id: sheet.id, name: sheet.name, rowCount: sheet.rowCount, columnCount: sheet.columnCount, cells}
+      if (change) cells.push(change)
+      return {
+        id: sheet.id, name: sheet.name, cells,
+        rowCount: Math.max(sheet.rowCount, change?.row ?? 0),
+        columnCount: Math.max(sheet.columnCount, change?.col ?? 0),
+      }
     }),
   }
 }

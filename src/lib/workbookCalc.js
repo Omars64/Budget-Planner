@@ -1,15 +1,16 @@
 import Parser from 'fast-formula-parser'
 import { cellValue } from './workbookCells'
+import limits from '../../workbook-limits.json'
 
 const allowed=new Set('SUM SUMIF SUMIFS COUNT COUNTA COUNTIF COUNTIFS AVERAGE MIN MAX ROUND ROUNDUP ROUNDDOWN ABS INT MOD IF IFERROR AND OR NOT LEN LEFT RIGHT TRIM UPPER LOWER CONCATENATE DATE DAY MONTH YEAR ROW COLUMN'.split(' '))
 export function calculate(wb) {
   const results=new Map(),issues=new Map(),visiting=new Set(),parsers=[]
   const sheets=new Map(wb.worksheets.map(ws=>[ws.name.toLowerCase(),ws]))
-  let budget=500000, total=0
+  let budget=2500000, total=0
   function read(ws,row,col){
     if(--budget<0)throw Error('Calculation exceeds the workbook limit.')
     if(!ws)throw Error('Worksheet reference unavailable.')
-    if(row>1000 || col>50)return null
+    if(row>limits.rows || col>limits.columns)return null
     const c=ws.findRow(row)?.findCell(col)
     if(!c)return null
     if(!c.formula){
@@ -36,7 +37,7 @@ export function calculate(wb) {
             if(!sheet)throw Error('Missing worksheet.')
             const rows=Math.max(1,Math.min(ref.to.row,sheet.rowCount)-ref.from.row+1)
             const cols=Math.max(1,Math.min(ref.to.col,sheet.columnCount)-ref.from.col+1)
-            if(rows*cols>50000)throw Error('Range exceeds the workbook limit.')
+            if(rows*cols>limits.cells)throw Error('Range exceeds the workbook limit.')
             return Array.from({length:rows},(_,r)=>Array.from({length:cols},(_,i)=>read(sheet,r+ref.from.row,i+ref.from.col)))
           }
         })

@@ -4,7 +4,7 @@ export function workbookMerges(sheet) {
   if (!sheet.hasMerges) return new Map()
   return new Map(sheet.model.merges.map(range => {
     const [start,end] = range.split(':').map(ref => sheet.getCell(ref))
-    return [start.address, {first:start.row-1, last:end.row, rowSpan:end.row-start.row+1, colSpan:end.col-start.col+1}]
+    return [start.address, {first:start.row-1, last:end.row, left:start.col-1, right:end.col}]
   }))
 }
 

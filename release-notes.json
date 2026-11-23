@@ -1,4 +1,8 @@
 {
+  "6.25.4": [
+    {"title":"Larger workbook imports","detail":"Import more rows and columns, and open large workbooks with a grid that renders only the visible cells."},
+    {"title":"Clearer import choices","detail":"Google Sheets and Excel appear side by side. The info button explains workbook copies and import limits."}
+  ],
   "6.25.3": [
     {"title":"GTA 6 theme","detail":"Choose the Miami sunset palette in Settings → Look & feel and preview the matching wallet icon."},
     {"title":"Cleaner everyday screens","detail":"Bank Inbox, Transactions, Upcoming, Workbooks, and debt payments put the key decisions first. Reference details are one tap away."},

@@ -28,6 +28,17 @@ class Workbook(Base):
     updated = Column(DateTime, nullable=False, default=utc_now)
 
 
+class WorkbookTransfer(Base):
+    __tablename__ = 'workbook_transfers'
+    id = Column(String(64), primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    kind = Column(String(10), nullable=False)
+    info = Column(JSON, nullable=False)
+    content = Column(LargeBinary, nullable=False)
+    received = Column(Integer, nullable=False)
+    expires_at = Column(DateTime, nullable=False, index=True)
+
+
 class Wallet(Base):
     __tablename__ = "wallets"
     id = Column(Integer, primary_key=True)
