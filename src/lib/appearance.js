@@ -14,6 +14,7 @@ function preferences(value = {}) {
     theme:['light','dark','system'].includes(value?.theme) ? value.theme : 'light',
     color_palette:paletteKey(value?.color_palette),
     pinned_icon_palette:Object.hasOwn(colorPalettes,value?.pinned_icon_palette) ? value.pinned_icon_palette : null,
+    miami_wallpaper:value?.miami_wallpaper !== false,
     font_family:Object.hasOwn(fonts,value?.font_family) ? value.font_family : 'system',
     text_color:Object.hasOwn(colours,value?.text_color) ? value.text_color : 'ink',
   }
@@ -27,9 +28,11 @@ export function readDeviceAppearance() {
 export function applyAppearance(value, systemDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches) {
   const prefs = preferences(value)
   const root = document.documentElement
-  const dark = prefs.theme === 'dark' || (prefs.theme === 'system' && systemDark)
-  root.dataset.theme = dark ? 'dark' : 'light'
   const palette = colorPalettes[prefs.color_palette]
+  const dark = palette.fixedAppearance === 'dark' || prefs.theme === 'dark' || (prefs.theme === 'system' && systemDark)
+  root.dataset.theme = dark ? 'dark' : 'light'
+  root.dataset.palette = prefs.color_palette
+  root.toggleAttribute('data-miami-wallpaper', prefs.color_palette === 'miami' && prefs.miami_wallpaper)
   root.style.setProperty('--palette-deep',palette.deep)
   root.style.setProperty('--palette-light',palette.light)
   root.style.setProperty('--palette-action',palette.action)
@@ -73,5 +76,5 @@ export function useAppearance(settings, pinnedIconPalette = null) {
     try { localStorage.setItem(storageKey,JSON.stringify(prefs)) } catch { /* Storage is optional. */ }
     media.addEventListener('change',update)
     return () => media.removeEventListener('change',update)
-  },[settings.theme,settings.font_family,settings.text_color,settings.color_palette,pinnedIconPalette])
+  },[settings.theme,settings.font_family,settings.text_color,settings.color_palette,settings.miami_wallpaper,pinnedIconPalette])
 }

@@ -7,24 +7,33 @@ vi.mock('../lib/api', () => ({ api: vi.fn(), jsonBody: data => ({ body: JSON.str
 vi.mock('../components/BankNotificationSetup', () => ({ default: () => <p>Native setup</p> }))
 vi.mock('../lib/bankNotifications/native', () => ({ bankInboxChanged: 'bank-changed', syncBankNotifications: vi.fn() }))
 const item = { id: 3, merchant: 'Talabat', source_app: 'Bank', amount: '6.750', currency: 'KWD', transaction_type: 'expense', wallet_id: 5, category_id: null, occurred_at: '2026-10-08T12:00:00', confidence: 0.95, reasons: ['Amount detected'], duplicates: [], refund_matches: [] }
+const mockInbox = (detail = item) => {
+  api.mockImplementation(path => Promise.resolve(path.startsWith('/api/bank-inbox?') ? { items:[{
+    id:detail.id, merchant:detail.merchant, amount:detail.amount, currency:detail.currency,
+    transaction_type:detail.transaction_type, wallet_id:detail.wallet_id, possible_duplicate:!!detail.duplicates.length,
+  }], total:1 } : path === '/api/bank-inbox/3' ? detail : path === '/api/wallets' ? [{id:5,name:'Home Card'}]
+    : path === '/api/categories' ? [] : {status:'approved',transaction_id:7}))
+}
 afterEach(() => { cleanup(); vi.clearAllMocks() })
 it('reviews a Space alert and sends an ordinary editable transaction only after approval', async () => {
-  api.mockImplementation(path => Promise.resolve(path.startsWith('/api/bank-inbox?') ? { items: [item], total: 1 } : path === '/api/wallets' ? [{ id: 5, name: 'Home Card' }] : path === '/api/categories' ? [] : { status: 'approved', transaction_id: 7 }))
+  mockInbox()
   render(<BankMessages/> )
   await screen.findByText('Talabat')
   expect(screen.queryByText('Bank notification setup')).not.toBeInTheDocument()
-  fireEvent.click(screen.getByRole('button', { name: 'Review & add' }))
-  fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Lunch' } })
+  expect(api.mock.calls.some(([path]) => path === '/api/bank-inbox/3')).toBe(false)
+  fireEvent.click(screen.getByRole('button', { name: 'Review', exact:true }))
+  fireEvent.change(await screen.findByLabelText('Description'), { target: { value: 'Lunch' } })
   fireEvent.click(screen.getByRole('button', { name: 'Approve transaction' }))
   await waitFor(() => expect(api).toHaveBeenCalledWith('/api/bank-inbox/3/approve', expect.objectContaining({ method: 'POST' })))
   const payload = JSON.parse(api.mock.calls.find(([path]) => path.endsWith('/approve'))[1].body)
   expect(payload).toMatchObject({ type: 'expense', amount: '6.750', description: 'Lunch', wallet_id: 5, transfer_wallet_id: null })
 })
 it('requires explicit duplicate confirmation and shows a refund as credit', async () => {
-  api.mockImplementation(path => Promise.resolve(path.startsWith('/api/bank-inbox?') ? { items: [{ ...item, transaction_type: 'refund', duplicates: [{ id: 8, description: 'Earlier credit', date: item.occurred_at }] }], total: 1 } : path === '/api/wallets' ? [{ id: 5, name: 'Home Card' }] : []))
+  mockInbox({ ...item, transaction_type:'refund', duplicates:[{ id:8, description:'Earlier credit', date:item.occurred_at }] })
   render(<BankMessages/> )
-  fireEvent.click(await screen.findByRole('button', { name: 'Review & add' }))
-  expect(screen.getByLabelText('Record as')).toHaveValue('income')
+  expect(await screen.findByText('Possible duplicate')).toBeInTheDocument()
+  fireEvent.click(await screen.findByRole('button', { name: 'Review', exact:true }))
+  expect(await screen.findByLabelText('Record as')).toHaveValue('income')
   fireEvent.change(screen.getByLabelText('For month'), { target: { value: '2026-10' } })
   fireEvent.click(screen.getByRole('button', { name: 'Approve transaction' }))
   expect(await screen.findByRole('alert')).toHaveTextContent('Check the similar transaction')
@@ -34,9 +43,9 @@ it('requires explicit duplicate confirmation and shows a refund as credit', asyn
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })
 it('explains which required review field needs attention', async () => {
-  api.mockImplementation(path => Promise.resolve(path.startsWith('/api/bank-inbox?') ? { items: [item], total: 1 } : path === '/api/wallets' ? [{ id: 5, name: 'Home Card' }] : []))
+  mockInbox()
   render(<BankMessages/>)
-  fireEvent.click(await screen.findByRole('button', { name: 'Review & add' }))
-  fireEvent.invalid(screen.getByLabelText('Wallet'))
+  fireEvent.click(await screen.findByRole('button', { name: 'Review', exact:true }))
+  fireEvent.invalid(await screen.findByLabelText('Wallet'))
   expect(screen.getByRole('alert')).toHaveTextContent('Check Wallet before approving')
 })

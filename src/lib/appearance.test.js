@@ -15,7 +15,7 @@ it('retains visual preferences after logout/unmount and restores them on a fresh
   const {unmount}=renderHook(()=>useAppearance({theme:'dark',accent_color:'#123456',email:'not-stored@example.com'}))
   unmount()
   expect(document.documentElement.dataset.theme).toBe('dark')
-  expect(readDeviceAppearance()).toEqual({theme:'dark',color_palette:'navy',pinned_icon_palette:null,font_family:'system',text_color:'ink'})
+  expect(readDeviceAppearance()).toEqual({theme:'dark',color_palette:'navy',pinned_icon_palette:null,miami_wallpaper:true,font_family:'system',text_color:'ink'})
   expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#8fd8f5')
   document.documentElement.dataset.theme='light'
   applyAppearance(readDeviceAppearance())
@@ -30,6 +30,19 @@ it('tracks changes to the local appearance and system theme',()=>{
   rerender({theme:'system'})
   act(()=>{media.matches=true;media.addEventListener.mock.calls.at(-1)[1]()})
   expect(document.documentElement.dataset.theme).toBe('dark')
+})
+
+it('applies the Miami contrast and remembers its wallpaper choice without replacing the preferred appearance',()=>{
+  const root = document.documentElement
+  const {rerender}=renderHook(({palette,wallpaper})=>useAppearance({theme:'light',color_palette:palette,miami_wallpaper:wallpaper}),{initialProps:{palette:'miami',wallpaper:true}})
+  expect(root.dataset.theme).toBe('dark')
+  expect(root).toHaveAttribute('data-miami-wallpaper')
+  expect(root.style.getPropertyValue('--palette-role-balance')).toBe('#ffbb8c')
+  rerender({palette:'miami',wallpaper:false})
+  expect(root).not.toHaveAttribute('data-miami-wallpaper')
+  expect(readDeviceAppearance()).toMatchObject({theme:'light',color_palette:'miami',miami_wallpaper:false})
+  rerender({palette:'navy',wallpaper:false})
+  expect(root.dataset.theme).toBe('light')
 })
 
 it('falls back safely if cached appearance is malformed',()=>{

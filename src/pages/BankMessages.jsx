@@ -26,11 +26,14 @@ export default function BankMessages() {
   const [rows, setRows] = useState([]), [total, setTotal] = useState(0), [status, setStatus] = useState('pending'), [page, setPage] = useState(1)
   const [wallets, setWallets] = useState([]), [categories, setCategories] = useState([])
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [loading, setLoading] = useState(true)
+  const [listError, setListError] = useState(''), [choicesError, setChoicesError] = useState('')
+  const [choicesLoading, setChoicesLoading] = useState(true), [choicesRetry, setChoicesRetry] = useState(0)
   const [paste, setPaste] = useState(false), [text, setText] = useState(''), [bank, setBank] = useState('nbk')
   const [selected, setSelected] = useState(null), [form, setForm] = useState({})
+  const [reviewReady, setReviewReady] = useState(false), [reviewError, setReviewError] = useState('')
   const [route, setRoute] = useState(null), [target, setTarget] = useState('personal'), [targetWallets, setTargetWallets] = useState([]), [routeWallet, setRouteWallet] = useState('')
   const [inboxInfo, setInboxInfo] = useState(null)
-  const activeView = useRef(null)
+  const listRequest = useRef(null), reviewRequest = useRef(null)
   const switchInboxInfo = (event, view) => {
     event.currentTarget.closest('[role="dialog"]')?.focus({ preventScroll: true })
     setInboxInfo(view)
@@ -42,24 +45,39 @@ export default function BankMessages() {
     }
   }, [status, page, user.id, spaceKey])
   const load = useCallback(async () => {
-    const view = activeView.current
-    const result = await api(`/api/bank-inbox?status=${status}&page=${page}`)
-    if (view && activeView.current === view) showInbox(result)
+    listRequest.current?.abort()
+    const controller = new AbortController()
+    listRequest.current = controller
+    try {
+      const result = await api(`/api/bank-inbox?status=${status}&page=${page}&compact=true`, { signal:controller.signal })
+      if (!controller.signal.aborted) { showInbox(result); setListError('') }
+    } catch (failure) {
+      if (!controller.signal.aborted) setListError(failure.message)
+    } finally {
+      if (!controller.signal.aborted) setLoading(false)
+    }
   }, [status, page, showInbox])
   useEffect(() => {
-    const view = {}
-    activeView.current = view
-    const alive = () => activeView.current === view
     setLoading(true)
-    Promise.all([api(`/api/bank-inbox?status=${status}&page=${page}`), api('/api/wallets'), api('/api/categories')]).then(([result, accounts, cats]) => {
-      if (alive()) {
-        showInbox(result); setWallets(accounts.filter(wallet => !wallet.archived)); setCategories(cats)
-      }
-    }).catch(failure => { if (alive()) setError(failure.message) }).finally(() => { if (alive()) setLoading(false) })
-    return () => { activeView.current = null }
-  }, [status, page, showInbox])
+    setRows([]); setTotal(0); setListError('')
+    void load()
+    return () => listRequest.current?.abort()
+  }, [load])
   useEffect(() => {
-    const changed = event => { if (event.detail !== 'inbox') void load().catch(failure => setError(failure.message)) }
+    const controller = new AbortController()
+    const options = { signal:controller.signal }
+    setChoicesLoading(true); setChoicesError('')
+    Promise.all([api('/api/wallets', options), api('/api/categories', options)]).then(([accounts, cats]) => {
+      if (!controller.signal.aborted) {
+        setWallets(accounts.filter(wallet => !wallet.archived)); setCategories(cats)
+      }
+    }).catch(failure => { if (!controller.signal.aborted) setChoicesError(failure.message) })
+      .finally(() => { if (!controller.signal.aborted) setChoicesLoading(false) })
+    return () => controller.abort()
+  }, [user.id, spaceKey, choicesRetry])
+  useEffect(() => () => reviewRequest.current?.abort(), [user.id, spaceKey])
+  useEffect(() => {
+    const changed = event => { if (event.detail !== 'inbox') void load() }
     window.addEventListener(bankInboxChanged, changed)
     window.addEventListener('focus', changed)
     return () => { window.removeEventListener(bankInboxChanged, changed); window.removeEventListener('focus', changed) }
@@ -77,11 +95,35 @@ export default function BankMessages() {
     setBusy(true); setError('')
     try { await task() } catch (failure) { setError(failure.message) } finally { setBusy(false) }
   }
-  function review(row) {
-    setError(''); setSelected(row)
-    setForm({ type: row.transaction_type === 'refund' ? 'income' : ['transfer', 'withdrawal'].includes(row.transaction_type) ? 'transfer' : row.transaction_type,
-      amount: row.amount, description: row.merchant, wallet_id: row.wallet_id || '', category_id: row.category_id || '',
-      transfer_wallet_id: '', date: dateInput(row.occurred_at), reporting_month: '', notes: '', add_anyway: false, remember: true, refund_of_id: '' })
+  async function review(summary) {
+    reviewRequest.current?.abort()
+    const controller = new AbortController()
+    reviewRequest.current = controller
+    setError(''); setReviewError(''); setReviewReady(false); setSelected(summary)
+    try {
+      const row = await api(`/api/bank-inbox/${summary.id}`, { signal:controller.signal })
+      if (controller.signal.aborted) return
+      setSelected(row)
+      setForm({ type: row.transaction_type === 'refund' ? 'income' : ['transfer', 'withdrawal'].includes(row.transaction_type) ? 'transfer' : row.transaction_type,
+        amount: row.amount, description: row.merchant, wallet_id: row.wallet_id || '', category_id: row.category_id || '',
+        transfer_wallet_id: '', date: dateInput(row.occurred_at), reporting_month: '', notes: '', add_anyway: false, remember: true, refund_of_id: '' })
+      setReviewReady(true)
+    } catch (failure) {
+      if (!controller.signal.aborted) setReviewError(failure.message)
+    }
+  }
+  function closeReview() {
+    reviewRequest.current?.abort()
+    setSelected(null); setError('')
+  }
+  function ignore(row) {
+    void act(async () => {
+      await api(`/api/bank-inbox/${row.id}/ignore`, { method:'POST' })
+      closeReview(); announceInboxChange(); await load()
+    })
+  }
+  function changeDestination(row) {
+    closeReview(); setRoute(row); setTarget(String(activeSpace?.id || 'personal'))
   }
   function pasteMessage(event) {
     event.preventDefault()
@@ -97,6 +139,7 @@ export default function BankMessages() {
   }
   function approve(event) {
     event.preventDefault()
+    if (!reviewReady || choicesLoading || choicesError) return
     if (navigator.onLine === false) { setError('Reconnect before approving this bank alert. It remains in your inbox and has not been recorded.'); return }
     if (!canAdd) { setError('You need Manager access to record a transaction in this Space. Ask the owner to update your role.'); return }
     if (selected.currency !== settings.currency) { setError(`This alert is in ${selected.currency}, but this workspace uses ${settings.currency}. Change its destination to a workspace with the same currency.`); return }
@@ -107,10 +150,10 @@ export default function BankMessages() {
       setSelected(null); announceInboxChange(); await load(); refresh(); notify('Bank transaction recorded')
     })
   }
-  const duplicateWarning = selected && (selected.duplicates.length > 0 || error.toLowerCase().includes('similar transaction'))
+  const duplicateWarning = selected && (selected.duplicates?.length > 0 || error.toLowerCase().includes('similar transaction'))
   return <div className="stack gap-18 bank-inbox everyday-page">
     <div className="section-row">
-      <small className="muted">{activeSpace?.name || 'Personal'} · {total} {statusLabels[status].toLowerCase()}</small>
+      <small className="muted">{total} {status === 'pending' ? 'to review' : status}</small>
       <div className="button-row everyday-actions bank-inbox-actions">
         <button type="button" className="button ghost bank-refresh-button" aria-label="Refresh bank inbox" title="Refresh bank inbox" disabled={busy} onClick={() => act(async () => { await syncBankNotifications(user.id); await load(); announceInboxChange() })}><RefreshCw size={19}/><span>Refresh</span></button>
         <button type="button" className="button primary" data-tour="paste-bank-message" disabled={!canAdd} onClick={() => setPaste(true)}><ClipboardPaste size={18}/>Paste message</button>
@@ -119,12 +162,15 @@ export default function BankMessages() {
     </div>
     <div className="tabs" role="tablist" aria-label="Bank inbox status">{['pending', 'approved', 'ignored'].map(value => <button key={value} type="button" role="tab" aria-selected={status === value} className={status === value ? 'active' : ''} onClick={() => { setStatus(value); setPage(1); setError('') }}>{statusLabels[value]}</button>)}</div>
     {error && !selected && !paste && !route && <p className="form-error" role="alert">{error}</p>}
-    {loading ? <p role="status">Loading bank alerts...</p> : error && !rows.length ? <div className="empty-state"><h3>Bank alerts unavailable</h3><p>Reconnect to load alerts that have not been saved on this device.</p><button type="button" className="button ghost" onClick={() => void load().catch(failure => setError(failure.message))}>Retry</button></div> : !rows.length ? <div className="empty-state"><h3>No bank transactions {status === 'pending' ? 'waiting for review' : `marked ${status}`}</h3><a className="button ghost" href="#/settings">Open Settings</a></div> : <div className="bank-inbox-list">{rows.map(row => <article className="bank-inbox-item" key={row.id}>
+    {listError && <div className="form-error" role="alert">{listError} <button type="button" className="button ghost" onClick={() => void load()}>Retry</button></div>}
+    {loading ? <p role="status">Loading bank alerts…</p> : !rows.length ? !listError && <div className="empty-state"><h3>{status === 'pending' ? 'No alerts to review' : `No ${status} alerts`}</h3>{status === 'pending' && <a className="button ghost" href="#/settings">Open Settings</a>}</div> : <div className="bank-inbox-list">{rows.map(row => <article className="bank-inbox-item" key={row.id}>
       <div className="section-row"><strong>{row.merchant}</strong><strong>{row.currency} {row.amount}</strong></div>
-      <div className="bank-item-meta"><span>{kinds[row.transaction_type]}</span><span>{row.source_app}{row.account_last4 && ` ••••${row.account_last4}`}</span><span>{showTime(row.occurred_at)}</span></div>
-      <div className="everyday-destination"><small className="muted">{status === 'approved' ? 'Alert destination' : 'Destination for approval'}</small><strong>{activeSpace?.name || 'Personal'} → {wallets.find(wallet => wallet.id === row.wallet_id)?.name || 'Choose a wallet during review'}</strong></div>
-      <small>{row.confidence >= 0.9 ? 'High' : row.confidence >= 0.65 ? 'Medium' : 'Low'} confidence{row.duplicates.length > 0 && ' · Possible duplicate'}</small>
-      {status === 'pending' && <div className="button-row everyday-actions"><button type="button" className="button primary small" disabled={busy || !canAdd} onClick={() => review(row)}><Check size={16}/>Review & add</button><button type="button" className="button ghost small" aria-label={`Ignore ${row.merchant}`} disabled={busy || !canAdd} onClick={() => act(async () => { await api(`/api/bank-inbox/${row.id}/ignore`, { method: 'POST' }); announceInboxChange(); await load() })}><X size={18}/>Ignore</button><button type="button" className="button ghost small" aria-label={`Move ${row.merchant} to a wallet or Space`} disabled={busy || !canAdd} onClick={() => { setRoute(row); setTarget(String(activeSpace?.id || 'personal')) }}><ArrowRightLeft size={18}/>Change destination</button></div>}
+      <div className="bank-item-meta">
+        <span>{wallets.find(wallet => wallet.id === row.wallet_id)?.name || (row.wallet_id ? 'Assigned wallet' : 'Choose a wallet during review')}</span>
+        {row.possible_duplicate && <strong className="bank-review-warning">Possible duplicate</strong>}
+        {row.currency !== settings.currency && <strong className="bank-review-warning">Currency mismatch</strong>}
+      </div>
+      {status === 'pending' && <div className="button-row everyday-actions"><button type="button" className="button primary small" disabled={busy || !canAdd} onClick={() => void review(row)}><Check size={16}/>Review</button></div>}
       {status === 'ignored' && <button type="button" className="button ghost small" disabled={busy || !canAdd} onClick={() => act(async () => { await api(`/api/bank-inbox/${row.id}/restore`, { method: 'POST' }); announceInboxChange(); await load() })}><RotateCcw size={16}/>Restore</button>}
       {status === 'approved' && <small>Recorded transaction #{row.transaction_id || 'removed'}</small>}
     </article>)}</div>}
@@ -143,9 +189,14 @@ export default function BankMessages() {
       </div>
     </Modal>
     <Modal open={paste} onClose={() => { if (!busy) setPaste(false) }} title="Paste bank message"><form onSubmit={pasteMessage} className="stack gap-16"><label className="field"><span>Bank/source</span><input required value={bank} maxLength={80} pattern="[a-zA-Z0-9_.-]+" onChange={event => setBank(event.target.value.toLowerCase())}/></label><label className="field"><span>Transaction alert</span><textarea required maxLength={4000} rows={5} value={text} onChange={event => setText(event.target.value)} placeholder="Paste a purchase, income, refund or transfer alert"/></label><small className="muted">Only parsed transaction details are saved. Unmapped alerts go to Personal.</small>{error && <p role="alert" className="form-error">{error}</p>}<button disabled={busy} className="button primary">Add to inbox</button></form></Modal>
-    <Modal open={!!selected} onClose={() => { if (!busy) setSelected(null) }} title={selected ? `Review ${kinds[selected.transaction_type].toLowerCase()}` : 'Review bank alert'}><form onSubmit={approve} onInvalid={event => setError(`Check ${event.target.closest('label')?.querySelector('span')?.textContent || 'the highlighted field'} before approving.`)} className="stack gap-16">
-      <small className="muted">{selected?.source_app} · {selected?.currency} · Requires approval</small>
-      <p className="muted">Approve to record in <strong>{activeSpace?.name || 'Personal'} → {wallets.find(wallet => String(wallet.id) === String(form.wallet_id))?.name || 'Choose a wallet below'}</strong>. Review the details before approving.</p>
+    <Modal open={!!selected} onClose={() => { if (!busy) closeReview() }} title={selected?.merchant || 'Review bank alert'}>
+      {selected && <div className="stack gap-16">
+      {!reviewReady && (reviewError ? <div className="form-error" role="alert">{reviewError} <button type="button" className="button ghost" onClick={() => void review(selected)}>Retry</button></div> : <p role="status">Loading alert details…</p>)}
+      {choicesError && <div className="form-error" role="alert">{choicesError} <button type="button" className="button ghost" onClick={() => setChoicesRetry(value => value + 1)}>Retry wallet and category choices</button></div>}
+      <form onSubmit={approve} onInvalid={event => setError(`Check ${event.target.closest('label')?.querySelector('span')?.textContent || 'the highlighted field'} before approving.`)} className="stack gap-16">
+      {reviewReady && <>
+      <small className="muted">{selected.source_app}{selected.account_last4 && ` ••••${selected.account_last4}`} · {showTime(selected.occurred_at)}</small>
+      <p className="muted">Record in <strong>{activeSpace?.name || 'Personal'} → {wallets.find(wallet => String(wallet.id) === String(form.wallet_id))?.name || 'Choose a wallet'}</strong></p>
       {selected?.reasons.includes('Transfer direction needs review') && <p role="status">Bank transfer: confirm the direction and whether both wallets are yours.</p>}
       {selected?.reasons.includes('Signed amount: direction needs review') && !selected.reasons.includes('Transfer direction needs review') && <p role="status">{selected.transaction_type === 'income' || selected.transaction_type === 'refund' ? 'Credit (+)' : 'Debit (-)'} detected. Confirm the payment details before recording.</p>}
       {selected && selected.currency !== settings.currency && <p role="alert" className="form-error">This alert uses {selected.currency}. Move it to a workspace using that currency; Budgetly does not convert it.</p>}
@@ -157,11 +208,24 @@ export default function BankMessages() {
       <DateTimeField value={form.date || dateInput()} onChange={date => setForm({ ...form, date })} disabled={busy}/>
       {form.type !== 'transfer' && <label className="field"><span>For month {form.type === 'income' ? '' : '(optional)'}</span><AppMonthField required={form.type === 'income'} value={form.reporting_month || ''} onChange={event => setForm({ ...form, reporting_month: event.target.value })}/></label>}
       {!!selected?.refund_matches.length && <label className="field"><span>Link original expense (optional)</span><AppSelect value={form.refund_of_id || ''} onChange={event => setForm({ ...form, refund_of_id: event.target.value })}><option value="">No link</option>{selected.refund_matches.map(item => <option value={item.id} key={item.id}>#{item.id} · {item.description}</option>)}</AppSelect></label>}
-      <details className="bank-settings-disclosure"><summary>More options</summary><label className="field"><span>Notes</span><textarea maxLength={2000} value={form.notes || ''} onChange={event => setForm({ ...form, notes: event.target.value })}/></label><label className="check-row"><input type="checkbox" checked={!!form.remember} onChange={event => setForm({ ...form, remember: event.target.checked })}/>Remember this merchant's category</label><ul>{selected?.reasons.map(reason => <li key={reason}>{reason}</li>)}</ul></details>
       {duplicateWarning && <div className="bank-duplicate"><p>A transaction with the same amount and type was recorded in this wallet within {settings.bank_duplicate_window_minutes || 5} minutes. Check whether this is a separate payment.</p>{selected?.duplicates.map(item => <small key={item.id}>#{item.id} · {item.description} · {showTime(item.date)}</small>)}<label className="check-row"><input type="checkbox" checked={!!form.add_anyway} onChange={event => { setForm({ ...form, add_anyway: event.target.checked }); setError('') }}/>I checked; add anyway</label></div>}
+      <div className="modal-actions"><button className="button primary" disabled={busy || choicesLoading || !!choicesError || selected.currency !== settings.currency}>Approve transaction</button></div>
+      </>}
       {error && <p role="alert" className="form-error">{error}</p>}
-      <div className="modal-actions"><button type="button" className="button ghost" disabled={busy} onClick={() => setSelected(null)}>Cancel</button><button className="button primary" disabled={busy}>Approve transaction</button></div>
-    </form></Modal>
+      <details className="form-options"><summary>More options</summary><div className="stack gap-12">
+        <div className="button-row">
+          <button type="button" className="button ghost" disabled={busy || !canAdd} onClick={() => changeDestination(selected)}><ArrowRightLeft size={18}/>Change destination</button>
+          <button type="button" className="button ghost" disabled={busy || !canAdd} onClick={() => ignore(selected)}><X size={17}/>Ignore</button>
+        </div>
+        {reviewReady && <>
+          <label className="field"><span>Notes</span><textarea maxLength={2000} value={form.notes || ''} onChange={event => setForm({ ...form, notes: event.target.value })}/></label>
+          <label className="check-row"><input type="checkbox" checked={!!form.remember} onChange={event => setForm({ ...form, remember: event.target.checked })}/>Remember this merchant's category</label>
+          <ul>{selected.reasons.map(reason => <li key={reason}>{reason}</li>)}</ul>
+        </>}
+      </div></details>
+      </form>
+      </div>}
+    </Modal>
     <Modal open={!!route} onClose={() => { if (!busy) setRoute(null) }} title="Change alert destination" subtitle="Moving changes where this alert is reviewed. It does not record a transaction."><form className="stack gap-16" onSubmit={event => { event.preventDefault(); void act(async () => { await api(`/api/bank-inbox/${route.id}/route`, { method: 'POST', ...jsonBody({ wallet_id: Number(routeWallet) }) }); setRoute(null); announceInboxChange(); await load(); notify('Alert moved. Review it in its destination Bank Inbox.') }) }}><label className="field"><span>Personal or Space</span><AppSelect value={target} onChange={event => setTarget(event.target.value)}><option value="personal">Personal</option>{spaces.filter(space => space.role !== 'view').map(space => <option key={space.id} value={space.id}>{space.name}</option>)}</AppSelect></label><label className="field"><span>Wallet</span><AppSelect required value={routeWallet} onChange={event => setRouteWallet(event.target.value)}><option value="">Choose wallet</option>{targetWallets.map(wallet => <option value={wallet.id} key={wallet.id}>{wallet.name}</option>)}</AppSelect></label>{error && <p role="alert" className="form-error">{error}</p>}<button disabled={busy} className="button primary">Move to selected destination</button></form></Modal>
   </div>
 }

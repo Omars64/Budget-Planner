@@ -26,7 +26,8 @@ const offlineShell = () => {
   async closeBundle() {
     const files = (await shellFiles(folder)).sort()
     const manifest = JSON.parse(await readFile(resolve(folder, '.vite/manifest.json'), 'utf8'))
-    const essentials = new Set(files.filter(file => file !== 'budgetly-push-sw.js' && !file.startsWith('assets/')))
+    const onDemand = file => file.startsWith('assets/') || file.startsWith('themes/')
+    const essentials = new Set(files.filter(file => file !== 'budgetly-push-sw.js' && !onDemand(file)))
     const visited = new Set()
     function include(key) {
       if (visited.has(key)) return
@@ -42,7 +43,7 @@ const offlineShell = () => {
     const revision = createHash('sha256').update(files.join('|')).update([...essentials].join('|')).update(pushScript).digest('hex').slice(0, 12)
     const script = `const CACHE = 'budgetly-shell-${revision}';
 const ESSENTIALS = ${JSON.stringify([...essentials].map(file => `/${file}`))};
-const OPTIONAL_ASSETS = new Set(${JSON.stringify(files.filter(file => file.startsWith('assets/') && !essentials.has(file)).map(file => `/${file}`))});
+const OPTIONAL_ASSETS = new Set(${JSON.stringify(files.filter(file => onDemand(file) && !essentials.has(file)).map(file => `/${file}`))});
 self.addEventListener('install', event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ESSENTIALS)).then(() => self.skipWaiting())));
 self.addEventListener('activate', event => event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key.startsWith('budgetly-shell-') && key !== CACHE).slice(0, -1).map(key => caches.delete(key)))).then(() => self.clients.claim())));
 self.addEventListener('fetch', event => {

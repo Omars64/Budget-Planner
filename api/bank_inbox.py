@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy import func
+from sqlalchemy import func, literal, select, union_all
 from sqlalchemy.exc import IntegrityError
 from .database import get_db
 from .auth_dependency import current_user
@@ -102,18 +102,30 @@ def duplicate_window(db, user_id):
     return minutes
 
 
-def matches(db, wallet_id, amount, date, kind, window=timedelta(minutes=5)):
+def matching_transactions(db, wallet_id, amount, date, kind, window):
     return db.query(Transaction).filter(Transaction.wallet_id == wallet_id, Transaction.amount == amount,
         Transaction.type == kind, Transaction.is_opening_balance.is_(False),
-        Transaction.date >= date - window, Transaction.date <= date + window).order_by(Transaction.date.desc()).limit(5).all()
+        Transaction.date >= date - window, Transaction.date <= date + window)
+
+
+def matches(db, wallet_id, amount, date, kind, window=timedelta(minutes=5)):
+    return matching_transactions(db, wallet_id, amount, date, kind, window).order_by(Transaction.date.desc()).limit(5).all()
+
+
+def ledger_kind(alert):
+    return {'refund': 'income', 'withdrawal': 'transfer'}.get(alert.transaction_type, alert.transaction_type)
+
+
+def alert_summary(row):
+    return {k: getattr(row, k) for k in ('id', 'space_id', 'transaction_type', 'currency', 'merchant', 'wallet_id', 'status', 'transaction_id')} | {'amount': str(row.amount)}
 
 
 def serialize(db, row):
-    kind = 'income' if row.transaction_type == 'refund' else 'transfer' if row.transaction_type == 'withdrawal' else row.transaction_type
+    kind = ledger_kind(row)
     duplicates = matches(db, row.wallet_id, row.amount, row.occurred_at, kind, timedelta(minutes=duplicate_window(db, row.user_id))) if row.wallet_id else []
     originals = matches(db, row.wallet_id, row.amount, row.occurred_at, 'expense', timedelta(days=30)) if row.wallet_id and row.transaction_type == 'refund' else []
-    return {k: getattr(row, k) for k in ('id', 'space_id', 'source_package', 'source_app', 'transaction_type', 'currency', 'merchant', 'account_last4', 'wallet_id', 'category_id', 'status', 'transaction_id')} | {
-        'amount': str(row.amount), 'occurred_at': row.occurred_at.isoformat(), 'confidence': float(row.confidence), 'reasons': json.loads(row.reasons),
+    return alert_summary(row) | {k: getattr(row, k) for k in ('source_package', 'source_app', 'account_last4', 'category_id')} | {
+        'occurred_at': row.occurred_at.isoformat(), 'confidence': float(row.confidence), 'reasons': json.loads(row.reasons),
         'duplicates': [{'id': t.id, 'description': t.description, 'date': t.date.isoformat()} for t in duplicates],
         'refund_matches': [{'id': t.id, 'description': t.description} for t in originals]}
 
@@ -192,9 +204,22 @@ def ingest(payload: CandidateIn, actor=Depends(current_user), db=Depends(get_db)
 
 
 @router.get('')
-def inbox(status: Literal['pending', 'ignored', 'approved'] = 'pending', limit: int = Query(default=100, ge=1, le=100), page: int = Query(default=1, ge=1, le=100), actor=Depends(workspace_actor), db=Depends(get_db)):
+def inbox(status: Literal['pending', 'ignored', 'approved'] = 'pending', limit: int = Query(default=100, ge=1, le=100), page: int = Query(default=1, ge=1, le=100), compact: bool = False, actor=Depends(workspace_actor), db=Depends(get_db)):
     query = db.query(BankCandidate).filter_by(user_id=actor.id, space_id=scope_id(db), status=status)
-    return {'total': query.count(), 'items': [serialize(db, row) for row in query.order_by(BankCandidate.id.desc()).offset((page-1)*limit).limit(limit).all()]}
+    total = query.count()
+    rows = query.order_by(BankCandidate.id.desc()).offset((page-1)*limit).limit(limit).all()
+    if not compact:
+        return {'total': total, 'items': [serialize(db, row) for row in rows]}
+    duplicates = set()
+    wallet_ids = set(db.info['space'].wallet_ids)
+    check_rows = [row for row in rows if row.wallet_id in wallet_ids] if status == 'pending' else []
+    if check_rows:
+        window = timedelta(minutes=duplicate_window(db, actor.id))
+        checks = [select(literal(row.id)).where(
+            matching_transactions(db, row.wallet_id, row.amount, row.occurred_at, ledger_kind(row), window).exists()
+        ) for row in check_rows]
+        duplicates.update(db.execute(union_all(*checks)).scalars())
+    return {'total': total, 'items': [alert_summary(row) | {'possible_duplicate': row.id in duplicates} for row in rows]}
 
 
 @router.get('/stats')

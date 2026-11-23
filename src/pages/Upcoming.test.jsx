@@ -55,7 +55,7 @@ it('uses the shared calendar and clock and keeps the reminder label visible when
   expect(body).toMatchObject({ reminder_enabled: true, transaction: { type: 'expense', description: 'Lunch', amount: 2.25, wallet_id: 1 } })
 })
 
-it('retains transfer destination, recording mode, and reminder controls in the popup', async () => {
+it('keeps transfer destination and shows the automatic recording notice only when selected', async () => {
   api.mockImplementation(path => Promise.resolve(path === '/api/planned-transactions' ? rows : path === '/api/wallets' ? [
     { id: 1, name: 'Main', archived: false, is_shared: false },
     { id: 2, name: 'Savings', archived: false, is_shared: false },
@@ -69,7 +69,13 @@ it('retains transfer destination, recording mode, and reminder controls in the p
   fireEvent.change(editor.getByLabelText('Amount (KWD)'), { target: { value: '3.5' } })
   fireEvent.change(editor.getByLabelText('Description'), { target: { value: 'Planned transfer' } })
   expect(editor.getByLabelText('Recording')).toHaveValue('planned')
-  fireEvent.click(editor.getByRole('checkbox', { name: 'Remind me' }))
+  expect(editor.queryByRole('checkbox', { name: 'Remind me' })).toBeNull()
+  fireEvent.change(editor.getByLabelText('Recording'), { target:{ value:'scheduled' } })
+  await waitFor(() => expect(editor.getByText('Records in Budgetly only.')).toBeVisible())
+  fireEvent.click(editor.getByRole('button', { name:'About recording and reminders' }))
+  await waitFor(() => expect(screen.getByRole('dialog', { name:'Recording and reminders' })).toBeVisible())
+  fireEvent.click(within(screen.getByRole('dialog', {name:'Recording and reminders'})).getByRole('button',{name:'Close dialog'}))
+  fireEvent.change(editor.getByLabelText('Recording'), { target:{ value:'planned' } })
   fireEvent.click(editor.getByRole('button', { name: 'Save entry' }))
   await waitFor(() => expect(api).toHaveBeenCalledWith('/api/planned-transactions', expect.objectContaining({ method: 'POST' })))
   const payload = JSON.parse(api.mock.calls.find(([, options]) => options?.method === 'POST')[1].body)

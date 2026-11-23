@@ -1,5 +1,6 @@
 from tests import test_api  # Configure the disposable database before importing the app.
 from tests.test_spaces import spaces, transaction
+from sqlalchemy import event
 from sqlalchemy.orm import Session
 from api.models import BankCandidate, BankMerchantMemory, Transaction
 
@@ -105,6 +106,37 @@ def test_duplicate_window_defaults_to_five_minutes_and_can_be_changed(spaces):
     assert client.put('/api/settings', json={'bank_duplicate_window_minutes': 5}).status_code == 200
     assert client.post(path, json=current).status_code == 200
     assert client.put('/api/settings', json={'bank_duplicate_window_minutes': 0}).status_code == 422
+
+
+def test_compact_inbox_keeps_duplicate_flags_and_reads_matches_in_one_statement(spaces):
+    client, engine, _, ids = spaces
+    paths = '/api/bank-inbox?space_id=personal'
+    assert client.put('/api/bank-inbox/mappings', json={'source_package':'test.bank', 'wallet_id':ids['private']}).status_code == 200
+    assert client.post('/api/transactions?space_id=personal', json=transaction(
+        ids['private'], amount='6.750', date='2026-10-08T12:00:00+03:00',
+    )).status_code == 201
+    for index in range(6):
+        assert client.post('/api/bank-inbox/ingest', json=alert(
+            content_hash=f'{index:064x}', amount='6.750' if index % 2 == 0 else '9.000',
+        )).status_code == 201
+    legacy = client.get(paths).json()
+
+    statements = []
+    def track(_, __, statement, *args):
+        if 'FROM transactions' in statement:
+            statements.append(statement)
+
+    event.listen(engine, 'before_cursor_execute', track)
+    try:
+        response = client.get(paths + '&compact=true')
+    finally:
+        event.remove(engine, 'before_cursor_execute', track)
+    assert response.status_code == 200, response.text
+    rows = response.json()['items']
+    assert len(statements) == 1
+    assert [row['possible_duplicate'] for row in rows] == [bool(row['duplicates']) for row in legacy['items']]
+    assert sum(row['possible_duplicate'] for row in rows) == 3
+    assert all('duplicates' not in row and 'refund_matches' not in row for row in rows)
 
 
 def test_currency_security_precision_and_income_month(spaces):

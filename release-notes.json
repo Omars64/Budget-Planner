@@ -1,4 +1,9 @@
 {
+  "6.25.3": [
+    {"title":"GTA 6 theme","detail":"Choose the Miami sunset palette in Settings → Look & feel and preview the matching wallet icon."},
+    {"title":"Cleaner everyday screens","detail":"Bank Inbox, Transactions, Upcoming, Workbooks, and debt payments put the key decisions first. Reference details are one tap away."},
+    {"title":"Faster Bank Inbox and Upcoming","detail":"Bank Inbox reads full alert details when you review them. Upcoming uses the saved result immediately."}
+  ],
   "6.25.2": [
     {"title":"Live Bank Inbox on Android","detail":"Eligible bank alerts refresh the inbox and badge while Budgetly is open."},
     {"title":"Automatic session expiry","detail":"Expired sessions end automatically. The sign-in screen explains why you need to sign in again."},

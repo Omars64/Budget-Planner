@@ -11,11 +11,12 @@ test('keeps the payment month distinct from a month-end due date',()=>{
 test('previews extra payments using only later unpaid months and exact currency precision',()=>{
   const items = makeSchedule({opening:36000,monthly:12000,apr:0,month:'2026-12',due:'2026-12-01'},'KWD')
   const record = {kind:'loan',items}
-  expect(extraPaymentChange(record,items[0],15000,'KWD')).toEqual({extra:3000,amounts:[10500,10500]})
-  expect(extraPaymentChange(record,items[0],15001,'KWD')).toEqual({extra:3001,amounts:[10500,10499]})
-  expect(extraPaymentChange(record,items[0],15010,'USD')).toEqual({extra:3010,amounts:[10500,10490]})
+  const schedule = (january,february) => [{month:'2027-01',amount:january},{month:'2027-02',amount:february}]
+  expect(extraPaymentChange(record,items[0],15000,'KWD')).toEqual({extra:3000,schedule:schedule(10500,10500)})
+  expect(extraPaymentChange(record,items[0],15001,'KWD')).toEqual({extra:3001,schedule:schedule(10500,10499)})
+  expect(extraPaymentChange(record,items[0],15010,'USD')).toEqual({extra:3010,schedule:schedule(10500,10490)})
   expect(extraPaymentChange(record,items[1],25000,'KWD')).toEqual({limit:24000,hasLater:true})
-  expect(extraPaymentChange(record,items[0],36000,'KWD')).toEqual({extra:24000,amounts:[]})
+  expect(extraPaymentChange(record,items[0],36000,'KWD')).toEqual({extra:24000,schedule:[]})
 })
 
 test('uses only outgoing debt in payoff estimates and tracks partial receipts',()=>{

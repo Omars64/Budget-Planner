@@ -80,14 +80,14 @@ public static class WalletIconArtwork
 
     public static Bitmap Render(Color dark, Color mid, Color light, int size, string platform)
     {
+        return Render(dark, mid, light, size, platform, false);
+    }
+
+    public static Bitmap Render(Color dark, Color mid, Color light, int size, string platform, bool miami)
+    {
         var bitmap = new Bitmap(size, size, PixelFormat.Format32bppArgb);
         using (var g = Graphics.FromImage(bitmap))
         using (var edge = new SolidBrush(dark))
-        using (var snap = new SolidBrush(light))
-        using (var rear = Matte(mid, 55, 16))
-        using (var front = Matte(light, 55, 16))
-        using (var body = Matte(light, 88, 25))
-        using (var clasp = Matte(mid, 88, 25))
         {
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.InterpolationMode = InterpolationMode.HighQualityBicubic;
@@ -119,6 +119,20 @@ public static class WalletIconArtwork
             g.ScaleTransform(scale, scale);
             g.TranslateTransform(-50, -50);
 
+            if (miami) DrawMiamiWallet(g, edge, mid, light);
+            else DrawWallet(g, edge, mid, light);
+        }
+        return bitmap;
+    }
+
+    private static void DrawWallet(Graphics g, Brush edge, Color mid, Color light)
+    {
+        using (var snap = new SolidBrush(light))
+        using (var rear = Matte(mid, 55, 16))
+        using (var front = Matte(light, 55, 16))
+        using (var body = Matte(light, 88, 25))
+        using (var clasp = Matte(mid, 88, 25))
+        {
             Card(g, edge, rear, new RectangleF(19, 21, 45, 36), -44, .195f, .12f);
             Card(g, edge, front, new RectangleF(34, 20, 46, 43), -28, .205f, .14f);
             var wallet = new RectangleF(12.5f, 40, 75, 45);
@@ -131,6 +145,22 @@ public static class WalletIconArtwork
             g.FillEllipse(edge, 67.12f, 61.34f, 6.42f, 6.42f);
             g.FillEllipse(snap, 69.12f, 63.34f, 2.42f, 2.42f);
         }
-        return bitmap;
+    }
+
+    private static void DrawMiamiWallet(Graphics g, Brush edge, Color pink, Color peach)
+    {
+        using (var detail = new SolidBrush(pink))
+        using (var body = new SolidBrush(peach))
+        {
+            Card(g, edge, detail, new RectangleF(23, 25, 39, 28), -37, .20f, .20f);
+            Card(g, edge, body, new RectangleF(36, 22, 42, 38), -19, .20f, .20f);
+            var wallet = new RectangleF(14, 43, 72, 41);
+            Shape(g, edge, body, wallet, 12.24f, 11.07f, 12.24f, 11.07f);
+            wallet.Inflate(-2, -2);
+            using (var inside = Rounded(wallet, 10.24f, 9.07f, 10.24f, 9.07f))
+                g.SetClip(inside);
+            Shape(g, edge, detail, new RectangleF(57, 54, 32, 21), 10, 10, 10, 10, true);
+            g.FillEllipse(edge, 65, 62, 6, 6);
+        }
     }
 }

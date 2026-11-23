@@ -6,7 +6,6 @@ import { workspaceNavigation } from '../lib/workspaceNavigation'
 import { useWorkspacePreferences } from '../lib/workspacePreferences'
 import { guestRoutes } from '../lib/guest'
 import { SUPPORT_URL } from '../lib/support'
-import BankInboxBadge from '../components/BankInboxBadge'
 
 const directory = [
   ['Plan ahead', ['/planner', '/upcoming', '/calendar', '/attention']],
@@ -14,9 +13,19 @@ const directory = [
   ['Your workspace', ['/bank-messages', '/spaces', '/notes', '/workbooks']],
   ['Help and account', ['/ask-ai', '/feedback', '/settings']],
 ]
+const shortDescriptions = {
+  '/planner':'Cash flow forecast',
+  '/attention':'Budget and deadline alerts',
+  '/goals':'Savings goals and repayments',
+  '/debt-management':'Loans and money lent',
+  '/analytics':'Spending and income trends',
+  '/spaces':'Manage shared workspaces',
+  '/workbooks':'Import and edit spreadsheets',
+  '/ask-ai':'Ask about your activity',
+}
 
 export default function More() {
-  const { user, activeSpace, isGuest, requestSignIn, settings, lock } = useApp()
+  const { user, activeSpace, isGuest, requestSignIn, settings, lock, bankInboxCount } = useApp()
   const location = useLocation()
   const finder = useRef(null)
   const [query, setQuery] = useState('')
@@ -33,13 +42,15 @@ export default function More() {
       <div className="more-directory">{items.sort((a, b) => {
         const left = preferences.navOrder.indexOf(a[0]), right = preferences.navOrder.indexOf(b[0])
         return left < 0 || right < 0 ? 0 : left - right
-      }).map(([path, label, Icon, , description]) => <Link className="more-tool glass" to={path} key={path} onClick={event => {
+      }).map(([path, label, Icon]) => <Link className="more-tool glass" to={path} key={path} onClick={event => {
         if (isGuest && !guestRoutes.has(path)) { event.preventDefault(); requestSignIn(label) }
-      }}><span className="more-tool-icon"><Icon size={21}/></span><span><strong>{label}</strong><small>{description}</small></span>{path === '/bank-messages' && <BankInboxBadge/>}{isGuest && !guestRoutes.has(path) ? <LockKeyhole size={16}/> : <ChevronRight size={17}/>}</Link>)}</div>
+      }}><span className="more-tool-icon"><Icon size={21}/></span><span><strong>{label}</strong>
+        {shortDescriptions[path] && <small>{shortDescriptions[path]}</small>}
+        {path === '/bank-messages' && bankInboxCount > 0 && <small>{bankInboxCount} to review</small>}</span>{isGuest && !guestRoutes.has(path) ? <LockKeyhole size={16}/> : <ChevronRight size={17}/>}</Link>)}</div>
     </section>)}
-    {!isGuest && <button type="button" className="more-tool glass" data-tour="tutorial" onClick={() => window.dispatchEvent(new Event('budgetly:open-tutorial'))}><Compass/><span><strong>Budgetly walkthrough</strong><small>A guided tour of the app</small></span><ChevronRight/></button>}
+    {!isGuest && <button type="button" className="more-tool glass" data-tour="tutorial" onClick={() => window.dispatchEvent(new Event('budgetly:open-tutorial'))}><Compass/><span><strong>Budgetly walkthrough</strong></span><ChevronRight/></button>}
     {user?.role === 'admin' && <Link className="more-tool glass" to="/admin"><ShieldCheck/><span><strong>Admin controls</strong><small>Service health, users and resource controls</small></span><ChevronRight/></Link>}
-    {(user?.role !== 'admin' || settings.support_sidebar_enabled !== false) && <a className="more-tool glass" href={SUPPORT_URL} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer"><Coffee/><span><strong>Buy me a coffee</strong><small>Optional support for Budgetly</small></span><ExternalLink size={16}/></a>}
-    <div className="more-signout-section"><button type="button" className="more-tool glass" onClick={lock}><LogOut/><span><strong>{isGuest ? 'Sign in' : 'Sign out'}</strong><small>{isGuest ? 'Continue with your Budgetly account' : 'Leave this session on this device'}</small></span><ChevronRight size={17}/></button></div>
+    {(user?.role !== 'admin' || settings.support_sidebar_enabled !== false) && <a className="more-tool glass" href={SUPPORT_URL} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer"><Coffee/><span><strong>Buy me a coffee</strong></span><ExternalLink size={16}/></a>}
+    <div className="more-signout-section"><button type="button" className="more-tool glass" onClick={lock}><LogOut/><span><strong>{isGuest ? 'Sign in' : 'Sign out'}</strong></span><ChevronRight size={17}/></button></div>
   </div>
 }

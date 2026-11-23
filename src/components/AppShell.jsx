@@ -133,12 +133,13 @@ export default function AppShell({ children }) {
     const controller = new AbortController()
     api('/api/attention', { signal:controller.signal })
       .then(value => {
-        if (!controller.signal.aborted && Array.isArray(value?.items)) setAttention(attentionKeys(value.items, value.generated_at))
+        if (!controller.signal.aborted && Array.isArray(value?.items)) setAttention({ scope:spaceKey, keys:attentionKeys(value.items, value.generated_at) })
       })
       .catch(() => { /* Keep the last available notification snapshot. */ })
     return () => controller.abort()
-  }, [shouldLoadAttention, refreshKey, notificationRequest])
-  const attentionUnread = attention?.filter(key => !seen.attention.includes(key)).length ?? 0
+  }, [shouldLoadAttention, refreshKey, notificationRequest, spaceKey])
+  const attentionItems = attention?.scope === spaceKey ? attention?.keys : null
+  const attentionUnread = attentionItems?.filter(key => !seen.attention.includes(key)).length ?? 0
   const bankUnread = bankInboxCount > 0 && bankInboxLatestId > seen.bank
   const notificationCount = Number(bankUnread) + attentionUnread + announcementUnread
   const notificationLabel = [
@@ -154,10 +155,9 @@ export default function AppShell({ children }) {
   const spending = location.pathname === '/spending'
   const isSettings = ['/settings','/admin'].includes(location.pathname)
   const selectedPage = visibleNav.find(([path]) => path === location.pathname)
-  const subtitle = isOverview
-    ? isGuest ? 'Saved on this device' : activeSpace ? 'Shared money at a glance' : 'Your money at a glance'
-    : isDebt ? (debtView === 'debts' ? (debtLocation.id ? 'Shared debt space' : 'Loans, repayments and money lent') : '')
-    : isWallets || isLedger || spending ? activeSpace?.name || 'Personal' : location.pathname === '/upcoming' ? 'See what happens next' : selectedPage?.[4]
+  const subtitle = isDebt ? (debtView === 'debts' && debtLocation.id ? 'Shared debt space' : '') :
+    isWallets || isLedger || spending ? activeSpace?.name || 'Personal' :
+    ['/','/upcoming','/bank-messages','/workbooks','/more'].includes(location.pathname) ? '' : selectedPage?.[4]
   const debtTitle = debtView === 'debts' && debtSpace ? debtSpace.name : debtViews[debtView]
   const greeting = new Intl.DateTimeFormat('en-GB', { timeZone:'Asia/Kuwait', hour:'numeric', hourCycle:'h23' }).format(new Date())
   const overviewTitle = isGuest ? 'Guest workspace' : activeSpace?.name || `Good ${Number(greeting) < 12 ? 'morning' : Number(greeting) < 18 ? 'afternoon' : 'evening'}, ${user?.username || 'there'}`
@@ -232,15 +232,14 @@ export default function AppShell({ children }) {
       {notificationsOpen && showAnnouncements ? <NotificationAnnouncements onBack={() => setShowAnnouncements(false)} onRead={refreshAnnouncements}/> :
       <div className="notification-inbox">
         <button type="button" className="notification-inbox-link" onClick={() => setShowAnnouncements(true)}>
-          <span><strong>Announcements</strong><small>Messages from Budgetly</small></span>
-          {announcementUnread > 0 && <span className="bank-inbox-badge" aria-label={`${announcementUnread} unread`}>{announcementUnread}</span>}
+          <span><strong>Announcements</strong>{announcementUnread > 0 && <small>{announcementUnread} unread</small>}</span>
           <ChevronRight size={17} aria-hidden="true"/>
         </button>
         <Link className="notification-inbox-link" to="/bank-messages" onClick={() => setNotificationsOpen(false)}>
-          <span><strong>Bank Inbox</strong><small>{bankInboxCount ? `${bankInboxCount} waiting for review` : 'No bank alerts waiting for review'}</small></span>{bankUnread && <span className="bank-inbox-badge">New</span>}<ChevronRight size={17} aria-hidden="true"/>
+          <span><strong>Bank Inbox</strong>{bankInboxCount > 0 && <small>{bankInboxCount} to review</small>}</span>{bankUnread && <span className="bank-inbox-badge">New</span>}<ChevronRight size={17} aria-hidden="true"/>
         </Link>
         <Link className="notification-inbox-link" to="/attention" onClick={() => setNotificationsOpen(false)}>
-          <span><strong>Needs your attention</strong><small>{attention?.length === 0 ? 'No items to review' : 'Review budgets, plans and deadlines'}</small></span>{attentionUnread > 0 && <span className="bank-inbox-badge" aria-label={`${attentionUnread} new`}>{attentionUnread}</span>}<ChevronRight size={17} aria-hidden="true"/>
+          <span><strong>Needs your attention</strong>{!!attentionItems?.length && <small>{attentionItems.length} to review</small>}</span>{attentionUnread > 0 && <span className="bank-inbox-badge" aria-label={`${attentionUnread} new`}>{attentionUnread}</span>}<ChevronRight size={17} aria-hidden="true"/>
         </Link>
         <Link className="notification-inbox-link" to="/upcoming" onClick={() => setNotificationsOpen(false)}><strong>Upcoming reminders</strong><ChevronRight size={17} aria-hidden="true"/></Link>
       </div>}

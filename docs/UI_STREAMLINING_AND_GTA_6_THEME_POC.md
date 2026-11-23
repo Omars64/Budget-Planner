@@ -1,6 +1,6 @@
 # Budgetly UI streamlining and GTA 6 theme
 
-These proposals are for review before implementation. The approved Budgetly layout, navigation, and component placement are the baseline.
+The app UI and warmer wallet icon were approved for implementation. The approved Budgetly layout, navigation, and component placement are the baseline.
 
 ## UI review notes
 
@@ -19,8 +19,9 @@ Use the existing info button for reference material. Keep required actions, erro
 ## GTA 6 theme
 
 - **Deep Plum** `#22152D` for surfaces, palm silhouettes, and the wallet icon background.
-- **Flamingo Pink** `#E981B1` for selected states and the wallet icon's accent.
-- **Sunset Peach** `#FFBB8C` for primary actions, the featured balance card, and the wallet body.
+- **Flamingo Pink** `#E981B1` for selected states.
+- **Sunset Peach** `#FFBB8C` for primary actions and the featured balance card.
+- The second wallet icon draft uses a warmer peach `#FFAD74` for the body and a darker pink `#CB568C` for the rear card and clasp. The icon tile uses the same Deep Plum as the UI.
 - Use an original Miami waterfront sunset behind the app chrome, with dark palm silhouettes and a readable foreground. Preview it at phone and desktop widths with wallpaper on and off.
 - Keep the existing smooth matte wallet silhouette, with two cards and a single dark icon tile. Review Android, Windows, and favicon sizes.
 - Demonstrate the current device palette preference and the independent **Match icon to color palette** setting. Review companion theme and launcher changes before they ship.

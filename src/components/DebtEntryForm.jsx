@@ -91,9 +91,7 @@ export default function DebtEntryForm({mode, record, item, direction, currency, 
     } catch (failure) { setError(failure.message) }
   }
   const heading = editing?'Edit debt':adding?'Add debt':receipt?'Record money received':'Record payment'
-  const futureAmounts = extra?.amounts || []
-  const lowest = Math.min(...futureAmounts), highest = Math.max(...futureAmounts)
-  const futureAmount = futureAmounts.length === 0 ? '' : lowest === highest ? fmt(highest) : `${fmt(lowest)} or ${fmt(highest)}`
+  const future = extra?.schedule || []
   return <>
     <Modal open onClose={()=>!busy && onClose()} protectChanges size="small" title={heading} layerClass="debt-entry-layer debt-transaction-layer"
       footer={close=><div className="modal-actions"><button type="button" className="button ghost" disabled={busy} onClick={close}>Cancel</button>
@@ -110,15 +108,16 @@ export default function DebtEntryForm({mode, record, item, direction, currency, 
               <label className="field"><span>Pay back</span><AppSelect value={form.frequency} onChange={e=>set('frequency',e.target.value)}><option value="once">Once</option><option value="monthly">Every month</option></AppSelect></label></div>
             {monthlyPlan && <label className="field"><span>Monthly payment ({currency})</span><input inputMode="decimal" value={form.monthly} onChange={e=>set('monthly',e.target.value)}/></label>}
           </> : <>
-            <div className="debt-entry-context"><div><strong>{record.name}</strong>{selection && <small className="debt-month-due muted">{fmt(left(selection))} left for this month</small>}</div>
+            <div className="debt-entry-context"><div><strong>{record.name}</strong>{selection && <small className="debt-month-due muted">{fmt(left(selection))} left for {monthLabel(selection.month,true)}</small>}</div>
               <InfoButton label="About payment dates" onClick={()=>setHelp(true)}/></div>
-            <div className="debt-form-pair"><DateField label={receipt?'Date received':'Date paid'} value={form.date} onChange={value=>set('date',value)} max={dateKey()} min="1900-01-01" disabled={busy}/>
-              <label className="field"><span>Payment month</span><AppSelect value={form.item} onChange={e=>set('item',e.target.value)}>{choices.map(row=><option key={row.id} value={row.id}>{monthLabel(row.month,true)}</option>)}</AppSelect></label></div>
+            <div className="debt-form-pair"><DateField label={receipt?'Received on':'Paid on'} value={form.date} onChange={value=>set('date',value)} max={dateKey()} min="1900-01-01" disabled={busy}/>
+              <label className="field"><span>Applies to</span><AppSelect value={form.item} onChange={e=>set('item',e.target.value)}>{choices.map(row=><option key={row.id} value={row.id}>{monthLabel(row.month,true)}</option>)}</AppSelect></label></div>
             {extra?.extra > 0 && <div className="debt-payment-preview" role="status">
               <strong>{fmt(extra.extra)} extra</strong>
-              <small className="muted">{futureAmounts.length === 0 ? 'No payments left in the following months.' : futureAmounts.length === 1
-                ? `${futureAmount} left in the following months.` : `${futureAmount} per month for ${futureAmounts.length} months.`}</small>
-              {record.apr>0 && <small className="muted">Uses the interest already in your schedule.</small>}
+              {!future.length ? <small className="muted">No payments left after {monthLabel(selection.month)}.</small> :
+                <><small className="muted">Updated repayments</small>
+                <dl className="debt-data">{future.slice(0,3).map(term=><div key={term.month}><dt>{monthLabel(term.month,true)}</dt><dd>{fmt(term.amount)}</dd></div>)}</dl>
+                {future.length>3 && <details><summary>Show {future.length-3} more months</summary><dl className="debt-data">{future.slice(3).map(term=><div key={term.month}><dt>{monthLabel(term.month,true)}</dt><dd>{fmt(term.amount)}</dd></div>)}</dl></details>}</>}
             </div>}
           </>}
           {adding&&<div className="debt-form-help"><InfoButton label="About repayment schedules" onClick={()=>setHelp(true)}/></div>}
@@ -145,7 +144,7 @@ export default function DebtEntryForm({mode, record, item, direction, currency, 
     </Modal>
     <Modal open={help} onClose={()=>setHelp(false)} size="small" title={adding?'Repayment schedules':'Payment month and date'}>
       <p>{adding?'Monthly loans use estimated interest to build a schedule. You can set a payment month separately from the due date.':
-        'The payment month is the instalment this covers. The payment date is when the money moved. Link a matching Personal transaction to keep just one ledger entry.'}</p>
+        'Use the actual date the money moved. Applies to is the month of the instalment this payment covers. Extra payments use the interest already in your schedule. Link a matching Personal transaction to keep one ledger entry.'}</p>
     </Modal>
   </>
 }

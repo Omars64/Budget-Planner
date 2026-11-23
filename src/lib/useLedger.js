@@ -65,6 +65,7 @@ export default function useLedger(endpoint, filters, refreshKey, poll = false, v
     rows,
     loading: !current.rows && !current.error,
     busy: busy || !sameView,
+    hasSnapshot: Array.isArray(current.rows),
     error: current.error,
     updatedAt: current.updatedAt,
     hasMore: (current.rows?.length || 0) > PAGE_SIZE,

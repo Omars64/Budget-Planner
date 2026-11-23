@@ -102,18 +102,21 @@ export default function Transactions() {
       balanceAction={<button type="button" className="button ghost ledger-balance-trigger" data-tour="wallet-balances" aria-label="Current wallet balances" aria-haspopup="dialog" onClick={() => setWalletBalancesOpen(true)}><Wallet size={16} aria-hidden="true"/><span>Wallet balances</span></button>}>
       {!isGuest && !activeSpace && <StatementImport wallets={wallets} compact/>}
     </LedgerFilters>
-    {ledger.error && <div className="transaction-read-error" role="alert"><strong>Transactions could not be refreshed</strong><span>{ledger.error}</span><span>{ledger.updatedAt ? 'Showing the last loaded records. New saves may not appear until refresh succeeds.' : 'No current records are available. Your entry draft stays on this device.'}</span><button type="button" className="button ghost small" onClick={ledger.retry}>Retry loading</button></div>}
-    {ledger.error && ledger.updatedAt && <small className="muted">Showing records last updated at {new Date(ledger.updatedAt).toLocaleTimeString()}.</small>}
+    {ledger.error && <div className="transaction-read-error" role="alert">
+      <div><strong>{ledger.hasSnapshot ? 'Showing saved transactions' : 'Transactions unavailable'}</strong>
+      <small>{ledger.updatedAt ? `Last updated ${new Date(ledger.updatedAt).toLocaleTimeString([], { hour:'numeric', minute:'2-digit' })}` : ledger.error}</small></div>
+      <button type="button" className="button ghost small" disabled={ledger.busy} onClick={ledger.retry}>{ledger.busy ? 'Retrying…' : 'Retry'}</button>
+    </div>}
 
 
     <section ref={list} className="ledger-list" aria-label="Recorded transactions">
-      {ledger.error && !ledger.updatedAt ? <EmptyState title="Saved records unavailable" text="Reconnect to load this view. Any entries waiting to sync are shown above." action={<button className="button ghost" onClick={ledger.retry}>Retry loading</button>}/> : loading && !rows.length ? <div className="list-skeleton"><i/><i/><i/><i/></div> : !rows.length ? <EmptyState title="No matching transactions" text="Try another filter or add a transaction." action={<div className="button-row"><button className="button ghost" onClick={() => setFilters({...defaultLedgerFilters})}>Clear filters</button><button className="button primary" disabled={!canAdd} onClick={() => {setEditing(null);setModal(true)}}>Add transaction</button></div>}/> : <div className="date-groups">
+      {loading && !rows.length ? <div className="list-skeleton"><i/><i/><i/><i/></div> : !rows.length ? !ledger.error && <EmptyState title="No matching transactions" text="Try another filter or add a transaction." action={<div className="button-row"><button className="button ghost" onClick={() => setFilters({...defaultLedgerFilters})}>Clear filters</button><button className="button primary" disabled={!canAdd} onClick={() => {setEditing(null);setModal(true)}}>Add transaction</button></div>}/> : <div className="date-groups">
         {Object.entries(grouped).map(([day, txs]) => <div className="date-group" key={day}>
           <LedgerDateHeader day={day} compact/>
           {txs.map(tx => <LedgerRow key={tx.id} tx={tx} fmt={fmt} compact onOpen={() => setSelected(tx)}/> )}
         </div>)}
       </div>}
-      <LedgerPagination ledger={ledger}/>
+      {(!ledger.error || ledger.hasSnapshot) && <LedgerPagination ledger={ledger}/>}
     </section>
     <Modal open={walletBalancesOpen} onClose={() => setWalletBalancesOpen(false)} title="Current wallet balances" subtitle={activeSpace?.name || 'Personal wallets'} size="small">
       <div>

@@ -95,6 +95,18 @@
     "lightMode": {"bar":"#e9dcfc","barInk":"#2e2241","page":"#f8f1ff","ink":"#302343","muted":"#645271","balance":"#20503a","balanceInk":"#f0fff2","action":"#20503a","actionInk":"#f0fff2"},
     "darkMode": {"bar":"#103225","barInk":"#f3e6ff","page":"#19382e","ink":"#f3e6ff","muted":"#c9dbcb","balance":"#d7c3ff","balanceInk":"#2e1c49","action":"#d7c3ff","actionInk":"#2e1c49"}
   },
+  "miami": {
+    "name": "GTA 6 theme",
+    "deep": "#22152d",
+    "light": "#fff7fb",
+    "action": "#ffbb8c",
+    "bright": "#e981b1",
+    "fixedAppearance": "dark",
+    "swatches": ["#22152d", "#e981b1", "#ffbb8c"],
+    "iconColors": ["#22152d", "#cb568c", "#ffad74"],
+    "card": {"light":"#ffbb8c","dark":"#e981b1","ink":"#22152d","line":"#78395b"},
+    "darkMode": {"bar":"#22152d","barInk":"#fff7fb","page":"#2f2339","ink":"#fff7fb","muted":"#e5ccde","balance":"#ffbb8c","balanceInk":"#22152d","action":"#ffbb8c","actionInk":"#22152d"}
+  },
   "papaya": {
     "name": "Papaya & Espresso",
     "deep": "#301c18",

@@ -9,12 +9,14 @@ import DateTimeField from '../components/DateTimeField'
 import ReportingMonthField from '../components/ReportingMonthField'
 import Modal from '../components/Modal'
 import PageActions from '../components/PageActions'
+import InfoButton from '../components/InfoButton'
 import { useApp } from '../App'
 import '../upcoming.css'
 import '../everyday-planning.css'
 
 const tabs = [['upcoming', 'Coming up'], ['posted', 'Recorded'], ['all', 'All entries']]
-const planLabel = row => row.status === 'posted' ? 'Recorded' : row.status === 'failed' ? 'Needs attention' : row.status === 'scheduled' ? 'Records automatically' : row.reminder_enabled && row.type === 'expense' ? 'Reminder only' : 'Plan only'
+const recordingOptions = { planned:'Plan only', scheduled:'Record automatically' }
+const planLabel = row => recordingOptions[row.status] ?? (row.status === 'posted' ? 'Recorded' : 'Needs attention')
 const empty = () => ({ type: 'expense', amount: '', description: '', notes: '', date: dateInput(new Date(Date.now() + 86400000)), reporting_month: '', wallet_id: '', transfer_wallet_id: '', category_id: '', status: 'planned', reminder_enabled: true })
 const reportingMonthLabel = month => new Intl.DateTimeFormat('en', { month: 'short', year: 'numeric' }).format(new Date(`${month}-01T12:00:00`))
 
@@ -27,6 +29,7 @@ export default function Upcoming() {
   const [filter, setFilter] = useState('upcoming')
   const [status, setStatus] = useState('')
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const [recordingHelp, setRecordingHelp] = useState(false)
   const [selectedId, setSelectedId] = useState(null)
   const [draft, setDraft] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -36,15 +39,32 @@ export default function Upcoming() {
   const formId = useId()
   const baseline = useRef('')
 
-  const load = async () => {
-    const [plans, owned, ownCategories] = await Promise.all([api('/api/planned-transactions'), api('/api/wallets'), api('/api/categories')])
-    setRows(plans)
-    const own = owned.filter(w => !w.archived && (activeSpace || !w.is_shared)).map(w => ({ id: w.id, name: w.name, owner_id: user.id, shared: Boolean(activeSpace), editable: canAdd }))
-    setWallets(own)
-    setCategories(ownCategories)
-    setLoading(false)
-  }
-  useEffect(() => { let active = true; load().catch(err => { if (active) { setError(err.message); setLoading(false) } }); return () => { active = false } }, [user.id])
+  const [choicesError, setChoicesError] = useState('')
+  const [choicesRetry, setChoicesRetry] = useState(0)
+  const [plansRetry, setPlansRetry] = useState(0)
+  const [plansError, setPlansError] = useState('')
+  useEffect(() => {
+    const controller = new AbortController()
+    setRows([]); setLoading(true); setPlansError('')
+    api('/api/planned-transactions', { signal:controller.signal }).then(plans => {
+      if (!controller.signal.aborted) setRows(plans)
+    }).catch(err => { if (!controller.signal.aborted) setPlansError(err.message) })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
+    return () => controller.abort()
+  }, [user.id, activeSpace?.id, plansRetry])
+  useEffect(() => {
+    const controller = new AbortController()
+    const options = { signal:controller.signal }
+    setWallets([]); setCategories([]); setChoicesError('')
+    Promise.all([api('/api/wallets', options), api('/api/categories', options)]).then(([owned, ownCategories]) => {
+      if (controller.signal.aborted) return
+      setWallets(owned.filter(w => !w.archived && (activeSpace || !w.is_shared)).map(w => ({
+        id:w.id, name:w.name, owner_id:user.id, shared:Boolean(activeSpace), editable:canAdd,
+      })))
+      setCategories(ownCategories)
+    }).catch(err => { if (!controller.signal.aborted) setChoicesError(err.message) })
+    return () => controller.abort()
+  }, [user.id, activeSpace?.id, canAdd, choicesRetry])
 
   const start = row => {
     setSelectedId(null)
@@ -58,7 +78,7 @@ export default function Upcoming() {
   const change = (key, value) => setDraft(current => ({ ...current, [key]: value, ...(key === 'wallet_id' || key === 'type' ? { category_id: '', transfer_wallet_id: '' } : {}), ...(key === 'type' && value !== 'expense' ? { reporting_month: '' } : {}) }))
   const wallet = wallets.find(w => String(w.id) === String(draft?.wallet_id))
   useEffect(() => {
-    if (!draft?.wallet_id || wallet?.owner_id === user.id) return
+    if (!draft?.wallet_id || !wallet || wallet.owner_id === user.id) return
     let active = true
     api(`/api/shared/wallets/${draft.wallet_id}/categories`).then(items => {
       if (active) setCategories(current => [...current.filter(c => c.wallet_id !== Number(draft.wallet_id)), ...items.map(c => ({ ...c, wallet_id: Number(draft.wallet_id) }))])
@@ -84,8 +104,9 @@ export default function Upcoming() {
     if (draft.status === 'scheduled' && new Date(saveDate(draft.date)).getTime() <= Date.now()) { setError('Choose a future date and time for automatic recording.'); return }
     setBusy(true); setError('')
     try {
-      await api(draft.id ? `/api/planned-transactions/${draft.id}` : '/api/planned-transactions', { method: draft.id ? 'PUT' : 'POST', ...jsonBody({ ...(draft.id ? { revision: draft.revision } : {}), status: draft.status === 'failed' ? 'planned' : draft.status, reminder_enabled: draft.reminder_enabled, transaction: { type: draft.type, amount: Number(draft.amount), description: draft.description.trim(), notes: draft.notes || '', date: saveDate(draft.date), reporting_month: draft.type === 'transfer' ? null : draft.reporting_month || null, wallet_id: Number(draft.wallet_id), transfer_wallet_id: draft.type === 'transfer' ? Number(draft.transfer_wallet_id) : null, category_id: draft.type === 'transfer' || !draft.category_id ? null : Number(draft.category_id), recurring_frequency: 'none', recurring_until: null } }) })
-      setDraft(null); await load(); void syncPlannedNotifications(user.id).catch(() => {}); notify('Upcoming entry saved')
+      const saved = await api(draft.id ? `/api/planned-transactions/${draft.id}` : '/api/planned-transactions', { method: draft.id ? 'PUT' : 'POST', ...jsonBody({ ...(draft.id ? { revision: draft.revision } : {}), status: draft.status === 'failed' ? 'planned' : draft.status, reminder_enabled: draft.type === 'expense' && draft.reminder_enabled, transaction: { type: draft.type, amount: Number(draft.amount), description: draft.description.trim(), notes: draft.notes || '', date: saveDate(draft.date), reporting_month: draft.type === 'transfer' ? null : draft.reporting_month || null, wallet_id: Number(draft.wallet_id), transfer_wallet_id: draft.type === 'transfer' ? Number(draft.transfer_wallet_id) : null, category_id: draft.type === 'transfer' || !draft.category_id ? null : Number(draft.category_id), recurring_frequency: 'none', recurring_until: null } }) })
+      if (saved?.id) setRows(current => [...current.filter(row => row.id !== saved.id), saved])
+      setDraft(null); void syncPlannedNotifications(user.id).catch(() => {}); notify('Upcoming entry saved')
     } catch (err) { setError(err.message); setConflict(err.status === 409 && Boolean(draft.id)) } finally { setBusy(false) }
   }
   const reloadConflict = async () => {
@@ -101,7 +122,7 @@ export default function Upcoming() {
   }
   const remove = async row => {
     if (!await confirm(`Delete "${row.description}" from upcoming entries?`)) return
-    try { await api(`/api/planned-transactions/${row.id}`, { method: 'DELETE', ...(row.revision ? { headers: { 'If-Match': row.revision } } : {}) }); setSelectedId(null); await load(); void syncPlannedNotifications(user.id).catch(() => {}); notify('Upcoming entry deleted') } catch (err) { notify(err.message, 'error') }
+    try { await api(`/api/planned-transactions/${row.id}`, { method: 'DELETE', ...(row.revision ? { headers: { 'If-Match': row.revision } } : {}) }); setSelectedId(null); setRows(current => current.filter(item => item.id !== row.id)); void syncPlannedNotifications(user.id).catch(() => {}); notify('Upcoming entry deleted') } catch (err) { notify(err.message, 'error') }
   }
 
   return <section className="upcoming-page everyday-page">
@@ -111,7 +132,8 @@ export default function Upcoming() {
       <button type="button" className="upcoming-details-button" aria-haspopup="dialog" onClick={() => setDetailsOpen(true)}>Details{(scope !== 'all' || status) && <span aria-label="Filters active"> •</span>}</button>
     </div>
     {error && !draft && <p className="form-error" role="alert">{error}</p>}
-    <Modal layerClass="everyday-page" open={Boolean(draft)} onClose={closeEditor} title={draft?.id ? 'Edit upcoming entry' : 'Add upcoming entry'} subtitle="Plan ahead without changing your balance." protectChanges isDirty={Boolean(draft && JSON.stringify(draft) !== baseline.current)} footer={close => <div className="modal-actions"><button type="button" className="button ghost" disabled={busy} onClick={close}>Cancel</button><button type="submit" form={formId} className="button primary" disabled={busy || conflict}>{busy ? 'Saving...' : 'Save entry'}</button></div>}>
+    {plansError && <div className="form-error" role="alert">{plansError} <button type="button" className="button ghost" onClick={() => setPlansRetry(value => value + 1)}>Retry</button></div>}
+    <Modal layerClass="everyday-page" open={Boolean(draft)} onClose={closeEditor} title={draft?.id ? 'Edit upcoming entry' : 'Add upcoming entry'} protectChanges isDirty={Boolean(draft && JSON.stringify(draft) !== baseline.current)} footer={close => <div className="modal-actions"><button type="button" className="button ghost" disabled={busy} onClick={close}>Cancel</button><button type="submit" form={formId} className="button primary" disabled={busy || conflict}>{busy ? 'Saving...' : 'Save entry'}</button></div>}>
     {draft && <form id={formId} className="upcoming-editor stack gap-18 transaction-form" onSubmit={save}>
       <fieldset className="transaction-fields stack gap-18" disabled={busy}>
       <DateTimeField value={draft.date} onChange={value => change('date', value)} disabled={busy}/>
@@ -125,18 +147,25 @@ export default function Upcoming() {
         <label className="field"><span>Wallet</span><AppSelect required value={draft.wallet_id} onChange={event => change('wallet_id', event.target.value)}><option value="">Choose wallet</option>{wallets.filter(w => w.editable).map(w => <option key={w.id} value={w.id}>{w.name}{w.shared ? ' · Shared' : ''}</option>)}</AppSelect></label>
         <label className="field"><span>{draft.type === 'transfer' ? 'Destination' : 'Category'}</span>{draft.type === 'transfer' ? <AppSelect required value={draft.transfer_wallet_id} onChange={event => change('transfer_wallet_id', event.target.value)}><option value="">Choose destination</option>{wallets.filter(w => w.editable && w.owner_id === wallet?.owner_id && String(w.id) !== String(wallet?.id)).map(w => <option key={w.id} value={w.id}>{w.name}</option>)}</AppSelect> : <AppSelect value={draft.category_id} onChange={event => change('category_id', event.target.value)}><option value="">Uncategorized</option>{choices.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</AppSelect>}</label>
       </div>
-      <label className="field"><span>Recording</span><AppSelect aria-describedby={`${formId}-recording-help`} value={draft.status} onChange={event => change('status', event.target.value)}><option value="planned">Plan only / remind me</option><option value="scheduled">Record automatically</option></AppSelect></label>
-      <p id={`${formId}-recording-help`} className="muted everyday-help">{draft.status === 'scheduled' ? 'Records at the next automatic server check after the due time, unless processing is paused. No bank payment is made.' : 'Stays a plan after the due time. Add the actual transaction yourself when it happens; this plan will not record automatically.'}</p>
-      <label className="upcoming-reminder"><input type="checkbox" checked={draft.reminder_enabled} onChange={event => change('reminder_enabled', event.target.checked)}/><Bell size={19}/><span>Remind me</span></label>
-      <p className="muted everyday-help">Reminders apply to expense entries only and depend on notification settings and permissions. Manage timing and delivery in Settings.</p>
+      <div className="field">
+        <div className="button-row"><span>Recording</span><InfoButton label="About recording and reminders" onClick={() => setRecordingHelp(true)}/></div>
+        <AppSelect aria-label="Recording" value={draft.status} onChange={event => change('status', event.target.value)}>{Object.entries(recordingOptions).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</AppSelect>
+        {draft.status === 'scheduled' && <small>Records in Budgetly only.</small>}
+      </div>
+      {draft.type === 'expense' && <label className="upcoming-reminder"><input type="checkbox" checked={draft.reminder_enabled} onChange={event => change('reminder_enabled', event.target.checked)}/><Bell size={19}/><span>Remind me</span></label>}
       <label className="field"><span>Notes (optional)</span><textarea value={draft.notes || ''} onChange={event => change('notes', event.target.value)}/></label>
       </fieldset>
+      {choicesError && <div className="form-error" role="alert">{choicesError} <button type="button" className="button ghost" onClick={() => setChoicesRetry(value => value + 1)}>Retry wallet and category choices</button></div>}
       {error && <p className="form-error" role="alert">{error}</p>}
       {conflict && <button type="button" className="button ghost" disabled={busy} onClick={() => void reloadConflict()}>Reload latest entry</button>}
     </form>}
     </Modal>
+    <Modal open={recordingHelp} title="Recording and reminders" size="small" onClose={() => setRecordingHelp(false)}>
+      <p>Choose Plan only to record the actual transaction yourself. Record automatically adds the entry at the next server check after the due time.</p>
+      <p>Expense reminders use your device’s notification permissions and settings.</p>
+    </Modal>
     <div className="poc-list" aria-live="polite">
-      {loading ? <p className="muted">Loading upcoming records…</p> : displayed.length === 0 ? <p className="muted">No entries in this view.</p> : displayed.map(row => <button type="button" className="poc-line plan-row" key={row.id} onClick={() => setSelectedId(row.id)}>
+      {loading ? <p className="muted">Loading upcoming records…</p> : displayed.length === 0 ? !plansError && <p className="muted">No entries in this view.</p> : displayed.map(row => <button type="button" className="poc-line plan-row" key={row.id} onClick={() => setSelectedId(row.id)}>
         <span className="poc-marker"><CalendarClock size={18} aria-hidden="true"/></span>
         <span><strong>{row.description}</strong><small>{showTime(row.date)} · {row.wallet_name}</small><span className={`upcoming-status ${row.status}`}>{planLabel(row)}</span></span>
         <strong className={`upcoming-amount ${row.type}`}>{amountLabel(row)}</strong>
@@ -145,9 +174,8 @@ export default function Upcoming() {
     <Modal open={detailsOpen} onClose={() => setDetailsOpen(false)} title="Upcoming details" size="small">
       <div className="stack gap-16">
         <label className="field"><span>Wallet context</span><AppSelect value={scope} onChange={event => setScope(event.target.value)}><option value="all">All wallets</option><option value="personal">Personal</option><option value="shared">Shared</option></AppSelect></label>
-        {filter !== 'posted' && <label className="field"><span>Plan status</span><AppSelect value={status} onChange={event => setStatus(event.target.value)}><option value="">Any status</option><option value="planned">Manual / reminder only</option><option value="scheduled">Automatic</option><option value="failed">Needs attention</option></AppSelect></label>}
+        {filter !== 'posted' && <label className="field"><span>Plan status</span><AppSelect value={status} onChange={event => setStatus(event.target.value)}><option value="">Any status</option>{Object.entries(recordingOptions).map(([value,label]) => <option key={value} value={value}>{label}</option>)}<option value="failed">Needs attention</option></AppSelect></label>}
         <p><strong>Net planned</strong> {money(total, settings.currency)}</p>
-        <p className="muted">Automatic entries record after their due time when processing runs. Plans stay unrecorded until you add the transaction yourself.</p>
       </div>
     </Modal>
     <Modal open={Boolean(selected)} onClose={() => setSelectedId(null)} title={selected?.description || 'Upcoming entry'}>

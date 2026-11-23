@@ -93,8 +93,8 @@ export function extraPaymentChange(record, item, amount, currency) {
   const unit = 10 ** (3 - Math.min(currencyDigits(currency), 3)), units = (balance - extra)/unit
   if (!Number.isInteger(units)) return { precisionError:true }
   const each = Math.floor(units/later.length), remainder = units % later.length
-  const amounts = later.map((_, index) => (each + Number(index < remainder))*unit).filter(Boolean)
-  return { extra, amounts }
+    const schedule = later.map((term, index) => ({month:term.month, amount:(each + Number(index < remainder))*unit})).filter(term=>term.amount>0)
+    return { extra, schedule }
 }
 export function payoffMonth(records,extra,today = dateKey()) {
   const start = today.slice(0,7)

@@ -234,14 +234,14 @@ export default function App() {
   const [deviceAppearance, setDeviceAppearanceState] = useState(readDeviceAppearance)
   const [accountSettings, setSettings] = useState(() => ({ ...deviceAppearance, logo_style: 'current', currency: 'KWD', display_name: 'Budgetly', week_starts_on: 'sunday', compact_numbers: false }))
   const setDeviceAppearance = useCallback(patch => setDeviceAppearanceState(current => ({ ...current, ...patch })), [])
-  const { color_palette, theme, pinned_icon_palette } = deviceAppearance
+  const { color_palette, theme, pinned_icon_palette, miami_wallpaper } = deviceAppearance
   const iconPalette = pinned_icon_palette ?? color_palette
   const iconFollowsPalette = pinned_icon_palette === null
   const setIconFollowsPalette = useCallback(follows => setDeviceAppearanceState(current => ({
     ...current,
     pinned_icon_palette: follows ? null : current.pinned_icon_palette ?? current.color_palette,
   })), [])
-  const settings = useMemo(() => ({ ...accountSettings, color_palette, theme }), [accountSettings, color_palette, theme])
+  const settings = useMemo(() => ({ ...accountSettings, color_palette, theme, miami_wallpaper }), [accountSettings, color_palette, theme, miami_wallpaper])
   const [appearance, setAppearance] = useState({ profile_image: '', wallpaper_image: '' })
   const [refreshKey, setRefreshKey] = useState(0)
   const plannedRead = useRef(null)
@@ -350,7 +350,8 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    const wallpaperStyle = settings.wallpaper_enabled === false ? 'none' : settings.wallpaper_style || (appearance.wallpaper_image ? 'custom' : 'none')
+    const wallpaperStyle = settings.color_palette === 'miami' && settings.miami_wallpaper !== false ? 'none' :
+      settings.wallpaper_enabled === false ? 'none' : settings.wallpaper_style || (appearance.wallpaper_image ? 'custom' : 'none')
     const wallpaper = wallpaperStyle === 'custom' ? appearance.wallpaper_image || '' : ''
     document.body.style.backgroundImage = wallpaper ? `url(${JSON.stringify(wallpaper)})` : ''
     document.body.style.backgroundSize = wallpaper ? 'cover' : ''
@@ -366,7 +367,7 @@ export default function App() {
       document.body.classList.remove('has-wallpaper')
       document.body.classList.remove('wallpaper-budgetly')
     }
-  }, [appearance.wallpaper_image, settings.wallpaper_enabled, settings.wallpaper_style])
+  }, [appearance.wallpaper_image, settings.wallpaper_enabled, settings.wallpaper_style, settings.color_palette, settings.miami_wallpaper])
 
   const clearSession = useCallback(() => {
     if (smsAvailable()) void BankSms.configure({enabled:false}).catch(console.error)
@@ -493,7 +494,8 @@ export default function App() {
 
   return <AppContext.Provider value={value}>
     {!isGuest && <Experience />}
-    <SeasonalAtmosphere settings={settings}/><div className="ambient" aria-hidden="true"><i/><i/><i/></div>
+    {!(settings.color_palette === 'miami' && settings.miami_wallpaper !== false) && <SeasonalAtmosphere settings={settings}/>}
+    <div className="ambient" aria-hidden="true"><i/><i/><i/></div>
     <RouteMotion key={`${session.user.id}:${activeSpace?.id || 'personal'}:${activeSpace?.role || 'owner'}`}>{routeLocation => <AppShell>
       <Suspense fallback={<div role="status">Loading page...</div>}>
       {isGuest && !guestRoutes.has(routeLocation.pathname) ? <GuestGate/> : <Routes>

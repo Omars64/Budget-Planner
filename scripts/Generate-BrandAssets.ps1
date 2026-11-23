@@ -1,4 +1,5 @@
 # Render the smooth matte wallet for the browser, Windows and Android.
+param([string]$PaletteKey)
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 Add-Type -Path (Join-Path $PSScriptRoot 'WalletIconArtwork.cs') -ReferencedAssemblies System.Drawing
@@ -64,15 +65,18 @@ function Save-AtExistingSize([Drawing.Bitmap]$source, [string]$path) {
 }
 
 $windowsSizes = @(16,24,32,48,64,128,256)
-$colors = foreach ($palette in $palettes) {
+$selected = if ($PaletteKey) { $palettes | Where-Object Name -eq $PaletteKey } else { $palettes }
+if (!$selected) { throw "Unknown wallet palette: $PaletteKey" }
+foreach ($palette in $selected) {
     $key = $palette.Name
     $background, $detail, $wallet = $palette.Value.iconColors
     $dark = [Drawing.ColorTranslator]::FromHtml($background)
     $mid = [Drawing.ColorTranslator]::FromHtml($detail)
     $light = [Drawing.ColorTranslator]::FromHtml($wallet)
-    $tile = [WalletIconArtwork]::Render($dark, $mid, $light, 512, 'tile')
-    $android = [WalletIconArtwork]::Render($dark, $mid, $light, 512, 'android')
-    $adaptive = [WalletIconArtwork]::Render($dark, $mid, $light, 432, 'adaptive')
+    $miami = $key -eq 'miami'
+    $tile = [WalletIconArtwork]::Render($dark, $mid, $light, 512, 'tile', $miami)
+    $android = [WalletIconArtwork]::Render($dark, $mid, $light, 512, 'android', $miami)
+    $adaptive = [WalletIconArtwork]::Render($dark, $mid, $light, 432, 'adaptive', $miami)
     try {
         Save-Png $tile (Join-Path $root "brand-assets/wallet-$key.png") 512
         Save-Png $adaptive (Join-Path $root "brand-assets/android/wallet-$key.png") 432
@@ -105,11 +109,15 @@ $colors = foreach ($palette in $palettes) {
     <foreground android:drawable="@drawable/${resource}_art" />
 </adaptive-icon>
 "@ | Set-Content -LiteralPath (Join-Path $res "mipmap-anydpi-v26/$resource.xml") -Encoding Ascii
-            "    <color name=""${resource}_background"">$background</color>"
         }
     } finally { $tile.Dispose(); $android.Dispose(); $adaptive.Dispose() }
 }
 
+$colors = foreach ($palette in $palettes) {
+    if ($palette.Name -ne 'navy') {
+        "    <color name=""wallet_launcher_$($palette.Name)_background"">$($palette.Value.iconColors[0])</color>"
+    }
+}
 @('<?xml version="1.0" encoding="utf-8"?>','<resources>') + $colors + '</resources>' |
     Set-Content -LiteralPath (Join-Path $res 'values/wallet_launcher_colors.xml') -Encoding UTF8
 

@@ -6,13 +6,13 @@ import './SettingsWorkspace.css'
 
 const groups = [
   { id: 'account', title: 'Account & security', description: 'Profile, password and sign-in', icon: ShieldCheck, label: 'Your account', terms: 'password session fingerprint biometric passkey account profile' },
-  { id: 'appearance', title: 'Look & feel', description: 'Theme, text size and motion', icon: Palette, label: 'Your preferences', terms: 'logo legacy font colour color accent wallpaper seasonal halloween winter summer rain autumn spring motion vibration comfort appearance welcome greeting animation speed' },
+  { id: 'appearance', title: 'Look & feel', description: 'Theme, text size and motion', icon: Palette, label: 'Your preferences', terms: 'logo legacy font colour color accent wallpaper seasonal halloween winter summer rain autumn spring motion vibration comfort appearance welcome greeting animation speed gta 6 miami' },
   { id: 'money', title: 'Money & categories', description: 'Currency and transaction defaults', icon: Banknote, terms: 'currency kwd categories default wallet balances entry templates display locale week numbers budget name' },
   { id: 'notifications', title: 'Notifications', description: 'Updates, reminders and scheduled entries', icon: Bell, terms: 'upcoming expense update quiet hours reminder scheduled notification' },
   { id: 'android', title: 'Android app', description: 'Latest version and release notes', icon: Smartphone, terms: 'android phone latest version release mobile app' },
   { id: 'bank', title: 'Bank messages', description: 'Connected apps and wallet matching', icon: Landmark, terms: 'smart bank inbox notification access card matching capture android' },
   { id: 'backup', title: 'Backups & data', description: 'Google Drive, exports and recovery', icon: CloudUpload, label: 'Your data', terms: 'trash deleted recovery restore google drive export statement reset guest records' },
-  { id: 'privacy', title: 'Privacy policy', description: 'How Budgetly handles your data', icon: FileLock2, terms: 'privacy personal information data storage retention sharing rights' },
+  { id: 'privacy', title: 'Privacy policy', icon: FileLock2, terms: 'privacy personal information data storage retention sharing rights' },
   { id: 'support', title: 'Support & about', description: 'Coffee preferences and app information', icon: Coffee, terms: 'coffee tip support popup sidebar about' },
 ]
 const titleGroups = {
@@ -95,7 +95,7 @@ export default function SettingsWorkspace({ children, guest = false, sections = 
 
   return <div className="settings-workspace palette-settings-workspace" data-mobile-detail={mobileDetail}>
     <div className="palette-dark-section palette-settings-heading">
-      {mobileDetail ? <><button type="button" className="settings-back" onClick={back}><ArrowLeft size={20}/>{admin ? 'All admin tools' : 'All settings'}</button><h2 ref={heading} tabIndex={-1}>{current.title}</h2><p>{current.description}</p></> : <><h2 ref={menuHeading} tabIndex={-1}>{title}</h2><p>{admin ? 'Manage accounts and service controls' : 'Make Budgetly work the way you like'}</p></>}
+      {mobileDetail ? <><button type="button" className="settings-back" onClick={back}><ArrowLeft size={20}/>{admin ? 'All admin tools' : 'All settings'}</button><h2 ref={heading} tabIndex={-1}>{current.title}</h2></> : <h2 ref={menuHeading} tabIndex={-1}>{title}</h2>}
     </div>
     <aside className="settings-menu palette-sheet" aria-label={admin ? 'Admin tools' : 'Settings categories'} hidden={mobileDetail}>
       <label className="settings-search"><Search size={18} aria-hidden="true"/><input type="search" value={query} placeholder={admin ? 'Search admin tools' : 'Search settings'} aria-label={admin ? 'Search admin tools' : 'Search settings'} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && visible[0]) { event.preventDefault(); void show(visible[0].id) } }}/></label>
@@ -103,7 +103,7 @@ export default function SettingsWorkspace({ children, guest = false, sections = 
         {visible.map(group => <div key={group.id}>
           {group.label && <p className="settings-menu-label">{group.label}</p>}
           <button type="button" className="settings-category" onClick={() => void show(group.id)}>
-            <group.icon size={20} aria-hidden="true"/><span>{group.title}<small>{group.description}</small></span><ChevronRight size={16} aria-hidden="true"/>
+            <group.icon size={20} aria-hidden="true"/><span>{group.title}{group.description && <small>{group.description}</small>}</span><ChevronRight size={16} aria-hidden="true"/>
           </button>
         </div>)}
         {!visible.length && <p className="muted" role="status">{admin ? 'No matching admin tools.' : 'No matching settings.'}</p>}

@@ -9,8 +9,7 @@
 .transaction-save-state small { color:var(--muted); }
 .transaction-save-state button { flex:none; }
 .transaction-read-error { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; padding:14px 18px; border:1px solid var(--negative); border-radius:16px; color:var(--text); }
-.transaction-read-error strong { width:100%; }
-.transaction-read-error span { overflow-wrap:anywhere; }
+.transaction-read-error small { display:block;color:var(--muted);overflow-wrap:anywhere; }
 .transaction-read-error button { margin-left:auto; }
 .transaction-conflict { display:grid; gap:12px; min-width:0; padding:16px; border:1px solid var(--line); border-radius:16px; background:var(--surface-soft); }
 .transaction-conflict p { margin:0; }

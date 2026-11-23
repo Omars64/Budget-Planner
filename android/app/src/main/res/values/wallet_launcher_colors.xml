@@ -9,5 +9,6 @@
     <color name="wallet_launcher_lagoon_background">#112e2b</color>
     <color name="wallet_launcher_ultramarine_background">#161933</color>
     <color name="wallet_launcher_lilac_background">#132b23</color>
+    <color name="wallet_launcher_miami_background">#22152d</color>
     <color name="wallet_launcher_papaya_background">#241512</color>
 </resources>

@@ -5,6 +5,7 @@
 .bank-inbox-badge { margin-left:auto; font-size:12px; min-width:22px; text-align:center; padding:2px 5px; background:var(--accent-soft); border-radius:8px; }
 .bank-inbox-item .section-row strong { overflow-wrap:anywhere; }
 .bank-item-meta { display:flex; gap:8px 18px; flex-wrap:wrap; color:var(--muted); font-size:13px; }
+.bank-review-warning { color:var(--text);background:var(--surface-soft);border-radius:6px;padding:0 6px; }
 .bank-app-list { max-height:280px; overflow:auto; margin-top:12px; display:grid; gap:12px; }
 .bank-setup small, .bank-duplicate small { display:block; overflow-wrap:anywhere; color:var(--muted); }
 .bank-duplicate { padding:12px; border:1px solid var(--line); border-radius:8px; display:grid; gap:8px; }

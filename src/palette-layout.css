@@ -256,6 +256,35 @@ body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2 .overview-activity-sh
 }
 .budgetly-v2.everyday-shell:not(.has-ai) .main-area { display:flex;flex-direction:column;min-height:100dvh;padding-inline:0;padding-top:0; }
 body:not([data-seasonal]):not(.has-wallpaper) .budgetly-v2.everyday-shell .main-area { background:var(--palette-header); }
+:root[data-palette=miami] {
+  --palette-header-accent:var(--palette-bright);
+  --surface-soft:#382b43;
+  --surface-hover:#46334e;
+}
+:root[data-miami-wallpaper] body:not([data-seasonal]) .budgetly-v2.everyday-shell .main-area {
+  position:relative;
+  isolation:isolate;
+}
+:root[data-miami-wallpaper] body:not([data-seasonal]) .budgetly-v2.everyday-shell .main-area::before {
+  content:'';
+  position:absolute;
+  inset:0 0 auto;
+  height:460px;
+  pointer-events:none;
+  z-index:-1;
+  background:linear-gradient(105deg,#22152de6,#22152d4d 78%,#22152d29),
+    linear-gradient(to top,#22152d,transparent 45%),
+    url('/themes/miami-sunset.webp') center 51% / cover;
+}
+:root[data-miami-wallpaper] body:not([data-seasonal]) .budgetly-v2.everyday-shell .topbar {
+  background:transparent;
+}
+@media(max-width:760px) {
+  :root[data-miami-wallpaper] body:not([data-seasonal]) .budgetly-v2.everyday-shell .main-area::before {
+    height:420px;
+    background-position:0 0,0 0,88% top;
+  }
+}
 .budgetly-v2.everyday-shell:is(.browser-app,.native-android) .topbar {
   width:100%;min-height:0;margin:0 auto;padding:18px var(--layout-gutter) 20px;
   grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto;gap:14px 10px;
