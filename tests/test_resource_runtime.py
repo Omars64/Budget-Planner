@@ -1,6 +1,7 @@
 """Runtime fences and entrypoint integration; all storage/providers are synthetic."""
 import asyncio
 import hashlib
+from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from importlib import import_module
@@ -624,7 +625,6 @@ def end_to_end(monkeypatch, isolated):
 
     event.listen(engine, 'before_cursor_execute', count_sql)
     app = import_module('api.app').app
-    previous = dict(app.dependency_overrides)
     dependencies = []
 
     def get_db():
@@ -636,14 +636,17 @@ def end_to_end(monkeypatch, isolated):
     def current_user(db=Depends(database.get_db)):
         return db.get(User, user_id)
 
-    app.dependency_overrides[database.get_db] = get_db
-    app.dependency_overrides[runtime.current_user] = current_user
+    monkeypatch.setitem(app.dependency_overrides, database.get_db, get_db)
+    monkeypatch.setitem(app.dependency_overrides, runtime.current_user, current_user)
     monkeypatch.setattr(app.state, 'storage_ready', True, raising=False)
     monkeypatch.setattr(app.state, 'storage_retry_at', 0, raising=False)
     initialize = Mock(side_effect=AssertionError('Synthetic schema already initialized'))
     monkeypatch.setattr(index, 'initialize_storage', initialize)
 
-    with fakeredis.FakeRedis(decode_responses=True, version=(7, 0)) as redis:
+    with ExitStack() as stack:
+        stack.callback(engine.dispose)
+        stack.callback(event.remove, engine, 'before_cursor_execute', count_sql)
+        redis = stack.enter_context(fakeredis.FakeRedis(decode_responses=True, version=(7, 0)))
         assert redis.eval("return cjson.decode(ARGV[1]).value", 0, '{"value":1}') == 1
         transport = SimpleNamespace(failed=False, commands=[])
 
@@ -668,18 +671,12 @@ def end_to_end(monkeypatch, isolated):
         for name in ('configured', 'read_state', 'read_health', 'claim_scheduler',
                      'begin_change', 'end_change', 'finish_scheduler', 'save_health', 'update_policy'):
             monkeypatch.setattr(runtime.control, name, getattr(coordinator, name))
-        try:
-            with TestClient(app, raise_server_exceptions=False) as client:
-                # Lifespan deliberately leaves optimized cold starts uninitialized.
-                app.state.storage_ready = True
-                yield SimpleNamespace(client=client, coordinator=coordinator, transport=transport,
-                    sql=sql, dependencies=dependencies, engine=engine, wallet_id=wallet_id,
-                    user_id=user_id, clock=clock, local_now=local_now, initialize=initialize)
-        finally:
-            app.dependency_overrides.clear()
-            app.dependency_overrides.update(previous)
-            event.remove(engine, 'before_cursor_execute', count_sql)
-            engine.dispose()
+        with TestClient(app, raise_server_exceptions=False) as client:
+            # Lifespan deliberately leaves optimized cold starts uninitialized.
+            app.state.storage_ready = True
+            yield SimpleNamespace(client=client, coordinator=coordinator, transport=transport,
+                sql=sql, dependencies=dependencies, engine=engine, wallet_id=wallet_id,
+                user_id=user_id, clock=clock, local_now=local_now, initialize=initialize)
 
 
 def ledger_snapshot(s):

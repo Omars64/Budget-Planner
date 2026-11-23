@@ -20,6 +20,11 @@ try {
     foreach ($command in @('node.exe', 'npm.cmd')) {
         if (!(Get-Command $command -ErrorAction SilentlyContinue)) { throw "Install Node.js with npm; $command was not found." }
     }
+    $python = $null
+    if (!$Debug -and !$SkipTests -and !$CheckOnly) {
+        $python = Get-Command python.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        if (!$python) { throw 'Use Python 3.13 with requirements-dev.txt installed to run the backend release tests.' }
+    }
     if (!$JdkHome) {
         $candidates = @($env:JAVA_HOME, (Join-Path $env:ProgramFiles 'Android/Android Studio/jbr'))
         $adoptium = Join-Path $env:ProgramFiles 'Eclipse Adoptium'
@@ -56,15 +61,20 @@ try {
 
     Push-Location $projectRoot
     try {
+        if ($python) {
+            $env:PYTEST_DISABLE_PLUGIN_AUTOLOAD = '1'
+            Invoke-Step 'Backend regression tests (same suite as GitHub)' {
+                & $python.Source -m pytest tests -q
+            }
+        }
         if (!$SkipInstall) {
             Write-Host "`n=== Prepare locked dependencies ===" -ForegroundColor Cyan
             & (Join-Path $PSScriptRoot 'install-deps.ps1') -IfNeeded
         }
         if (!$SkipTests) {
             Invoke-Step 'Frontend lint (same gate as GitHub)' { & npm.cmd run lint }
-            # One worker avoids intermittent Windows fork-start timeouts that can
-            # leave an otherwise successful suite waiting for hours.
-            Invoke-Step 'Frontend regression tests' { & npm.cmd test -- --maxWorkers=1 }
+            # Keep one worker and allow Windows enough time for the picker tests.
+            Invoke-Step 'Frontend regression tests' { & npm.cmd test -- --maxWorkers=1 --testTimeout=15000 }
         }
         Invoke-Step 'Build shared web assets' { & npm.cmd run build }
         Invoke-Step 'Check measured web bundle budget' { & npm.cmd run budget:client }

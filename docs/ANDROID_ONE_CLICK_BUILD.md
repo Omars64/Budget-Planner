@@ -4,7 +4,7 @@ Double-click `build-Budgetly.bat` in the repository root, or run `./build-Budget
 
 The batch checks GitHub access, the main branch, and the original signing files. It refreshes npm dependencies when the lockfile changes or the required tools are missing, runs local tests, and builds the web assets once for both packages. After verifying the APK, Windows installer, and both manifests, it stages changes, commits them if needed, and pushes main. It waits for Vercel and the GitHub quality workflow for that commit, then uploads the files to a draft release and publishes it.
 
-One-time setup: install GitHub CLI (`winget install --id GitHub.cli --exact`), reopen the terminal, then run `gh auth login`. Git must also be authenticated for pushes. The launcher does not collect or embed credentials.
+One-time setup: install GitHub CLI (`winget install --id GitHub.cli --exact`), reopen the terminal, then run `gh auth login`. Git must also be authenticated for pushes. With Python 3.13 active, run `python -m pip install -r requirements-dev.txt` to prepare the backend tests that run before packaging.
 
 The batch publishes `Budgetly-VERSION.apk` and `update.json` from `android/app/build/outputs/apk/release`, and `Budgetly-Setup-VERSION.exe` and `windows-update.json` from `dist-desktop`. Use `-Bundle` to also build the local Play bundle at `android/app/build/outputs/bundle/release/app-release.aab`. See [Android updates](ANDROID_UPDATES.md) for device testing.
 

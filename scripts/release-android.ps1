@@ -35,6 +35,7 @@ try {
         $result = Invoke-BudgetlyNativeCommand powershell.exe $buildArgs
         if ($result.ExitCode -eq 0 -and $BuildOnly -and !$CheckOnly) {
             Build-BudgetlyWindows $root ${function:Invoke-BudgetlyNativeCommand}
+            Write-Host 'LOCAL BUILD COMPLETE. Android and Windows artifacts are ready.' -ForegroundColor Green
         }
         exit $result.ExitCode
     }
@@ -47,8 +48,8 @@ try {
     Invoke-BudgetlyRelease -Root (Split-Path $PSScriptRoot -Parent) -BuildArguments $buildArgs -Message $Message -CheckOnly:$CheckOnly
     exit 0
 } catch {
-    Write-Host "RELEASE STOPPED: $($_.Exception.Message)" -ForegroundColor Red
-    Write-Host 'A successful Git push is not rolled back if a later build or release step fails.'
+    $phase = if ($BuildOnly -or $Debug -or $CheckOnly) { 'BUILD STOPPED' } else { 'RELEASE STOPPED' }
+    Write-Host "${phase}: $($_.Exception.Message)" -ForegroundColor Red
     exit 1
 } finally {
     if ($transcribing) { $null = Stop-Transcript }

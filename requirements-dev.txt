@@ -2,4 +2,6 @@
 pytest>=8.4,<9.0
 httpx>=0.28,<1.0
 fakeredis[lua]>=2.40,<3
+# fakeredis 2.40's constructor introspection is incompatible with redis-py 8.2.
+redis>=8.1,<8.2
 uvicorn[standard]>=0.35,<1.0

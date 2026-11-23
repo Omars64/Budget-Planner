@@ -33,10 +33,10 @@ function Get-BudgetlyReleaseGate([object]$Status, [object[]]$Runs) {
     $deployment = @($Status.statuses | Where-Object { $_.context -eq 'Vercel' } | Select-Object -First 1)
     $quality = @($Runs | Sort-Object databaseId -Descending | Select-Object -First 1)
     if ($deployment.Count -and $deployment[0].state -in @('failure', 'error')) {
-        throw "Vercel deployment failed: $($deployment[0].target_url). No Android update will be published."
+        throw "Publication blocked by the Vercel deployment: $($deployment[0].target_url)"
     }
     if ($quality.Count -and $quality[0].status -eq 'completed' -and $quality[0].conclusion -ne 'success') {
-        throw "GitHub quality gates did not pass ($($quality[0].conclusion)): $($quality[0].url). No Android update will be published."
+        throw "Publication blocked by the GitHub quality checks ($($quality[0].conclusion)): $($quality[0].url)"
     }
     return ($deployment.Count -gt 0 -and $deployment[0].state -eq 'success' -and
         $quality.Count -gt 0 -and $quality[0].status -eq 'completed' -and $quality[0].conclusion -eq 'success')
@@ -168,7 +168,7 @@ function Invoke-BudgetlyRelease {
         $commit = Run git.exe @('rev-parse', 'HEAD')
         $null = Run git.exe @('diff', '--exit-code')
         $null = Run git.exe @('diff', '--cached', '--exit-code')
-        Write-Host 'Verifying Vercel deployment and GitHub quality gates for this exact commit before publication...'
+        Write-Host 'Android and Windows packages passed local validation. Waiting for Vercel and GitHub checks before publishing...'
         $deadline = [DateTime]::UtcNow.AddMinutes(20)
         do {
             $deploymentStatus = Run gh.exe @('api', "repos/$repo/commits/$commit/status") | ConvertFrom-Json
@@ -184,10 +184,13 @@ function Invoke-BudgetlyRelease {
                     $diagnostic = & $Runner gh.exe @('run', 'view', [string]$failedRun[0].databaseId, '--repo', $repo, '--log-failed')
                     $diagnostic.Output | Select-Object -Last 100 | ForEach-Object { Write-Host $_ }
                 }
-                Write-Host "The APK is retained at $apk. Fix the reported checks and rerun build-Budgetly.bat; no force push or version change is required for this unpublished release."
+                Write-Host "Local Android APK: $apk"
+                Write-Host "Local Windows installer: $installer"
                 throw $failure
             }
-            if ([DateTime]::UtcNow -ge $deadline) { throw 'Timed out waiting for deployment/quality checks. APK remains local; fix checks and rerun this version.' }
+            if ([DateTime]::UtcNow -ge $deadline) {
+                throw "Publication timed out waiting for Vercel or GitHub checks. Local packages are in $directory and $windowsDirectory."
+            }
             Start-Sleep -Seconds 10
         } while ($true)
         if ($existing) {
