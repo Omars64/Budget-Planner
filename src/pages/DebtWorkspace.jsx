@@ -66,6 +66,7 @@ function DebtScreen({spaceId,tab,requestedPreview}) {
   const request = useRef(null)
   const [direction,setDirection] = useState('owe')
   const [scheduleMonth,setScheduleMonth] = useState(currentMonth)
+  const [scheduleStatus,setScheduleStatus] = useState('all')
   const [historyMonth,setHistoryMonth] = useState(currentMonth)
   const [by,setBy] = useState('actual')
   const [modal,setModal] = useState(null)
@@ -104,6 +105,8 @@ function DebtScreen({spaceId,tab,requestedPreview}) {
   const currency = workspace?.currency || personalCurrency
   const fmt = amount => money(amount/1000,currency)
   const range = allItems(records)
+  const scheduled = tab==='schedule' ? range.filter(({item})=>item.month===scheduleMonth &&
+    (scheduleStatus==='all'||left(item)>0 && (scheduleStatus==='due'||item.due<today))) : []
   const open = openItems(records)
   const activeRecords = records.filter(record=>incoming(record)===(direction==='lent'))
   const next = open.find(({record})=>incoming(record)===(direction==='lent'))
@@ -245,8 +248,11 @@ function DebtScreen({spaceId,tab,requestedPreview}) {
     </div>}
     {tab==='schedule' && <div className="debt-narrow stack gap-12">
       <div className="debt-heading debt-schedule-control">{monthControl(scheduleMonth,setScheduleMonth,'Schedule month')}<InfoButton label="About the schedule" onClick={()=>setInfo('schedule')}/></div>
-      {range.some(({item})=>item.month===scheduleMonth)?<ul className="debt-list">{range.filter(({item})=>item.month===scheduleMonth).sort((a,b)=>a.item.due.localeCompare(b.item.due)).map(({record,item})=>scheduleRow(record,item))}</ul>:
-        <p className="muted">No instalments for this month.</p>}
+      <label className="field"><span>Status</span><AppSelect value={scheduleStatus} onChange={event=>setScheduleStatus(event.target.value)}>
+        <option value="all">All instalments</option><option value="due">Still due</option><option value="overdue">Overdue</option>
+      </AppSelect></label>
+      {scheduled.length?<ul className="debt-list">{scheduled.sort((a,b)=>a.item.due.localeCompare(b.item.due)).map(({record,item})=>scheduleRow(record,item))}</ul>:
+        <p className="muted">{scheduleStatus==='all'?'No instalments for this month.':'No instalments match this status.'}</p>}
     </div>}
     {tab==='history' && <div className="debt-narrow stack gap-12">
       <div className="debt-history-tools">{monthControl(historyMonth,setHistoryMonth,'History month')}
@@ -279,13 +285,16 @@ function DebtScreen({spaceId,tab,requestedPreview}) {
     <Modal open={modal?.type==='record'&&Boolean(selected)} onClose={close} title={selected?.name || 'Debt'} subtitle={selected&&[selected.person,debtKinds[selected.kind]].filter(Boolean).join(' · ')}>
       {selected && <div className="stack gap-12">
         <div className="debt-record-balance"><small>{incoming(selected)?'Still to receive':'Still to pay'}</small><strong>{fmt(remaining(selected))}</strong>
-          <progress aria-label="Repayment progress" value={sum(selected.items,paid)} max={sum(selected.items,term=>term.amount)}/></div>
-         {canEdit&&!preview&&<button type="button" className="button secondary" onClick={()=>show('edit',selected)}>Edit debt</button>}
+          <progress aria-label="Repayment progress" value={sum(selected.items,paid)} max={sum(selected.items,term=>term.amount)}/>
+          <small>{incoming(selected)?'Received so far':'Paid so far'} · {fmt(sum(selected.items,paid))}</small></div>
         <h3>Instalments</h3>{selected.note&&<p className="muted">{selected.note}</p>}
         <ul className="debt-list">{selected.items.slice(0,expanded?selected.items.length:5).map(term=><Row key={term.id} icon={CalendarDays} name={monthLabel(term.month)}
           description={`Due ${dayLabel(term.due)}`} amount={fmt(term.covered_by?0:left(term)||term.amount)} status={paymentStatus(selected,term,today)} onClick={()=>show('instalment',selected,term)}/>)}</ul>
         {!expanded&&selected.items.length>5&&<button type="button" className="button ghost" onClick={()=>setExpanded(true)}>Show all {selected.items.length} instalments</button>}
-        {canEdit&&!preview&&<details className="form-options"><summary>More options</summary><button type="button" className="button danger" onClick={()=>void confirmDelete(selected)}>Delete debt</button></details>}
+        {canEdit&&!preview&&<details className="form-options"><summary>More options</summary><div className="button-row">
+          <button type="button" className="button secondary" onClick={()=>show('edit',selected)}>Edit debt</button>
+          <button type="button" className="button danger" onClick={()=>void confirmDelete(selected)}>Delete debt</button>
+        </div></details>}
         {formError&&<p className="form-error" role="alert">{formError}</p>}
       </div>}
     </Modal>
@@ -293,7 +302,10 @@ function DebtScreen({spaceId,tab,requestedPreview}) {
       {selected&&item&&<div className="stack gap-12">
         <dl className="debt-data"><dt>Payment month</dt><dd>{monthLabel(item.month)}</dd><dt>Due date</dt><dd>{dayLabel(item.due)}</dd>
           <dt>Scheduled amount</dt><dd>{fmt(item.amount)}</dd><dt>{incoming(selected)?'Received so far':'Paid so far'}</dt><dd>{fmt(paid(item))}</dd><dt>Left for this month</dt><dd>{fmt(left(item))}</dd></dl>
-        {left(item)>0&&canEdit&&!preview&&<div className="button-row"><button type="button" className="button ghost" onClick={()=>show('due',selected,item)}>Change due date</button></div>}
+        {left(item)>0&&canEdit&&!preview&&<div className="button-row">
+          <button type="button" className="button primary" onClick={()=>show('payment',selected,item)}>{incoming(selected)?'Record money received':'Record payment'}</button>
+          <button type="button" className="button ghost" onClick={()=>show('due',selected,item)}>Change due date</button>
+        </div>}
         <h3>{incoming(selected)?'Receipts':'Payments'}</h3>
         {item.payments.length?<ul className="debt-list">{item.payments.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(payment=><li key={payment.id} className="debt-payment-line"><span>{dayLabel(payment.date)}
           {payment.note&&<small>{payment.note}</small>}{payment.transaction_id&&<small>Linked Personal transaction</small>}</span><strong>{fmt(payment.amount)}</strong></li>)}</ul>

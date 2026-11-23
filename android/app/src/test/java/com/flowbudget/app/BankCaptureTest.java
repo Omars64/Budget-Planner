@@ -2,6 +2,7 @@ package com.flowbudget.app;
 
 import android.app.Notification;
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.service.notification.StatusBarNotification;
@@ -19,6 +20,7 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 import static org.junit.Assert.*;
+import static org.robolectric.Shadows.shadowOf;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 28, manifest = Config.NONE)
@@ -94,6 +96,18 @@ public class BankCaptureTest {
             service.onNotificationPosted(alert("bank.app", text, 0));
         }
         assertTrue(worker.tasks.isEmpty());
+    }
+
+    @Test public void signalsTheAppWithoutSendingAnyBankDataAfterQueuing() throws Exception {
+        service.onNotificationPosted(alert("bank.app", "Purchase KWD 5.000 at Shop", 0));
+        assertEquals(0, pending("1").length());
+        worker.drain();
+        assertEquals(1, pending("1").length());
+        List<Intent> changes = shadowOf(RuntimeEnvironment.getApplication()).getBroadcastIntents().stream()
+            .filter(intent -> BankNotificationListenerService.QUEUE_CHANGED.equals(intent.getAction())).toList();
+        assertEquals(1, changes.size());
+        assertEquals(context.getPackageName(), changes.get(0).getPackage());
+        assertNull(changes.get(0).getExtras());
     }
 
     @Test public void rejectsUnapprovedSourcesSummariesAndDisabledCapture() {

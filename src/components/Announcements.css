@@ -1,0 +1,17 @@
+.announcement-message {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.notification-inbox button.notification-inbox-link {
+  text-align: start;
+  background: transparent;
+}
+
+.notification-inbox button.notification-inbox-link:hover {
+  background: var(--surface-hover);
+}
+
+.notification-inbox-link strong {
+  overflow-wrap: anywhere;
+}

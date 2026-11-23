@@ -43,7 +43,8 @@ from .ledger_filters import ledger_options, filter_ledger
 from ._version import VERSION
 from .ledger_accounting import personal_wallet_ids, personal_records, set_opening_balance, migrate_opening_balances, require_regular_transaction
 from .spaces import workspace_user, router as spaces_router, attach_wallet_members
-from .auth_dependency import current_user
+from .auth_dependency import admin_user, current_user
+from .announcements import router as announcements_router
 from .coordination import lock_owners, snapshot_session
 from .debt_workspace import KEY as debt_workspace_key, Workspace as DebtWorkspace, remove_pending_debt_invitations, router as debt_workspace_router
 from .debt_workspace import DebtSpaceArchive, export_debt_spaces, restore_debt_spaces
@@ -206,6 +207,7 @@ async def lifespan(application: FastAPI):
 app = FastAPI(title="Budgetly API", version=VERSION, lifespan=lifespan)
 app.include_router(spaces_router)
 app.include_router(debt_workspace_router)
+app.include_router(announcements_router)
 
 
 @app.middleware("http")
@@ -300,12 +302,6 @@ def issue_token(user: User) -> str:
         db.add(AccountSession(id=sid, user_id=user.id, verified_at=utc_now()))
         db.commit()
     return auth_serializer.dumps({"user_id": user.id, "sid": sid, "role": user.role, "credential": hashlib.sha256(user.password_hash.encode()).hexdigest()})
-
-
-def admin_user(user: User = Depends(current_user)) -> User:
-    if user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-    return user
 
 
 def setting(db: Session, user_id: int, key: str, default: str = "") -> str:

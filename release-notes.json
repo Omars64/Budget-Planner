@@ -1,4 +1,11 @@
 {
+  "6.25.2": [
+    {"title":"Live Bank Inbox on Android","detail":"Eligible bank alerts refresh the inbox and badge while Budgetly is open."},
+    {"title":"Automatic session expiry","detail":"Expired sessions end automatically. The sign-in screen explains why you need to sign in again."},
+    {"title":"Easier debt management","detail":"Find Edit and Delete together in More options, filter the schedule by status and record payments directly from an instalment."},
+    {"title":"Worksheet copies","detail":"Import Google Sheets and Excel files with charts or drawings. The review shows which features the Budgetly copy leaves out."},
+    {"title":"Admin announcements","detail":"Admins can send messages to active accounts through the Budgetly notification inbox."}
+  ],
   "6.25.1": [
     {"title":"Faster startup and navigation","detail":"Budgetly loads your Overview sooner and shows recently viewed transactions immediately while refreshing them in the background."},
     {"title":"Smoother transaction saves","detail":"The entry form reuses wallet and category choices, and the transaction list keeps its position after a save."},

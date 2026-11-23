@@ -81,18 +81,37 @@ export const auth = {
 }
 
 function sessionExpiredError() {
-  return Object.assign(new Error('Session expired. Logging out now…'), { status: 401, sessionExpired: true })
+  return Object.assign(new Error('Your session expired. Sign in again to continue.'), { status: 401, sessionExpired: true })
+}
+
+export function expireSession(token) {
+  if (token && token === auth.token && !auth.expired) {
+    expiredToken = token
+    invalidateReads()
+    window.dispatchEvent(new Event(sessionExpiredEvent))
+  }
+}
+
+export function sessionExpiresAt(token) {
+  // ItsDangerous places the signed issue timestamp before the signature.
+  const parts = token?.split('.')
+  if (parts?.length !== 3 && (parts?.length !== 4 || parts[0] !== '')) return null
+  const encoded = parts.at(-2)
+  if (!/^[\w-]{1,8}$/.test(encoded)) return null
+  try {
+    const bytes = atob(encoded.replace(/-/g, '+').replace(/_/g, '/'))
+    const seconds = Array.from(bytes).reduce((timestamp, byte) => timestamp * 256 + byte.charCodeAt(0), 0)
+    return (seconds + 24 * 60 * 60) * 1000
+  } catch {
+    return null
+  }
 }
 
 function detectExpiredSession(response, detail, token) {
   if (!token || token !== auth.token || response.status !== 401) return
   // Older hosted APIs still return the original messages during rollout.
   if (response.headers?.get('WWW-Authenticate') !== 'Bearer error="invalid_token"' && !legacySessionErrors.has(detail)) return
-  if (!auth.expired) {
-    expiredToken = token
-    invalidateReads()
-    window.dispatchEvent(new Event(sessionExpiredEvent))
-  }
+  expireSession(token)
   throw sessionExpiredError()
 }
 

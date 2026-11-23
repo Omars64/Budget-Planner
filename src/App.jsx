@@ -3,7 +3,7 @@ import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useM
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowLeft, RefreshCw } from 'lucide-react'
-import { api, auth, flushOfflineTransactions, jsonBody, sessionExpiredEvent } from './lib/api'
+import { api, auth, expireSession, flushOfflineTransactions, jsonBody, sessionExpiredEvent, sessionExpiresAt } from './lib/api'
 import { startReadPolling, startResourcePolicySession } from './lib/resourcePolicy'
 import {installMoneyInputDefaults} from './lib/moneyInputs'
 import { rememberOfflineSession, restoreOfflineSession, setOfflineUser } from './lib/offlineSync'
@@ -47,7 +47,7 @@ import PasswordRecovery from './components/PasswordRecovery'
 import GoogleSignIn from './components/GoogleSignIn'
 import { cancelReminder } from './lib/deviceNotifications'
 import { BankSms, smsAvailable } from './lib/bankSms'
-import { bankNotificationsAvailable, BankNotifications, suspendBankCapture, syncBankNotifications } from './lib/bankNotifications/native'
+import { bankNotificationsAvailable, suspendBankCapture, watchBankNotifications } from './lib/bankNotifications/native'
 import { readDeviceAppearance, useAppearance } from './lib/appearance'
 import usePendingBankAlerts from './lib/bankNotifications/usePendingBankAlerts'
 import FeedbackPrompt from './components/FeedbackPrompt'
@@ -224,12 +224,13 @@ function StartupScreen({ label }) {
   return <div className="app-loading" role="status" aria-label={label}><span className="startup-ring" aria-hidden="true"/></div>
 }
 
+const expiredSessionKey = 'budgetly:session-ended'
+
 export default function App() {
   const currentLocation = useLocation()
   const { confirm, confirmation } = useConfirmation()
   const [session, setSession] = useState({ loading: true, user: null })
-  const [sessionExpiry, setSessionExpiry] = useState(null)
-  const [signInAfterExpiry, setSignInAfterExpiry] = useState(false)
+  const [signInAfterExpiry, setSignInAfterExpiry] = useState(() => localStorage.getItem(expiredSessionKey) === '1')
   const [deviceAppearance, setDeviceAppearanceState] = useState(readDeviceAppearance)
   const [accountSettings, setSettings] = useState(() => ({ ...deviceAppearance, logo_style: 'current', currency: 'KWD', display_name: 'Budgetly', week_starts_on: 'sunday', compact_numbers: false }))
   const setDeviceAppearance = useCallback(patch => setDeviceAppearanceState(current => ({ ...current, ...patch })), [])
@@ -252,6 +253,7 @@ export default function App() {
   const isGuest = session.user?.role === 'guest'
   const enterGuest = useCallback(async () => {
     const data = readGuest()
+    localStorage.removeItem(expiredSessionKey)
     setGuestActive(true); setOfflineUser(null)
     setSettings(data.settings); setAppearance({ profile_image: '', wallpaper_image: '' })
     setGuestSigningIn(false); setSignInAfterExpiry(false); setSession({ loading: false, user: guestUser })
@@ -266,7 +268,7 @@ export default function App() {
   const notify = useCallback((message, type = 'success', action = null) => {
     setToast({ id: Date.now(), message, type, action })
   }, [])
-  const activeUser = sessionExpiry ? null : session.user
+  const activeUser = session.user
   const spaceState = useSpaces(activeUser, notify, confirm)
   const {spaces:debtSpaces, loaded:debtSpacesLoaded, error:debtSpacesError, reload:reloadDebtSpaces,
     remember:rememberDebtSpace, forget:forgetDeletedDebtSpace, refresh:refreshDebtSpaces} = useDebtSpaces(activeUser)
@@ -290,23 +292,13 @@ export default function App() {
     return startResourcePolicySession()
   }, [activeUser?.id, isGuest])
   useEffect(() => {
-    if (!bankNotificationsAvailable() || session.loading || sessionExpiry) return
+    if (!bankNotificationsAvailable() || session.loading) return
     if (!session.user || isGuest) { void suspendBankCapture().catch(() => {}); return }
-    let alive = true
-    const sync = async () => {
-      if (!alive || document.visibilityState === 'hidden') return
-      try {
-        await BankNotifications.bindSession({ owner: String(session.user.id) })
-        await syncBankNotifications(session.user.id)
-      } catch { /* Queue is retained; Bank Inbox offers an explicit retry. */ }
-    }
-    void sync()
-    const changed = () => { void sync() }
     const logout = () => { void suspendBankCapture().catch(() => {}) }
-    window.addEventListener('online', changed); window.addEventListener('focus', changed)
-    document.addEventListener('visibilitychange', changed); window.addEventListener('budgetly:auth-cleared', logout)
-    return () => { alive = false; window.removeEventListener('online', changed); window.removeEventListener('focus', changed); document.removeEventListener('visibilitychange', changed); window.removeEventListener('budgetly:auth-cleared', logout) }
-  }, [session.loading, session.user?.id, isGuest, sessionExpiry])
+    window.addEventListener('budgetly:auth-cleared', logout)
+    const stop = watchBankNotifications(session.user.id)
+    return () => { stop(); window.removeEventListener('budgetly:auth-cleared', logout) }
+  }, [session.loading, session.user?.id, isGuest])
   useEffect(() => {
     const prompt = event => { if (guestActive()) setGuestFeature(event.detail || 'this feature') }
     const changed = () => { if (guestActive()) refresh() }
@@ -391,35 +383,38 @@ export default function App() {
   }, [session.user?.id])
   useEffect(() => {
     const expired = () => {
-      const token = auth.token
-      if (token) setSessionExpiry(current => current?.token === token ? current : { token, deadline: Date.now() + 5000 })
+      if (!auth.expired) return
+      localStorage.setItem(expiredSessionKey, '1')
+      setSignInAfterExpiry(true)
+      clearSession()
     }
     window.addEventListener(sessionExpiredEvent, expired)
     if (auth.expired) expired()
     return () => window.removeEventListener(sessionExpiredEvent, expired)
-  }, [])
+  }, [clearSession])
   useEffect(() => {
-    if (!sessionExpiry) return
-    const finish = () => {
-      if (auth.token === sessionExpiry.token && auth.expired) {
-        clearSession()
-        setSignInAfterExpiry(true)
-      }
-      setSessionExpiry(current => current === sessionExpiry ? null : current)
-    }
-    const finishOnResume = () => { if (Date.now() >= sessionExpiry.deadline) finish() }
-    const timer = window.setTimeout(finish, Math.max(0, sessionExpiry.deadline - Date.now()))
-    document.addEventListener('visibilitychange', finishOnResume)
+    const token = auth.token
+    const deadline = sessionExpiresAt(token)
+    if (deadline === null) return
+    const check = () => { if (Date.now() >= deadline) expireSession(token) }
+    check()
+    if (auth.token !== token) return
+    const timer = window.setTimeout(check, Math.min(86_400_000, Math.max(0, deadline - Date.now())))
+    document.addEventListener('visibilitychange', check)
+    window.addEventListener('focus', check)
+    window.addEventListener('pageshow', check)
     return () => {
       window.clearTimeout(timer)
-      document.removeEventListener('visibilitychange', finishOnResume)
+      document.removeEventListener('visibilitychange', check)
+      window.removeEventListener('focus', check)
+      window.removeEventListener('pageshow', check)
     }
-  }, [sessionExpiry, clearSession])
+  }, [session.loading, session.user?.id])
 
   useEffect(() => {
     const resume = async () => {
       const token = auth.token
-      if (!token) { if (guestRemembered()) { try { await enterGuest(); return } catch (error) { console.error(error) } } setSession({ loading: false, user: null }); return }
+      if (!token) { if (!localStorage.getItem(expiredSessionKey) && guestRemembered()) { try { await enterGuest(); return } catch (error) { console.error(error) } } setSession({ loading: false, user: null }); return }
       setGuestActive(false)
       if (navigator.onLine === false) {
         // A controlled worker/browser can leave an offline fetch pending. Open
@@ -472,6 +467,7 @@ export default function App() {
     setOfflineUser(user.id)
     await loadSettings()
     if (auth.token !== token || auth.expired) return
+    localStorage.removeItem(expiredSessionKey)
     setSignInAfterExpiry(false)
     setSession({ loading: false, user })
     void loadAppearance()
@@ -491,7 +487,6 @@ export default function App() {
     bankInboxCount, bankInboxLatestId, refreshKey, refresh, notify, confirm, reloadSettings: loadSettings, reloadAppearance: loadAppearance, reloadUser, isGuest, requestSignIn, lock: isGuest ? () => setGuestSigningIn(true) : signOut,
   }), [session.user, settings, viewSettings, setDeviceAppearance, iconPalette, iconFollowsPalette, setIconFollowsPalette, spaceState, activeSpace, appearance, debtSpaces, debtSpacesLoaded, debtSpacesError, reloadDebtSpaces, rememberDebtSpace, forgetDeletedDebtSpace, refreshDebtSpaces, bankInboxCount, bankInboxLatestId, refreshKey, refresh, notify, confirm, loadSettings, loadAppearance, reloadUser, signOut, isGuest, requestSignIn])
 
-  if (sessionExpiry) return <div className="app-loading session-expired"><p role="alert">Session expired. Logging out now…</p></div>
   if (session.loading) return <StartupScreen label="Loading Budgetly"/>
   if (!session.user || guestSigningIn) return <WelcomeScreen onGuest={enterGuest} returningGuest={isGuest} openSignIn={signInAfterExpiry} renderAuth={(mode, setWorking) => <LoginScreen initialMode={mode} embedded onBusyChange={setWorking} onLogin={completeLogin} onGuest={enterGuest} returningGuest={isGuest}/>}/>
   if (!spaceState.spacesReady) return <StartupScreen label="Opening workspace"/>

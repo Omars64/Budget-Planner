@@ -2,7 +2,7 @@ import { workspaceNavigation } from '../lib/workspaceNavigation'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Bell, CalendarDays, ChevronLeft, ChevronRight, History, Landmark, LogOut, Menu, PanelLeftOpen, Plus, Search, ShieldCheck } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useApp } from '../App'
 import TransactionModal from './TransactionModal'
 import SpaceSwitcher from './SpaceSwitcher'
@@ -26,8 +26,10 @@ import { Coffee, ExternalLink } from 'lucide-react'
 import SupportPrompt from './SupportPrompt'
 import { SUPPORT_URL } from '../lib/support'
 import Modal from './Modal'
+import NotificationAnnouncements from './NotificationAnnouncements'
 import { PageActionsProvider } from './PageActions'
 import { api } from '../lib/api'
+import { startReadPolling } from '../lib/resourcePolicy'
 import { attentionKeys, useNotificationReads } from '../lib/notificationReads'
 import { debtRoles, debtRoute, debtUrl, debtViews } from '../lib/debtWorkspace'
 import './DebtNavigation.css'
@@ -44,6 +46,9 @@ export default function AppShell({ children }) {
   const debtRouteActive = Boolean(debtLocation)
   const nativeAndroid = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android'
   const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [showAnnouncements, setShowAnnouncements] = useState(false)
+  const [announcementUnread, setAnnouncementUnread] = useState(0)
+  const announcementPolling = useRef(null)
   const [notificationRequest, setNotificationRequest] = useState(0)
   const [attention, setAttention] = useState(null)
   const [pageActions, setPageActions] = useState(null)
@@ -87,6 +92,17 @@ export default function AppShell({ children }) {
   }, [navSearch, nativeAndroid, navigate, debtRouteActive])
   useContainedScroll(sidebar)
   const { user, settings, iconPalette, appearance, refresh, refreshKey, notify, lock, isGuest, requestSignIn, activeSpace, spaceKey, canAdd, debtSpaces = [], bankInboxCount = 0, bankInboxLatestId = 0 } = useApp()
+  useEffect(() => {
+    if (isGuest || !user?.id) return
+    const controller = new AbortController()
+    const poll = startReadPolling(async () => {
+      const result = await api('/api/announcements/unread', { signal: controller.signal })
+      if (!controller.signal.aborted) setAnnouncementUnread(result.count ?? 0)
+    }, { initialDelay: 1500 })
+    announcementPolling.current = poll
+    return () => { controller.abort(); poll(); announcementPolling.current = null }
+  }, [isGuest, user?.id])
+  const refreshAnnouncements = useCallback(() => announcementPolling.current?.refresh(), [])
   const seen = useNotificationReads(isGuest ? null : user?.id, spaceKey)
   const [preferences] = useWorkspacePreferences(user?.id)
   const keyboardOpen = useKeyboardViewport()
@@ -124,11 +140,12 @@ export default function AppShell({ children }) {
   }, [shouldLoadAttention, refreshKey, notificationRequest])
   const attentionUnread = attention?.filter(key => !seen.attention.includes(key)).length ?? 0
   const bankUnread = bankInboxCount > 0 && bankInboxLatestId > seen.bank
-  const notificationCount = Number(bankUnread) + attentionUnread
+  const notificationCount = Number(bankUnread) + attentionUnread + announcementUnread
   const notificationLabel = [
     'Notifications',
     bankUnread && 'New bank alerts',
     attentionUnread > 0 && `${attentionUnread} new attention ${attentionUnread === 1 ? 'item' : 'items'}`,
+    announcementUnread > 0 && `${announcementUnread} unread ${announcementUnread === 1 ? 'announcement' : 'announcements'}`,
   ].filter(Boolean).join(', ')
   const isWallets = location.pathname === '/wallets'
   const pageParams = new URLSearchParams(location.search)
@@ -177,7 +194,7 @@ export default function AppShell({ children }) {
       <header className="topbar" role="banner">
         <div className="mobile-space"><SpaceSwitcher/></div>
         {!isDebt && <div className="header-controls">
-          {!isGuest && <button type="button" className="icon-button notification-trigger" aria-label={notificationLabel} aria-haspopup="dialog" onClick={() => { setNotificationRequest(value => value + 1); setNotificationsOpen(true) }}><Bell size={20} aria-hidden="true"/>{notificationCount > 0 && <small className="bank-inbox-badge" aria-hidden="true">{notificationCount}</small>}</button>}
+          {!isGuest && <button type="button" className="icon-button notification-trigger" aria-label={notificationLabel} aria-haspopup="dialog" onClick={() => { refreshAnnouncements(); setShowAnnouncements(false); setNotificationRequest(value => value + 1); setNotificationsOpen(true) }}><Bell size={20} aria-hidden="true"/>{notificationCount > 0 && <small className="bank-inbox-badge" aria-hidden="true">{notificationCount}</small>}</button>}
           <Link to="/settings" className="header-user-tag" aria-label="Account and preferences" title={isGuest ? 'Guest' : user?.username}>
             {appearance.profile_image ? <img className="header-user-avatar" src={appearance.profile_image} alt=""/> : <span className="header-user-avatar" aria-hidden="true">{(isGuest ? 'Guest' : user?.username || 'Budgetly').slice(0,1).toUpperCase()}</span>}
           </Link>
@@ -211,8 +228,14 @@ export default function AppShell({ children }) {
       <Link to="/more" aria-label="More tools" className={!primaryRoutes.has(location.pathname) ? 'active' : ''} aria-current={!primaryRoutes.has(location.pathname) ? 'page' : undefined}><Menu size={19}/><span>More</span></Link>
     </nav>}
 
-    <Modal open={notificationsOpen} onClose={() => setNotificationsOpen(false)} title="Notifications" size="small">
+    <Modal open={notificationsOpen} onClose={() => setNotificationsOpen(false)} title={showAnnouncements ? 'Announcements' : 'Notifications'} size="small">
+      {notificationsOpen && showAnnouncements ? <NotificationAnnouncements onBack={() => setShowAnnouncements(false)} onRead={refreshAnnouncements}/> :
       <div className="notification-inbox">
+        <button type="button" className="notification-inbox-link" onClick={() => setShowAnnouncements(true)}>
+          <span><strong>Announcements</strong><small>Messages from Budgetly</small></span>
+          {announcementUnread > 0 && <span className="bank-inbox-badge" aria-label={`${announcementUnread} unread`}>{announcementUnread}</span>}
+          <ChevronRight size={17} aria-hidden="true"/>
+        </button>
         <Link className="notification-inbox-link" to="/bank-messages" onClick={() => setNotificationsOpen(false)}>
           <span><strong>Bank Inbox</strong><small>{bankInboxCount ? `${bankInboxCount} waiting for review` : 'No bank alerts waiting for review'}</small></span>{bankUnread && <span className="bank-inbox-badge">New</span>}<ChevronRight size={17} aria-hidden="true"/>
         </Link>
@@ -220,7 +243,7 @@ export default function AppShell({ children }) {
           <span><strong>Needs your attention</strong><small>{attention?.length === 0 ? 'No items to review' : 'Review budgets, plans and deadlines'}</small></span>{attentionUnread > 0 && <span className="bank-inbox-badge" aria-label={`${attentionUnread} new`}>{attentionUnread}</span>}<ChevronRight size={17} aria-hidden="true"/>
         </Link>
         <Link className="notification-inbox-link" to="/upcoming" onClick={() => setNotificationsOpen(false)}><strong>Upcoming reminders</strong><ChevronRight size={17} aria-hidden="true"/></Link>
-      </div>
+      </div>}
     </Modal>
     <TransactionModal open={txModal} onClose={() => setTxModal(false)} onSaved={(saved, scheduled) => { setTxModal(false); if (scheduled || isGuest || !isLedger) refresh(); notify(saved.queued ? 'Saved on this device. Will sync when connected.' : scheduled ? 'Transaction scheduled' : 'Transaction saved') }} />
     <SupportPrompt userId={user?.id} guest={isGuest} popupEnabled={settings.support_popup_enabled !== false} suppressed={isDebt || notificationsOpen || keyboardOpen || txModal}/>

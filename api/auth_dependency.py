@@ -38,3 +38,9 @@ def current_user(request: Request, db: Session = Depends(get_db)) -> User:
         session.label = request.headers.get('user-agent', 'Browser session')[:200]
         session.last_seen = utc_now(); db.commit()
     return user
+
+
+def admin_user(user: User = Depends(current_user)) -> User:
+    if user.role != 'admin':
+        raise HTTPException(403, 'Admin access required')
+    return user

@@ -1,10 +1,14 @@
 package com.flowbudget.app;
 
 import android.content.ComponentName;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.ResolveInfo;
 import android.provider.Settings;
+import androidx.core.content.ContextCompat;
 import com.getcapacitor.*;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import java.util.HashSet;
@@ -12,6 +16,19 @@ import java.util.Set;
 
 @CapacitorPlugin(name="BankNotifications")
 public class BankNotificationsPlugin extends Plugin {
+    private final BroadcastReceiver queueChanges = new BroadcastReceiver() {
+        @Override public void onReceive(Context context, Intent intent) {
+            notifyListeners("notificationQueued", new JSObject());
+        }
+    };
+    @Override public void load() {
+        ContextCompat.registerReceiver(getContext(), queueChanges,
+            new IntentFilter(BankNotificationListenerService.QUEUE_CHANGED), ContextCompat.RECEIVER_NOT_EXPORTED);
+    }
+    @Override protected void handleOnDestroy() {
+        getContext().unregisterReceiver(queueChanges);
+        super.handleOnDestroy();
+    }
     private SharedPreferences prefs() { return getContext().getSharedPreferences("bank_notifications", 0); }
     private String owner(PluginCall call) {
         String value = call.getString("owner", "");

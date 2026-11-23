@@ -3,6 +3,7 @@ package com.flowbudget.app;
 import android.app.Notification;
 import android.os.Bundle;
 import android.content.SharedPreferences;
+import android.content.Intent;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 import org.json.JSONObject;
@@ -14,6 +15,7 @@ import java.util.concurrent.Executors;
 import java.util.regex.Pattern;
 
 public class BankNotificationListenerService extends NotificationListenerService {
+    static final String QUEUE_CHANGED = "com.flowbudget.app.BANK_NOTIFICATION_QUEUED";
     private final ExecutorService worker;
     public BankNotificationListenerService() { this(Executors.newSingleThreadExecutor()); }
     BankNotificationListenerService(ExecutorService worker) { this.worker = worker; }
@@ -57,6 +59,7 @@ public class BankNotificationListenerService extends NotificationListenerService
                 try (BankNotificationStore store = new BankNotificationStore(this)) {
                     if (!store.add(owner, row)) prefs.edit().putBoolean("queueFull", true).apply();
                 }
+                sendBroadcast(new Intent(QUEUE_CHANGED).setPackage(getPackageName()));
             } catch (Exception failure) { prefs.edit().putBoolean("captureError", true).apply(); }
         });
     }

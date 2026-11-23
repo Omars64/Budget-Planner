@@ -1,9 +1,32 @@
 import {expect,test} from 'vitest'
 import ExcelJS from 'exceljs'
+import { strToU8, unzipSync, zipSync } from 'fflate'
 import {loadWorkbook} from './workbook'
 import {formatted} from './workbookCells'
 import {calculate, calculateSnapshot} from './workbookCalc'
 import {applyWorkbookResult, workbookSnapshot} from './workbookCalculation'
+
+test('imports a worksheet copy of a drawn workbook and preserves its formulas and styles', async () => {
+  const source = new ExcelJS.Workbook()
+  const sheet = source.addWorksheet('Expenses')
+  sheet.getCell('A1').value = 6
+  sheet.getCell('A1').numFmt = '0.000'
+  sheet.getCell('B1').value = { formula:'A1*2', result:12 }
+  sheet.mergeCells('C1:D1')
+  sheet.addImage(source.addImage({ extension:'png', base64:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jLioAAAAASUVORK5CYII=' }), 'E1:F2')
+  const parts = unzipSync(new Uint8Array(await source.xlsx.writeBuffer()))
+  parts['xl/charts/chart1.xml'] = strToU8('<chart/>')
+  parts['xl/pivotCache/pivotCacheDefinition1.xml'] = strToU8('<pivotCacheDefinition/>')
+  let omitted
+  const book = await loadWorkbook(zipSync(parts), { reportOmissions: features => { omitted = features } })
+  const imported = book.getWorksheet('Expenses')
+  expect(omitted).toEqual(['charts', 'drawings', 'images', 'pivot tables'])
+  expect(imported.getCell('A1').numFmt).toBe('0.000')
+  expect(imported.getCell('B1').value).toEqual({ formula:'A1*2', result:12 })
+  expect(imported.getCell('D1').isMerged).toBe(true)
+  expect(imported.getImages()).toEqual([])
+  expect(Object.keys(unzipSync(new Uint8Array(await book.xlsx.writeBuffer())))).not.toContain('xl/charts/chart1.xml')
+})
 
 test('updates cross-sheet totals, arithmetic and conditional formulas, and flags stale dependencies',async()=>{
   const wb=new ExcelJS.Workbook()

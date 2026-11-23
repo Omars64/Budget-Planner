@@ -1,6 +1,6 @@
 import AppSelect from '../components/AppSelect'
 import { useEffect, useMemo, useState } from 'react'
-import { Activity, Database, History, MessageSquare, Palette, Pencil, Plus, Search, Trash2, UserRoundCheck, UserRoundX, Users } from 'lucide-react'
+import { Activity, Database, History, MessageSquare, Palette, Pencil, Plus, Search, Send, Trash2, UserRoundCheck, UserRoundX, Users } from 'lucide-react'
 import { api, jsonBody } from '../lib/api'
 import PasswordInput from '../components/PasswordInput'
 import { useApp } from '../App'
@@ -11,6 +11,7 @@ import EmptyState from '../components/EmptyState'
 import SettingsSection from '../components/SettingsSection'
 import SettingsWorkspace from '../components/SettingsWorkspace'
 import AssistantSettings from '../components/AssistantSettings'
+import AdminAnnouncements from '../components/AdminAnnouncements'
 import GoogleMark from '../components/GoogleMark'
 import UserSignins from '../components/UserSignins'
 import { signinTime } from '../lib/signinTime'
@@ -22,6 +23,7 @@ const sections = [
   { id:'database', title:'Database usage', description:'Resource controls and usage history', icon:Database },
   { id:'assistant', title:'Ask Budgetly', description:'AI availability and usage limits', icon:MessageSquare },
   { id:'users', title:'User management', description:'Accounts, roles and sign-in history', icon:Users },
+  { id:'announcements', title:'Send message', description:'Send an announcement in Budgetly', icon:Send },
 ]
 
 export default function Admin() {
@@ -97,6 +99,7 @@ export default function Admin() {
     <SettingsSection title="Service health" settingsId="health"><OperationsPanel standalone={false}/></SettingsSection>
     <SettingsSection title="Database usage" settingsId="database"><ResourcePolicyPanel/></SettingsSection>
     <SettingsSection title="Ask Budgetly" settingsId="assistant"><AssistantSettings/></SettingsSection>
+    <SettingsSection title="Send message" settingsId="announcements"><AdminAnnouncements/></SettingsSection>
     <SettingsSection title="User management" settingsId="users">
     {error && !open && <div className="form-error" role="alert">{error}<button className="button ghost small" onClick={()=>load().catch(err=>setError(err.message))}>Retry</button></div>}
 

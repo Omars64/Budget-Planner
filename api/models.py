@@ -225,6 +225,24 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.now)
 
 
+class AdminAnnouncement(Base):
+    __tablename__ = 'admin_announcements'
+    id = Column(Integer, primary_key=True)
+    sender_id = Column(Integer, ForeignKey('users.id', ondelete='SET NULL'), index=True)
+    title = Column(String(100), nullable=False)
+    message = Column(Text, nullable=False)
+    audience = Column(String(12), nullable=False)
+    recipient_count = Column(Integer, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+
+
+class AnnouncementRecipient(Base):
+    __tablename__ = 'announcement_recipients'
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
+    announcement_id = Column(Integer, ForeignKey('admin_announcements.id', ondelete='CASCADE'), primary_key=True, index=True)
+    read_at = Column(DateTime)
+
+
 class Space(Base):
     __tablename__ = 'spaces'
     id = Column(Integer, primary_key=True)

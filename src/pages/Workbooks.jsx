@@ -41,9 +41,10 @@ export default function Workbooks(){
   }
   async function parse(bytes){
     const {loadWorkbook}=await import('../lib/workbook')
-    const wb=await loadWorkbook(bytes)
+    let omittedFeatures=[]
+    const wb=await loadWorkbook(bytes,{reportOmissions:features=>{omittedFeatures=features}})
     const result=await recalculate(wb)
-    return {wb,report:applyWorkbookResult(wb,result).report}
+    return {wb,omittedFeatures,report:applyWorkbookResult(wb,result).report}
   }
   async function recalculate(wb,edit){
     const {signal}=controller.current
@@ -130,6 +131,7 @@ export default function Workbooks(){
     <Modal open={!!modal} title={{import:'Import workbook',review:'Review workbook',issues:'Formula compatibility',export:'Export a copy',delete:'Delete workbook'}[modal]} onClose={()=>{if(!busy){setModal('');setReview(null)}}}>
     <div className="stack gap-16">{modal==='import'&&<><button className="button primary" disabled={busy} onClick={google}>Choose a Google Sheet</button><button className="button ghost" disabled={busy} onClick={()=>file.current.click()}>Choose an Excel file (.xlsx)</button>{pickerOpen&&<><p role="status">Choose a sheet in Google, then return to Budgetly.</p><button className="button ghost" onClick={()=>picker.current?.abort()}>Cancel Google import</button></>}<small>Import a copy into your Personal workspace. Future edits save in Budgetly.</small></>}
     {modal==='review'&&review&&<><h3>{review.name}</h3><p>{review.wb.worksheets.map(s=>s.name).join(' · ')}</p><p>{report.total-report.issues.size} formulas recalculate · {report.issues.size} need review</p></>}
+    {modal==='review'&&!!review?.omittedFeatures.length&&<p role="status">This worksheet copy leaves out {review.omittedFeatures.join(', ')}. Your original file stays in place.</p>}
     {['review','issues'].includes(modal)&&!!report?.issues.size&&<details open={modal==='issues'}><summary>Review affected cells</summary><p>These cells show their imported result when available. Check them before relying on totals.</p>{Array.from(report.issues,([c,reason])=><p key={c.worksheet.id+':'+c.address}><strong>{c.worksheet.name} · {c.address}</strong> {reason}</p>)}</details>}
     {modal==='review'&&review&&<button className="button primary" disabled={busy} onClick={()=>act(async()=>open(await persist(review)))}>Import copy</button>}
     {modal==='export'&&<><label className="field">Format<select value={type} onChange={e=>setType(e.target.value)}>{Object.entries(exportFormats).map(([k,label])=><option key={k} value={k}>{label}</option>)}</select></label><button className="button primary" disabled={busy} onClick={()=>act(async()=>{const {exportBook}=await import('../lib/workbookExport');await exportBook(type,doc.wb,sheet,doc.name);setModal('')})}>Export file</button></>}

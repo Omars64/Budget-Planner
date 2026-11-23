@@ -1,8 +1,8 @@
 import { afterEach, expect, it, vi } from 'vitest'
-const mocks = vi.hoisted(() => ({ plugin: { getPendingNotifications: vi.fn(), removeNotifications: vi.fn(), suspend: vi.fn() }, api: vi.fn(), auth: { token: 'signed-in' } }))
+const mocks = vi.hoisted(() => ({ plugin: { addListener: vi.fn(), bindSession: vi.fn(), getPendingNotifications: vi.fn(), removeNotifications: vi.fn(), suspend: vi.fn() }, api: vi.fn(), auth: { token: 'signed-in' } }))
 vi.mock('@capacitor/core', () => ({ Capacitor: { isNativePlatform: () => true, getPlatform: () => 'android' }, registerPlugin: () => mocks.plugin }))
 vi.mock('../api', () => ({ api: mocks.api, auth: mocks.auth, jsonBody: data => ({ body: JSON.stringify(data) }) }))
-import { syncBankNotifications } from './native'
+import { bankInboxChanged, syncBankNotifications, watchBankNotifications } from './native'
 afterEach(() => vi.clearAllMocks())
 it('uploads structured fields only and acknowledges after acceptance', async () => {
   mocks.plugin.getPendingNotifications.mockResolvedValue({ notifications: [{ id: 'one', packageName: 'test.bank', appLabel: 'Bank', contentHash: 'a'.repeat(64), postedAt: Date.now(), text: 'Purchase KWD 5.000 at Shop' }] })
@@ -25,4 +25,57 @@ it('drops OTP locally without uploading it', async () => {
   await syncBankNotifications(1)
   expect(mocks.api).not.toHaveBeenCalled()
   expect(mocks.plugin.removeNotifications).toHaveBeenCalled()
+})
+
+it('drains a notification posted while an earlier bank alert is uploading', async () => {
+  const raw = id => ({ id, packageName: 'test.bank', postedAt: Date.now(), text: 'Purchase KWD 5.000 at Shop' })
+  mocks.plugin.getPendingNotifications.mockResolvedValueOnce({ notifications: [raw('first')] })
+    .mockResolvedValueOnce({ notifications: [raw('second')] })
+  let finishUpload
+  let started
+  const uploading = new Promise(resolve => { started = resolve })
+  mocks.api.mockResolvedValue({ id: 2 }).mockImplementationOnce(() => {
+    started()
+    return new Promise(resolve => { finishUpload = resolve })
+  })
+  const refreshed = vi.fn()
+  window.addEventListener(bankInboxChanged, refreshed)
+  try {
+    const sync = syncBankNotifications(1)
+    await uploading
+    expect(syncBankNotifications(1)).toBe(sync)
+    finishUpload({ id: 1 })
+    await sync
+    expect(mocks.api).toHaveBeenCalledTimes(2)
+    expect(mocks.plugin.removeNotifications).toHaveBeenLastCalledWith({ owner: '1', ids: ['second'] })
+    expect(refreshed).toHaveBeenCalledOnce()
+  } finally {
+    window.removeEventListener(bankInboxChanged, refreshed)
+  }
+})
+
+it('uploads on the foreground native signal and removes the subscription at sign-out', async () => {
+  const remove = vi.fn(async () => {})
+  let queued
+  mocks.plugin.addListener.mockImplementation(async (event, listener) => {
+    expect(event).toBe('notificationQueued')
+    queued = listener
+    return { remove }
+  })
+  mocks.plugin.bindSession.mockResolvedValue(undefined)
+  mocks.plugin.getPendingNotifications.mockResolvedValueOnce({ notifications: [] })
+    .mockResolvedValueOnce({ notifications: [{ id: 'arrival', packageName: 'test.bank', postedAt: Date.now(), text: 'Purchase KWD 5.000 at Shop' }] })
+  mocks.api.mockResolvedValue({ id: 3 })
+  const stop = watchBankNotifications(1)
+  try {
+    await vi.waitFor(() => expect(mocks.plugin.getPendingNotifications).toHaveBeenCalledOnce())
+    await queued()
+    expect(mocks.api).toHaveBeenCalledOnce()
+    expect(mocks.plugin.removeNotifications).toHaveBeenCalledWith({ owner: '1', ids: ['arrival'] })
+  } finally {
+    stop()
+  }
+  expect(remove).toHaveBeenCalledOnce()
+  await queued()
+  expect(mocks.api).toHaveBeenCalledOnce()
 })
