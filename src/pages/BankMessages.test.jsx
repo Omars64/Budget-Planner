@@ -49,3 +49,23 @@ it('explains which required review field needs attention', async () => {
   fireEvent.invalid(await screen.findByLabelText('Wallet'))
   expect(screen.getByRole('alert')).toHaveTextContent('Check Wallet before approving')
 })
+
+it('ignores from the list without loading review details', async () => {
+  mockInbox()
+  render(<BankMessages/>)
+  fireEvent.click(await screen.findByRole('button', { name: 'Ignore', exact: true }))
+  await waitFor(() => expect(api).toHaveBeenCalledWith('/api/bank-inbox/3/ignore', { method: 'POST' }))
+  expect(api.mock.calls.some(([path]) => path === '/api/bank-inbox/3')).toBe(false)
+})
+
+it('opens destination selection directly from review without approving', async () => {
+  mockInbox()
+  render(<BankMessages/>)
+  fireEvent.click(await screen.findByRole('button', { name: 'Review', exact: true }))
+  const approve = await screen.findByRole('button', { name: 'Approve transaction' })
+  const move = screen.getByRole('button', { name: 'Change destination' })
+  expect(move.parentElement).toBe(approve.parentElement)
+  fireEvent.click(move)
+  expect(await screen.findByRole('heading', { name: 'Change alert destination' })).toBeInTheDocument()
+  expect(api.mock.calls.some(([path]) => path.endsWith('/approve'))).toBe(false)
+})

@@ -17,3 +17,5 @@
 .app-month-grid button{min-height:46px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--text);font:inherit;cursor:pointer}
 .app-month-grid button:hover,.app-month-grid button[aria-pressed=true]{background:var(--accent-soft);border-color:var(--accent)}
 .app-month-grid button:disabled{opacity:.4;cursor:default}
+.category-icon-label { display:inline-flex; align-items:center; gap:7px; min-width:0; }
+.category-icon-label > svg { flex-shrink:0; }

@@ -17,6 +17,8 @@ import UserSignins from '../components/UserSignins'
 import { signinTime } from '../lib/signinTime'
 
 const fresh = () => ({ username: '', email: '', password: '', role: 'user', active: true })
+import { CategoryIcon } from '../lib/categoryIcons'
+
 const freshCategory = () => ({ name: '', kind: 'expense', icon: 'circle', color: '#0a4173' })
 const sections = [
   { id:'health', title:'Service health', description:'Scheduler, backups and service checks', icon:Activity },
@@ -138,7 +140,7 @@ export default function Admin() {
       </form>
     </Modal>
     <Modal open={!!categoryUser} onClose={() => setCategoryUser(null)} title={`Categories · ${categoryUser?.username || ''}`} subtitle="Manage this account's income and expense categories.">
-      <div className="admin-category-list">{categories.map(category => <div className="admin-category-row" key={category.id}><i style={{ background: category.color }}/><span><strong>{category.name}</strong><small>{category.kind}</small></span><button className="row-icon" onClick={() => { setEditingCategory(category); setCategoryForm({ name: category.name, kind: category.kind, icon: category.icon || 'circle', color: category.color || '#0a4173' }) }} aria-label={`Edit ${category.name}`}><Pencil size={14}/></button><button className="row-icon danger" onClick={() => removeCategory(category)} aria-label={`Delete ${category.name}`}><Trash2 size={14}/></button></div>)}</div>
+      <div className="admin-category-list">{categories.map(category => <div className="admin-category-row" key={category.id}><CategoryIcon name={category.name} type={category.kind} size={16}/><span><strong>{category.name}</strong><small>{category.kind}</small></span><button className="row-icon" onClick={() => { setEditingCategory(category); setCategoryForm({ name: category.name, kind: category.kind, icon: category.icon || 'circle', color: category.color || '#0a4173' }) }} aria-label={`Edit ${category.name}`}><Pencil size={14}/></button><button className="row-icon danger" onClick={() => removeCategory(category)} aria-label={`Delete ${category.name}`}><Trash2 size={14}/></button></div>)}</div>
       <form onSubmit={saveCategory} className="stack gap-12 admin-category-form"><h4>{editingCategory ? 'Edit category' : 'Add category'}</h4><label className="field"><span>Name</span><input required maxLength="100" value={categoryForm.name} onChange={e => setCategoryForm({ ...categoryForm, name: e.target.value })}/></label><div className="form-grid two"><label className="field"><span>Type</span><AppSelect value={categoryForm.kind} onChange={e => setCategoryForm({ ...categoryForm, kind: e.target.value })}><option value="expense">Expense</option><option value="income">Income</option></AppSelect></label><label className="field"><span>Accent</span><input type="color" value={categoryForm.color} onChange={e => setCategoryForm({ ...categoryForm, color: e.target.value })}/></label></div>{categoryError && <div className="form-error">{categoryError}</div>}<div className="button-row"><button type="button" className="button ghost" onClick={() => { setEditingCategory(null); setCategoryForm(freshCategory()) }}>Clear</button><button className="button primary" disabled={categoryBusy || !categoryForm.name.trim()}>{categoryBusy ? 'Saving...' : editingCategory ? 'Save category' : 'Add category'}</button></div></form>
     </Modal>
   </div>

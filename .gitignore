@@ -12,6 +12,7 @@ pytest-cache-files-*/
 !.env.example
 .verification/
 /.codex-remote-attachments/
+/.codex-attachments/
 .DS_Store
 .vercel/
 .android-signing/
@@ -21,3 +22,4 @@ browser-layout-evidence.json
 # Local workbook design previews
 /poc/workbook-preview/
 /poc/google-sheets-preview.html
+/poc/budgetly-review/

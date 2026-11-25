@@ -2,7 +2,7 @@ import AppSelect from './AppSelect'
 import { useId, useState } from 'react'
 
 // Retain the native picker and keyboard behavior; search narrows long lists.
-export default function SearchableSelect({ label, value, onChange, options, recentKey, rememberRecent = true, disabled, error, placeholder = 'Choose an option' }) {
+export default function SearchableSelect({ label, value, onChange, options, recentKey, rememberRecent = true, renderOptionIcon, disabled, error, placeholder = 'Choose an option' }) {
   const id = useId()
   const [search, setSearch] = useState('')
   const [recent, setRecent] = useState(() => { try { const value = JSON.parse(localStorage.getItem(recentKey)); return Array.isArray(value) ? value : [] } catch { return [] } })
@@ -14,7 +14,7 @@ export default function SearchableSelect({ label, value, onChange, options, rece
   return <div className="field searchable-field">
     <label htmlFor={id}>{label}</label>
     {options.length > 6 && <input type="search" aria-label={`Search ${label.toLowerCase()}`} placeholder="Search..." value={search} disabled={disabled} onChange={e => setSearch(e.target.value)}/>}
-    <AppSelect id={id} aria-label={label} value={value} disabled={disabled} aria-invalid={Boolean(error)} aria-describedby={error ? `${id}-error` : undefined} onChange={e => {
+    <AppSelect renderOptionIcon={renderOptionIcon} id={id} aria-label={label} value={value} disabled={disabled} aria-invalid={Boolean(error)} aria-describedby={error ? `${id}-error` : undefined} onChange={e => {
       onChange(e.target.value)
       const next = [e.target.value, ...recent.filter(v => v !== e.target.value)].slice(0, 5)
       if (rememberRecent) setRecent(next)

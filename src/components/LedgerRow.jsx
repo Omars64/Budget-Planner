@@ -1,4 +1,5 @@
-import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, Bus, Copy, Pencil, Repeat2, ShoppingBasket, Trash2, Utensils, Wallet } from 'lucide-react'
+import { Copy, Pencil, Repeat2, Trash2, Wallet } from 'lucide-react'
+import { CategoryIcon, categoryAppearance } from '../lib/categoryIcons'
 import { format } from 'date-fns'
 import { dateInput, displayDate } from '../lib/time'
 import Modal from './Modal'
@@ -19,8 +20,7 @@ export function LedgerDateHeader({ day, compact = false }) {
 
 export default function LedgerRow({ tx, fmt, shared = false, showDate = false, compact = false, onOpen }) {
   const saved = useSavedTransaction()
-  const name = (tx.category_name || '').toLowerCase()
-  const Icon = tx.type === 'income' ? ArrowDownLeft : tx.type === 'transfer' ? ArrowRightLeft : name.includes('food') ? Utensils : name.includes('shop') ? ShoppingBasket : name.includes('transport') ? Bus : ArrowUpRight
+  const { Icon, key } = categoryAppearance(tx.category_name, { type: tx.type, openingBalance: tx.is_opening_balance })
   const title = tx.description?.trim() || tx.category_name || 'Unnamed transaction'
   const walletLabel = tx.type === 'transfer' ? `${tx.wallet_name || 'Wallet'} → ${tx.transfer_wallet_name || 'Wallet'}` : tx.wallet_name || tx.shared_wallet_names?.join(' / ')
   const category = tx.is_opening_balance ? (tx.type === 'income' ? 'Starting funds' : 'Starting debt') : tx.category_name || (tx.type === 'transfer' ? 'Wallet transfer' : 'Uncategorized')
@@ -30,7 +30,7 @@ export default function LedgerRow({ tx, fmt, shared = false, showDate = false, c
     <strong className={`tx-amount ${tx.type}`}>{tx.type === 'income' ? '+' : tx.type === 'expense' ? '−' : ''}{fmt(tx.amount)}</strong>
   </button>
   return <button className={`ledger-entry${saved === tx.id ? ' just-saved' : ''}`} onClick={onOpen} aria-label={`View ${title}`}>
-    <span className={`tx-symbol ${tx.type} ${Icon === Utensils ? 'food' : Icon === ShoppingBasket ? 'shopping' : ''}`}><Icon size={20}/></span>
+    <span className={`tx-symbol ${tx.type} ${key === 'dining' ? 'food' : key === 'shopping' || key === 'groceries' ? 'shopping' : ''}`}><Icon size={20} aria-hidden="true"/></span>
     <span className="tx-main"><strong>{title}</strong><span className="tx-category">{tx.is_opening_balance ? (tx.type === 'income' ? 'Starting funds' : 'Starting debt') : tx.category_name || (tx.type === 'transfer' ? 'Wallet transfer' : 'Uncategorized')}</span><span className="wallet-label"><Wallet size={14} aria-hidden="true"/>{walletLabel}{tx.recurring_frequency && tx.recurring_frequency !== 'none' && <Repeat2 size={13} aria-label="Recurring transaction"/>}</span>{shared && <span className="tx-contributor">{tx.recorded_by_name ? `Added by ${tx.recorded_by_name}` : `Wallet owner: ${tx.owner_name || tx.owner_email || 'Unknown'}`}</span>}</span>
     <span className="tx-side"><strong className={`tx-amount ${tx.type}`}>{tx.type === 'income' ? '+\u00a0' : tx.type === 'expense' ? '-\u00a0' : ''}{fmt(tx.amount)}</strong><small className="tx-kind">{tx.type === 'income' ? 'Income' : tx.type === 'transfer' ? 'Transfer' : 'Expense'}</small><small>{format(displayDate(tx.date), showDate ? 'dd MMM, HH:mm' : 'HH:mm')}</small>{tx.reporting_month && tx.reporting_month !== String(tx.date || '').slice(0, 7) && <small className="reporting-month-label">For {format(new Date(`${tx.reporting_month}-01T12:00:00`), 'MMM yyyy')}</small>}</span>
   </button>
@@ -45,7 +45,7 @@ export function TransactionDetails({ tx, fmt, onClose, onEdit, onDelete, onDupli
       <p className="detail-kind">{tx.is_opening_balance ? 'Opening balance' : tx.type === 'income' ? 'Income' : tx.type === 'transfer' ? 'Transfer' : 'Expense'}</p>
       {tx.recorded_by_name && <p className="muted">Added by {tx.recorded_by_name}</p>}
       {shared && <div className="shared-access" role="status"><strong>{permission === 'edit' ? 'Can edit' : permission === 'add' ? 'Can add new records' : 'View only'}</strong>{permission !== 'edit' && <span>Only the owner or an editor can change this record.</span>}</div>}
-      <dl className="transaction-details"><div><dt>Wallet</dt><dd>{tx.wallet_name || tx.shared_wallet_names?.join(' / ')}</dd></div>{tx.transfer_wallet_name && <div><dt>To wallet</dt><dd>{tx.transfer_wallet_name}</dd></div>}<div><dt>Category</dt><dd>{tx.category_name || (tx.type === 'transfer' ? 'Transfer' : 'Uncategorized')}</dd></div><div><dt>Recorded</dt><dd>{format(displayDate(tx.date), 'dd MMM yyyy, HH:mm')}</dd></div>{tx.reporting_month && <div><dt>Reporting month</dt><dd>{format(new Date(`${tx.reporting_month}-01T12:00:00`), 'MMMM yyyy')}</dd></div>}{tx.owner_name && <div><dt>Wallet owner</dt><dd>{tx.owner_name}</dd></div>}{tx.recurring_frequency !== 'none' && tx.recurring_frequency && <div><dt>Repeat</dt><dd>{tx.recurring_frequency}{tx.recurring_until ? ` until ${tx.recurring_until}` : ' (set an end date when editing)'}</dd></div>}</dl>
+      <dl className="transaction-details"><div><dt>Wallet</dt><dd>{tx.wallet_name || tx.shared_wallet_names?.join(' / ')}</dd></div>{tx.transfer_wallet_name && <div><dt>To wallet</dt><dd>{tx.transfer_wallet_name}</dd></div>}<div><dt>Category</dt><dd className="category-icon-label"><CategoryIcon name={tx.category_name} type={tx.type} openingBalance={tx.is_opening_balance} size={15}/>{tx.category_name || (tx.type === 'transfer' ? 'Transfer' : 'Uncategorized')}</dd></div><div><dt>Recorded</dt><dd>{format(displayDate(tx.date), 'dd MMM yyyy, HH:mm')}</dd></div>{tx.reporting_month && <div><dt>Reporting month</dt><dd>{format(new Date(`${tx.reporting_month}-01T12:00:00`), 'MMMM yyyy')}</dd></div>}{tx.owner_name && <div><dt>Wallet owner</dt><dd>{tx.owner_name}</dd></div>}{tx.recurring_frequency !== 'none' && tx.recurring_frequency && <div><dt>Repeat</dt><dd>{tx.recurring_frequency}{tx.recurring_until ? ` until ${tx.recurring_until}` : ' (set an end date when editing)'}</dd></div>}</dl>
       {tx.notes && <p className="transaction-note">{tx.notes}</p>}
       <ReceiptAttachment key={tx.id} transactionId={tx.id} shared={shared} readOnly={shared&&permission!=='edit'} onDirty={setReceiptDirty}/>
       {!shared && <button className="button ghost" disabled={receiptDirty} onClick={() => { onClose(); navigate('/ask-ai', { state: { question: `Explain transaction #${tx.id}: ${tx.description}.`, scope: tx.shared_wallet_names ? 'shared' : 'personal', walletId: tx.shared_wallet_names ? tx.shared_wallet_ids?.[0] || tx.wallet_id : tx.wallet_id, month: tx.date.slice(0, 7) } }) }}><Sparkles size={17}/>Ask Budgetly about this</button>}

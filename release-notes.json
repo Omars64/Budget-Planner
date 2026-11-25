@@ -1,4 +1,9 @@
 {
+  "6.26.1": [
+    {"title":"Faster bank alert review","detail":"Ignore an alert from the inbox list. In review, Change destination sits beside Approve transaction."},
+    {"title":"A roomier Spending Map","detail":"Pan, pinch or scroll to zoom, then open a category pin for compact, scrollable transactions grouped by date."},
+    {"title":"Recognizable category icons","detail":"The same category symbols appear across transactions, shared Spaces, spending, and debt. The Miami wallet icon now blends palm silhouettes into a full-bleed design."}
+  ],
   "6.26.0": [
     {"title":"After Hours","detail":"Open After Hours from More in your Personal workspace to visit Miami districts, edit their messages and play music from your device."},
     {"title":"Spending Map","detail":"Open the map from More and select a category to see this month's transactions in the current workspace."},

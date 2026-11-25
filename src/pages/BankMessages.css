@@ -18,3 +18,5 @@
   .bank-inbox .bank-refresh-button { padding-inline:10px; }
   .bank-inbox .bank-refresh-button span { display:none; }
 }
+.modal-footer .bank-review-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
+.bank-review-actions > button { width:100%; min-height:44px; white-space:normal; }

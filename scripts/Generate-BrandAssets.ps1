@@ -73,10 +73,18 @@ foreach ($palette in $selected) {
     $dark = [Drawing.ColorTranslator]::FromHtml($background)
     $mid = [Drawing.ColorTranslator]::FromHtml($detail)
     $light = [Drawing.ColorTranslator]::FromHtml($wallet)
-    $miami = $key -eq 'miami'
-    $tile = [WalletIconArtwork]::Render($dark, $mid, $light, 512, 'tile', $miami)
-    $android = [WalletIconArtwork]::Render($dark, $mid, $light, 512, 'android', $miami)
-    $adaptive = [WalletIconArtwork]::Render($dark, $mid, $light, 432, 'adaptive', $miami)
+    if ($key -eq 'miami') {
+        $artwork = [Drawing.Image]::FromFile((Join-Path $root 'brand-assets/miami-artwork.png'))
+        try {
+            $tile = [WalletIconArtwork]::RenderMiami($artwork, 512, 'tile')
+            $android = [WalletIconArtwork]::RenderMiami($artwork, 512, 'android')
+            $adaptive = [WalletIconArtwork]::RenderMiami($artwork, 432, 'adaptive')
+        } finally { $artwork.Dispose() }
+    } else {
+        $tile = [WalletIconArtwork]::Render($dark, $mid, $light, 512, 'tile')
+        $android = [WalletIconArtwork]::Render($dark, $mid, $light, 512, 'android')
+        $adaptive = [WalletIconArtwork]::Render($dark, $mid, $light, 432, 'adaptive')
+    }
     try {
         Save-Png $tile (Join-Path $root "brand-assets/wallet-$key.png") 512
         Save-Png $adaptive (Join-Path $root "brand-assets/android/wallet-$key.png") 432

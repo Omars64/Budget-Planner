@@ -6,6 +6,7 @@ import InfoButton from '../components/InfoButton'
 import { useApp } from '../App'
 import { api, jsonBody } from '../lib/api'
 import { categoryChoices } from '../lib/categoryChoices'
+import { CategoryIcon } from '../lib/categoryIcons'
 import { dateInput, saveDate, showTime } from '../lib/time'
 import { currencyStep } from '../lib/currency'
 import { markNotificationsSeen } from '../lib/notificationReads'
@@ -50,7 +51,12 @@ export default function BankMessages() {
     listRequest.current = controller
     try {
       const result = await api(`/api/bank-inbox?status=${status}&page=${page}&compact=true`, { signal:controller.signal })
-      if (!controller.signal.aborted) { showInbox(result); setListError('') }
+      if (!controller.signal.aborted) {
+        const lastPage = Math.max(1, Math.ceil(result.total / 100))
+        if (page > lastPage) setPage(lastPage)
+        else showInbox(result)
+        setListError('')
+      }
     } catch (failure) {
       if (!controller.signal.aborted) setListError(failure.message)
     } finally {
@@ -123,7 +129,11 @@ export default function BankMessages() {
     })
   }
   function changeDestination(row) {
-    closeReview(); setRoute(row); setTarget(String(activeSpace?.id || 'personal'))
+    setError(''); setRoute(row); setTarget(String(activeSpace?.id || 'personal'))
+  }
+  function closeDestination() {
+    setRoute(null)
+    setError('')
   }
   function pasteMessage(event) {
     event.preventDefault()
@@ -170,7 +180,7 @@ export default function BankMessages() {
         {row.possible_duplicate && <strong className="bank-review-warning">Possible duplicate</strong>}
         {row.currency !== settings.currency && <strong className="bank-review-warning">Currency mismatch</strong>}
       </div>
-      {status === 'pending' && <div className="button-row everyday-actions"><button type="button" className="button primary small" disabled={busy || !canAdd} onClick={() => void review(row)}><Check size={16}/>Review</button></div>}
+      {status === 'pending' && <div className="button-row everyday-actions"><button type="button" className="button primary small" disabled={busy || !canAdd} onClick={() => void review(row)}><Check size={16}/>Review</button><button type="button" className="button ghost small" disabled={busy || !canAdd} onClick={() => ignore(row)}><X size={16}/>Ignore</button></div>}
       {status === 'ignored' && <button type="button" className="button ghost small" disabled={busy || !canAdd} onClick={() => act(async () => { await api(`/api/bank-inbox/${row.id}/restore`, { method: 'POST' }); announceInboxChange(); await load() })}><RotateCcw size={16}/>Restore</button>}
       {status === 'approved' && <small>Recorded transaction #{row.transaction_id || 'removed'}</small>}
     </article>)}</div>}
@@ -189,11 +199,14 @@ export default function BankMessages() {
       </div>
     </Modal>
     <Modal open={paste} onClose={() => { if (!busy) setPaste(false) }} title="Paste bank message"><form onSubmit={pasteMessage} className="stack gap-16"><label className="field"><span>Bank/source</span><input required value={bank} maxLength={80} pattern="[a-zA-Z0-9_.-]+" onChange={event => setBank(event.target.value.toLowerCase())}/></label><label className="field"><span>Transaction alert</span><textarea required maxLength={4000} rows={5} value={text} onChange={event => setText(event.target.value)} placeholder="Paste a purchase, income, refund or transfer alert"/></label><small className="muted">Only parsed transaction details are saved. Unmapped alerts go to Personal.</small>{error && <p role="alert" className="form-error">{error}</p>}<button disabled={busy} className="button primary">Add to inbox</button></form></Modal>
-    <Modal open={!!selected} onClose={() => { if (!busy) closeReview() }} title={selected?.merchant || 'Review bank alert'}>
+    <Modal open={!!selected} onClose={() => { if (!busy) closeReview() }} title={selected?.merchant || 'Review bank alert'} footer={selected && <div className="modal-actions bank-review-actions">
+        <button type="button" className="button ghost" disabled={busy || !canAdd} onClick={() => changeDestination(selected)}><ArrowRightLeft size={16}/>Change destination</button>
+        <button type="submit" form="bank-review-form" className="button primary" disabled={busy || !canAdd || !reviewReady || choicesLoading || !!choicesError || selected.currency !== settings.currency}><Check size={16}/>Approve transaction</button>
+      </div>}>
       {selected && <div className="stack gap-16">
       {!reviewReady && (reviewError ? <div className="form-error" role="alert">{reviewError} <button type="button" className="button ghost" onClick={() => void review(selected)}>Retry</button></div> : <p role="status">Loading alert details…</p>)}
       {choicesError && <div className="form-error" role="alert">{choicesError} <button type="button" className="button ghost" onClick={() => setChoicesRetry(value => value + 1)}>Retry wallet and category choices</button></div>}
-      <form onSubmit={approve} onInvalid={event => setError(`Check ${event.target.closest('label')?.querySelector('span')?.textContent || 'the highlighted field'} before approving.`)} className="stack gap-16">
+      <form id="bank-review-form" onSubmit={approve} onInvalid={event => setError(`Check ${event.target.closest('label')?.querySelector('span')?.textContent || 'the highlighted field'} before approving.`)} className="stack gap-16">
       {reviewReady && <>
       <small className="muted">{selected.source_app}{selected.account_last4 && ` ••••${selected.account_last4}`} · {showTime(selected.occurred_at)}</small>
       <p className="muted">Record in <strong>{activeSpace?.name || 'Personal'} → {wallets.find(wallet => String(wallet.id) === String(form.wallet_id))?.name || 'Choose a wallet'}</strong></p>
@@ -204,28 +217,21 @@ export default function BankMessages() {
       <div className="form-grid two"><label className="field"><span>Amount ({selected?.currency})</span><input required type="number" min={currencyStep(selected?.currency)} step={currencyStep(selected?.currency)} value={form.amount || ''} onChange={event => setForm({ ...form, amount: event.target.value })}/></label><label className="field"><span>Wallet</span><AppSelect required value={form.wallet_id || ''} onChange={event => setForm({ ...form, wallet_id: event.target.value })}><option value="">Choose wallet</option>{wallets.map(wallet => <option key={wallet.id} value={wallet.id}>{wallet.name}</option>)}</AppSelect></label></div>
       {form.type === 'transfer' && <label className="field"><span>Destination wallet</span><AppSelect required value={form.transfer_wallet_id || ''} onChange={event => setForm({ ...form, transfer_wallet_id: event.target.value })}><option value="">Choose destination (cash for ATM)</option>{wallets.filter(wallet => String(wallet.id) !== String(form.wallet_id)).map(wallet => <option key={wallet.id} value={wallet.id}>{wallet.name}</option>)}</AppSelect></label>}
       <label className="field"><span>Description</span><input required maxLength={160} value={form.description || ''} onChange={event => setForm({ ...form, description: event.target.value })}/></label>
-      {form.type !== 'transfer' && <label className="field"><span>Category</span><AppSelect value={form.category_id || ''} onChange={event => setForm({ ...form, category_id: event.target.value })}><option value="">Uncategorized</option>{categoryChoices(categories.filter(category => category.kind === form.type), activeSpace?.id, form.category_id).map(category => <option key={category.id} value={category.id}>{category.name}</option>)}</AppSelect></label>}
+      {form.type !== 'transfer' && <label className="field"><span>Category</span><AppSelect renderOptionIcon={option => <CategoryIcon name={option?.label} type={form.type} size={16}/>} value={form.category_id || ''} onChange={event => setForm({ ...form, category_id: event.target.value })}><option value="">Uncategorized</option>{categoryChoices(categories.filter(category => category.kind === form.type), activeSpace?.id, form.category_id).map(category => <option key={category.id} value={category.id}>{category.name}</option>)}</AppSelect></label>}
       <DateTimeField value={form.date || dateInput()} onChange={date => setForm({ ...form, date })} disabled={busy}/>
       {form.type !== 'transfer' && <label className="field"><span>For month {form.type === 'income' ? '' : '(optional)'}</span><AppMonthField required={form.type === 'income'} value={form.reporting_month || ''} onChange={event => setForm({ ...form, reporting_month: event.target.value })}/></label>}
       {!!selected?.refund_matches.length && <label className="field"><span>Link original expense (optional)</span><AppSelect value={form.refund_of_id || ''} onChange={event => setForm({ ...form, refund_of_id: event.target.value })}><option value="">No link</option>{selected.refund_matches.map(item => <option value={item.id} key={item.id}>#{item.id} · {item.description}</option>)}</AppSelect></label>}
       {duplicateWarning && <div className="bank-duplicate"><p>A transaction with the same amount and type was recorded in this wallet within {settings.bank_duplicate_window_minutes || 5} minutes. Check whether this is a separate payment.</p>{selected?.duplicates.map(item => <small key={item.id}>#{item.id} · {item.description} · {showTime(item.date)}</small>)}<label className="check-row"><input type="checkbox" checked={!!form.add_anyway} onChange={event => { setForm({ ...form, add_anyway: event.target.checked }); setError('') }}/>I checked; add anyway</label></div>}
-      <div className="modal-actions"><button className="button primary" disabled={busy || choicesLoading || !!choicesError || selected.currency !== settings.currency}>Approve transaction</button></div>
       </>}
       {error && <p role="alert" className="form-error">{error}</p>}
-      <details className="form-options"><summary>More options</summary><div className="stack gap-12">
-        <div className="button-row">
-          <button type="button" className="button ghost" disabled={busy || !canAdd} onClick={() => changeDestination(selected)}><ArrowRightLeft size={18}/>Change destination</button>
-          <button type="button" className="button ghost" disabled={busy || !canAdd} onClick={() => ignore(selected)}><X size={17}/>Ignore</button>
-        </div>
-        {reviewReady && <>
+      {reviewReady && <details className="form-options"><summary>More options</summary><div className="stack gap-12">
           <label className="field"><span>Notes</span><textarea maxLength={2000} value={form.notes || ''} onChange={event => setForm({ ...form, notes: event.target.value })}/></label>
           <label className="check-row"><input type="checkbox" checked={!!form.remember} onChange={event => setForm({ ...form, remember: event.target.checked })}/>Remember this merchant's category</label>
           <ul>{selected.reasons.map(reason => <li key={reason}>{reason}</li>)}</ul>
-        </>}
-      </div></details>
+      </div></details>}
       </form>
       </div>}
     </Modal>
-    <Modal open={!!route} onClose={() => { if (!busy) setRoute(null) }} title="Change alert destination" subtitle="Moving changes where this alert is reviewed. It does not record a transaction."><form className="stack gap-16" onSubmit={event => { event.preventDefault(); void act(async () => { await api(`/api/bank-inbox/${route.id}/route`, { method: 'POST', ...jsonBody({ wallet_id: Number(routeWallet) }) }); setRoute(null); announceInboxChange(); await load(); notify('Alert moved. Review it in its destination Bank Inbox.') }) }}><label className="field"><span>Personal or Space</span><AppSelect value={target} onChange={event => setTarget(event.target.value)}><option value="personal">Personal</option>{spaces.filter(space => space.role !== 'view').map(space => <option key={space.id} value={space.id}>{space.name}</option>)}</AppSelect></label><label className="field"><span>Wallet</span><AppSelect required value={routeWallet} onChange={event => setRouteWallet(event.target.value)}><option value="">Choose wallet</option>{targetWallets.map(wallet => <option value={wallet.id} key={wallet.id}>{wallet.name}</option>)}</AppSelect></label>{error && <p role="alert" className="form-error">{error}</p>}<button disabled={busy} className="button primary">Move to selected destination</button></form></Modal>
+    <Modal open={!!route} onClose={() => { if (!busy) closeDestination() }} title="Change alert destination" subtitle="Moving changes where this alert is reviewed. It does not record a transaction."><form className="stack gap-16" onSubmit={event => { event.preventDefault(); void act(async () => { await api(`/api/bank-inbox/${route.id}/route`, { method: 'POST', ...jsonBody({ wallet_id: Number(routeWallet) }) }); setRoute(null); closeReview(); announceInboxChange(); await load(); notify('Alert moved. Review it in its destination Bank Inbox.') }) }}><label className="field"><span>Personal or Space</span><AppSelect value={target} onChange={event => setTarget(event.target.value)}><option value="personal">Personal</option>{spaces.filter(space => space.role !== 'view').map(space => <option key={space.id} value={space.id}>{space.name}</option>)}</AppSelect></label><label className="field"><span>Wallet</span><AppSelect required value={routeWallet} onChange={event => setRouteWallet(event.target.value)}><option value="">Choose wallet</option>{targetWallets.map(wallet => <option value={wallet.id} key={wallet.id}>{wallet.name}</option>)}</AppSelect></label>{error && <p role="alert" className="form-error">{error}</p>}<div className="modal-actions bank-review-actions"><button type="button" disabled={busy} className="button ghost" onClick={closeDestination}>Back to review</button><button disabled={busy} className="button primary">Move alert</button></div></form></Modal>
   </div>
 }

@@ -5,6 +5,7 @@ import { DateField } from './DateTimeField'
 import Modal from './Modal'
 import InfoButton from './InfoButton'
 import { api, money } from '../lib/api'
+import { CategoryIcon } from '../lib/categoryIcons'
 import { currencyPlaceholder } from '../lib/currency'
 import { dateKey } from '../lib/time'
 import { debtAmount, debtPath, extraPaymentChange, incoming, left, makeSchedule, monthLabel, preserveDebtPayments, reminderLeads, sum } from '../lib/debtWorkspace'
@@ -102,7 +103,7 @@ export default function DebtEntryForm({mode, record, item, direction, currency, 
             <span aria-hidden="true">{currency}</span><input aria-label={`${adding?'Total amount now':'Amount'} (${currency})`} inputMode="decimal" autoComplete="off" value={form.amount} onChange={e=>set('amount',e.target.value)} placeholder={currencyPlaceholder(currency)}/>
           </span></label>
           {adding ? <>
-            <label className="field"><span>What are you tracking?</span><AppSelect value={form.kind} onChange={e=>set('kind',e.target.value)}>{kinds.map(([value,label])=><option key={value} value={value}>{label}</option>)}</AppSelect></label>
+            <label className="field"><span>What are you tracking?</span><AppSelect renderOptionIcon={option => <CategoryIcon name={option?.label} size={16}/>} value={form.kind} onChange={e=>set('kind',e.target.value)}>{kinds.map(([value,label])=><option key={value} value={value}>{label}</option>)}</AppSelect></label>
             <label className="field"><span>Name</span><input value={form.name} onChange={e=>set('name',e.target.value)} maxLength={120} placeholder="e.g. Car loan"/></label>
             <div className="debt-form-pair"><DateField label="First due date" value={form.due} onChange={value=>set('due',value)} min="1900-01-01" max="2199-12-31" disabled={busy}/>
               <label className="field"><span>Pay back</span><AppSelect value={form.frequency} onChange={e=>set('frequency',e.target.value)}><option value="once">Once</option><option value="monthly">Every month</option></AppSelect></label></div>

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { ArrowDownLeft, ArrowUpRight, Bell, Calculator, CalendarDays, Check, ChevronRight, History, Landmark, Plus, Receipt, Users } from 'lucide-react'
+import { Bell, Calculator, CalendarDays, ChevronRight, History, Landmark, Plus, Receipt, Users } from 'lucide-react'
 import { useApp } from '../App'
 import { api, jsonBody, money } from '../lib/api'
+import { CategoryIcon, categoryAppearance } from '../lib/categoryIcons'
 import { dateKey } from '../lib/time'
 import { allItems, dayLabel, debtAmount, debtApi, debtChanged, debtKinds, debtRoute, debtUrl, incoming, left, monthLabel,
   openItems, paid, paymentStatus, payoffMonth, remaining, shiftDay, sum } from '../lib/debtWorkspace'
@@ -32,6 +33,8 @@ const menu = [
   ['payoff','Debt-free calculator','Try a monthly extra payment',Calculator],
   ['directory','Debt spaces','Manage shared debt workspaces',Users],
 ]
+const lendingIcon = categoryAppearance('Lending money').Icon
+const recordIcon = record => incoming(record) ? lendingIcon : categoryAppearance(debtKinds[record.kind]).Icon
 const Row = ({icon:Icon,name,description,amount,status,onClick}) => <li><button type="button" className="debt-row" onClick={onClick}>
   <span className="debt-row-icon"><Icon size={18}/></span><span className="debt-row-label"><strong>{name}</strong><small>{description}</small></span>
   <span className="debt-row-tail">{amount && <strong>{amount}</strong>}{status ? <small>{status}</small> : !amount && <ChevronRight size={16}/>}</span>
@@ -200,12 +203,12 @@ function DebtScreen({spaceId,tab,requestedPreview}) {
 
   const heading = (name,key) => <div className="debt-heading"><h2>{name}</h2><InfoButton label={`About ${name.toLowerCase()}`} onClick={()=>setInfo(key)}/></div>
   const monthControl = (month,setMonth,label) => <label className="field"><span>Month</span><AppMonthField value={month} onChange={event=>setMonth(event.target.value)} aria-label={label} min="1900-01" max="2199-12" short required/></label>
-  const scheduleRow = (record,term) => <Row key={term.id} icon={incoming(record)?ArrowDownLeft:CalendarDays} name={record.name}
+  const scheduleRow = (record,term) => <Row key={term.id} icon={recordIcon(record)} name={record.name}
     description={`${dayLabel(term.due)}${left(term)?incoming(record)?' · To receive':' · To pay':''}`} amount={fmt(term.covered_by?0:left(term)||term.amount)}
     status={paymentStatus(record,term,today)} onClick={()=>show('instalment',record,term)}/>
   const recordRow = record => {
     const first = open.find(entry=>entry.record.id===record.id)?.item
-    return <Row key={record.id} icon={incoming(record)?ArrowDownLeft:record.kind==='loan'?Landmark:ArrowUpRight}
+    return <Row key={record.id} icon={recordIcon(record)}
       name={record.name} description={first?`${first.due<today?'Overdue · ':'Due '}${dayLabel(first.due)}`:'Settled'}
       amount={fmt(remaining(record))} onClick={()=>show('record',record)}/>
   }
@@ -230,7 +233,7 @@ function DebtScreen({spaceId,tab,requestedPreview}) {
     {tab==='debts' && <div className="debt-home">
       <div>
         {next && <section className="debt-next" aria-label={direction==='lent'?'Next to receive':'Next to pay'}>
-          <div><span className="debt-kicker">{direction==='lent'? <ArrowDownLeft size={16}/>:<CalendarDays size={16}/>} {direction==='lent'?'Next to receive':'Next to pay'}</span>
+          <div><span className="debt-kicker">{direction==='lent'? <CategoryIcon name="Lending money" size={16}/>:<CalendarDays size={16}/>} {direction==='lent'?'Next to receive':'Next to pay'}</span>
             <h2>{next.record.name}</h2><small>{dayLabel(next.item.due)}{next.item.due<today && <span className="debt-overdue"> · Overdue</span>}</small>
             <strong className="debt-next-amount">{fmt(left(next.item))}</strong></div>
         </section>}
@@ -259,7 +262,7 @@ function DebtScreen({spaceId,tab,requestedPreview}) {
         <label className="field"><span>Show by</span><AppSelect value={by} onChange={event=>setBy(event.target.value)}><option value="actual">Actual date</option><option value="assigned">Payment month</option></AppSelect></label>
       </div>
       <div className="debt-history-help"><InfoButton label="About payment history" onClick={()=>setInfo('history')}/></div>
-      {selectedHistory.length ? <ul className="debt-list">{selectedHistory.map(({record,term,payment})=><Row key={payment.id} icon={incoming(record)?ArrowDownLeft:Check} name={record.name}
+      {selectedHistory.length ? <ul className="debt-list">{selectedHistory.map(({record,term,payment})=><Row key={payment.id} icon={recordIcon(record)} name={record.name}
         description={`${incoming(record)?'Received':'Paid'} ${dayLabel(payment.date)} · For ${monthLabel(term.month)}`} amount={fmt(payment.amount)} onClick={()=>show('instalment',record,term)}/>)}</ul>
         : <p className="muted">No payments match this month.</p>}
     </div>}
@@ -275,7 +278,7 @@ function DebtScreen({spaceId,tab,requestedPreview}) {
     </Modal>
     <Modal open={canEdit&&modal?.type==='pickPayment'} onClose={close} title="Record payment" size="small">
       {open.length ? <ul className="debt-list">{records.filter(record=>remaining(record)>0).map(record=><Row key={record.id}
-        icon={Receipt} name={record.name} description={incoming(record)?'Money received':'Money paid'} amount={fmt(remaining(record))}
+        icon={recordIcon(record)} name={record.name} description={incoming(record)?'Money received':'Money paid'} amount={fmt(remaining(record))}
         onClick={()=>show('payment',record,open.find(entry=>entry.record.id===record.id)?.item)}/>)}</ul> :
         <p className="muted">Add a debt to record a payment.</p>}
     </Modal>

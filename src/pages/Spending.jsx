@@ -6,6 +6,7 @@ import { dateInput } from '../lib/time'
 import { useApp } from '../App'
 import AppMonthField from '../components/AppMonthField'
 import PageActions from '../components/PageActions'
+import { CategoryIcon } from '../lib/categoryIcons'
 
 const categoryColor = color => /^#[0-9a-f]{6}$/i.test(color) ? color : '#94a3b8'
 
@@ -53,7 +54,7 @@ export default function Spending() {
       {loaded && (view === 'category' ? <div className="poc-list">
         <h3>Spending by category</h3>
         {categories.length ? categories.map(item => <Link className="poc-line" to="/transactions" key={item.id} state={{ aiFilters:{...expenses,category:String(item.id)} }}>
-          <span className="spending-dot" style={{background:categoryColor(item.color)}} aria-hidden="true"/><strong>{item.name}</strong><strong>{fmt(item.value)}</strong>
+          <span className="poc-marker"><CategoryIcon name={item.name} type="expense"/></span><strong className="category-icon-label"><span className="spending-dot" style={{background:categoryColor(item.color)}} aria-hidden="true"/>{item.name}</strong><strong>{fmt(item.value)}</strong>
         </Link>) : <p className="muted">No spending assigned to this month.</p>}
       </div> : <>
         <div className="poc-section-heading"><h3>Monthly activity</h3><Link className="poc-link" to="/transactions" state={{ aiFilters:expenses }}>See expenses <ArrowRight size={16} aria-hidden="true"/></Link></div>

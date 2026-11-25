@@ -1,6 +1,6 @@
 import AppSelect from '../components/AppSelect'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { Bell, CalendarClock, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Bell, Pencil, Plus, Trash2 } from 'lucide-react'
 import { api, jsonBody, money } from '../lib/api'
 import { syncPlannedNotifications } from '../lib/plannedNotifications'
 import { categoryChoices } from '../lib/categoryChoices'
@@ -11,6 +11,7 @@ import Modal from '../components/Modal'
 import PageActions from '../components/PageActions'
 import InfoButton from '../components/InfoButton'
 import { useApp } from '../App'
+import { CategoryIcon } from '../lib/categoryIcons'
 import '../upcoming.css'
 import '../everyday-planning.css'
 
@@ -146,7 +147,7 @@ export default function Upcoming() {
       <label className="field"><span>Description</span><input required maxLength="160" placeholder="What is this for?" value={draft.description} onChange={event => change('description', event.target.value)}/></label>
       <div className="form-grid two">
         <label className="field"><span>Wallet</span><AppSelect required value={draft.wallet_id} onChange={event => change('wallet_id', event.target.value)}><option value="">Choose wallet</option>{wallets.filter(w => w.editable).map(w => <option key={w.id} value={w.id}>{w.name}{w.shared ? ' · Shared' : ''}</option>)}</AppSelect></label>
-        <label className="field"><span>{draft.type === 'transfer' ? 'Destination' : 'Category'}</span>{draft.type === 'transfer' ? <AppSelect required value={draft.transfer_wallet_id} onChange={event => change('transfer_wallet_id', event.target.value)}><option value="">Choose destination</option>{wallets.filter(w => w.editable && w.owner_id === wallet?.owner_id && String(w.id) !== String(wallet?.id)).map(w => <option key={w.id} value={w.id}>{w.name}</option>)}</AppSelect> : <AppSelect value={draft.category_id} onChange={event => change('category_id', event.target.value)}><option value="">Uncategorized</option>{choices.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</AppSelect>}</label>
+        <label className="field"><span>{draft.type === 'transfer' ? 'Destination' : 'Category'}</span>{draft.type === 'transfer' ? <AppSelect required value={draft.transfer_wallet_id} onChange={event => change('transfer_wallet_id', event.target.value)}><option value="">Choose destination</option>{wallets.filter(w => w.editable && w.owner_id === wallet?.owner_id && String(w.id) !== String(wallet?.id)).map(w => <option key={w.id} value={w.id}>{w.name}</option>)}</AppSelect> : <AppSelect renderOptionIcon={option => <CategoryIcon name={option?.label} type={draft.type} size={16}/>} value={draft.category_id} onChange={event => change('category_id', event.target.value)}><option value="">Uncategorized</option>{choices.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</AppSelect>}</label>
       </div>
       <div className="field">
         <div className="button-row"><span>Recording</span><InfoButton label="About recording and reminders" onClick={() => setRecordingHelp(true)}/></div>
@@ -167,7 +168,7 @@ export default function Upcoming() {
     </Modal>
     <div className="poc-list" aria-live="polite">
       {loading && !rows.length ? <p className="muted">Loading upcoming records…</p> : displayed.length === 0 ? !plansError && <p className="muted">No entries in this view.</p> : displayed.map(row => <button type="button" className="poc-line plan-row" key={row.id} onClick={() => setSelectedId(row.id)}>
-        <span className="poc-marker"><CalendarClock size={18} aria-hidden="true"/></span>
+        <span className="poc-marker"><CategoryIcon name={row.category_name} type={row.type}/></span>
         <span><strong>{row.description}</strong><small>{showTime(row.date)} · {row.wallet_name}</small><span className={`upcoming-status ${row.status}`}>{planLabel(row)}</span></span>
         <strong className={`upcoming-amount ${row.type}`}>{amountLabel(row)}</strong>
       </button>)}
@@ -183,7 +184,7 @@ export default function Upcoming() {
       {selected && <div className="stack gap-12">
         <strong className={`upcoming-amount ${selected.type}`}>{amountLabel(selected)}</strong>
         <span className={`upcoming-status ${selected.status}`}>{planLabel(selected)}</span>
-        <dl className="transaction-details"><div><dt>Date</dt><dd>{showTime(selected.date)}</dd></div><div><dt>Wallet</dt><dd>{selected.wallet_name}{selected.shared ? ` · Shared with ${selected.owner_name}` : ''}</dd></div><div><dt>{selected.type === 'transfer' ? 'Destination' : 'Category'}</dt><dd>{categoryLabel(selected)}</dd></div>
+        <dl className="transaction-details"><div><dt>Date</dt><dd>{showTime(selected.date)}</dd></div><div><dt>Wallet</dt><dd>{selected.wallet_name}{selected.shared ? ` · Shared with ${selected.owner_name}` : ''}</dd></div><div><dt>{selected.type === 'transfer' ? 'Destination' : 'Category'}</dt><dd className="category-icon-label"><CategoryIcon name={selected.category_name} type={selected.type} size={15}/>{categoryLabel(selected)}</dd></div>
           {selected.reporting_month && <div><dt>For month</dt><dd>{reportingMonthLabel(selected.reporting_month)}</dd></div>}</dl>
         {selected.reminder_enabled && selected.type === 'expense' && ['planned', 'scheduled'].includes(selected.status) && <p><Bell size={15}/> Reminder on</p>}
         {selected.error && <p className="form-error" role="status">{selected.error}</p>}

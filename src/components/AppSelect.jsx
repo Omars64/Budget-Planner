@@ -5,7 +5,7 @@ import './AppSelect.css'
 
 // Keep a real select for form values and validation, but open Budgetly's own
 // accessible picker instead of the platform's full-screen option sheet.
-export default function AppSelect({ children, value, onChange, disabled, required, className = '', ...props }) {
+export default function AppSelect({ children, value, onChange, disabled, required, renderOptionIcon, className = '', ...props }) {
   const native = useRef(null)
   const trigger = useRef(null)
   const [open, setOpen] = useState(false)
@@ -34,12 +34,12 @@ export default function AppSelect({ children, value, onChange, disabled, require
   return <span className={`app-select ${className}`}>
     <select {...props} ref={native} value={value} onChange={onChange} disabled={disabled} required={required} className="app-select-native" tabIndex={-1} aria-hidden="true" onInvalid={event => { event.preventDefault(); setInvalid(true); trigger.current?.focus(); props.onInvalid?.(event) }}>{children}</select>
     <button ref={trigger} type="button" className="app-select-trigger" role="combobox" aria-label={`Open ${label}`} aria-haspopup="dialog" aria-expanded={open} aria-invalid={invalid || props['aria-invalid']} aria-required={required || undefined} disabled={disabled} onClick={() => { setQuery(''); setOpen(true) }}>
-      <span>{selected?.label || options[0]?.label || 'Choose an option'}</span><ChevronDown size={18} aria-hidden="true"/>
+      <span className={renderOptionIcon ? 'category-icon-label' : undefined}>{renderOptionIcon?.(selected || options[0])}{selected?.label || options[0]?.label || 'Choose an option'}</span><ChevronDown size={18} aria-hidden="true"/>
     </button>
     {invalid && <small className="field-error">Choose {label.toLowerCase()} before continuing.</small>}
     <Modal open={open} onClose={() => setOpen(false)} title={label} size="small" layerClass="app-select-layer">
       {options.length > 8 && <label className="app-select-search"><Search size={18}/><input autoFocus type="search" aria-label={`Search ${label.toLowerCase()}`} placeholder="Search options" value={query} onChange={event => setQuery(event.target.value)}/></label>}
-      <div className="app-select-options" role="listbox" aria-label={label}>{options.filter(option => option.label.toLowerCase().includes(query.toLowerCase())).map((option, index) => <button type="button" role="option" aria-selected={String(value) === String(option.value)} key={`${option.value}-${index}`} disabled={option.disabled} onClick={() => choose(option.value)}>{option.label}{String(value) === String(option.value) && <Check size={18} aria-hidden="true"/>}</button>)}</div>
+      <div className="app-select-options" role="listbox" aria-label={label}>{options.filter(option => option.label.toLowerCase().includes(query.toLowerCase())).map((option, index) => <button type="button" role="option" aria-selected={String(value) === String(option.value)} key={`${option.value}-${index}`} disabled={option.disabled} onClick={() => choose(option.value)}>{renderOptionIcon ? <span className="category-icon-label">{renderOptionIcon(option)}{option.label}</span> : option.label}{String(value) === String(option.value) && <Check size={18} aria-hidden="true"/>}</button>)}</div>
     </Modal>
   </span>
 }
