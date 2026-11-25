@@ -24,6 +24,19 @@ beforeEach(() => {
 })
 afterEach(cleanup)
 
+it('shows private and shared debt workspaces only when coming from Personal', () => {
+  mocks.app.debtSpaces = [{ id: 'test-debt-space', name: 'Shared loan', member_count: 2 }]
+  const view = render(<SpaceSwitcher/>)
+  fireEvent.click(screen.getByRole('button', { name: /Switch space/ }))
+  expect(screen.getByRole('button', { name: /Personal/ })).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /Debt Management|Shared loan/ })).not.toBeInTheDocument()
+  mocks.app.activeSpace = null
+  view.rerender(<SpaceSwitcher/>)
+  fireEvent.click(screen.getByRole('button', { name: /Switch space/ }))
+  expect(screen.getByRole('button', { name: /Debt Management/ })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: /Shared loan/ })).toBeInTheDocument()
+})
+
 it('shows the Spaces library directly while reusing owner-only management', () => {
   render(<SpaceSwitcher library/>)
   expect(screen.queryByRole('button', {name:/Switch space/})).not.toBeInTheDocument()

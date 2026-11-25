@@ -20,7 +20,8 @@ export default function SpaceSwitcher({ library = false }) {
   const { user, activeSpace, spaces = [], debtSpaces = [], reloadDebtSpaces, switchSpace, reloadSpaces, forgetDeletedSpace, settings, isGuest, requestSignIn, notify, confirm } = useApp()
   const navigate = useNavigate()
   const { pathname } = useLocation()
-  const debt = !isGuest && debtRoute(pathname)
+  const debt = !isGuest && !activeSpace && debtRoute(pathname)
+  const showDebtSpaces = !isGuest && !library && !activeSpace
   const debtSpace = debt && debtSpaces.find(space => space.id === debt.id)
   const privateDebt = debt && !debt.id
   const currentName = debtSpace?.name || (debt ? 'Debt Management' : activeSpace?.name || 'Personal')
@@ -131,8 +132,8 @@ export default function SpaceSwitcher({ library = false }) {
 
   const options = <div className="space-options">
         <button className={`${personal ? 'selected' : ''}${library ? ' space-library-personal' : ''}`} onClick={() => choose(null)} aria-current={personal ? 'true' : undefined}><UserRound/><span><strong>Personal</strong><small>{library ? 'Your private wallets, transactions and plans' : 'Private records'}</small></span>{personal && <>{library && <span className="space-current-label">Current workspace</span>}<Check size={18}/></>}</button>
-        {!isGuest && !library && <button className={privateDebt ? 'selected' : ''} aria-current={privateDebt ? 'true' : undefined} onClick={() => chooseDebt(null)}><Landmark/><span><strong>Debt Management</strong><small>Only you</small></span>{privateDebt && <Check size={18}/>}</button>}
-        {!isGuest && !library && debtSpaces.map(space => <button key={space.id} className={`shared-debt-space${debt?.id === space.id ? ' selected' : ''}`} aria-current={debt?.id === space.id ? 'true' : undefined} onClick={() => chooseDebt(space.id)}>
+        {showDebtSpaces && <button className={privateDebt ? 'selected' : ''} aria-current={privateDebt ? 'true' : undefined} onClick={() => chooseDebt(null)}><Landmark/><span><strong>Debt Management</strong><small>Only you</small></span>{privateDebt && <Check size={18}/>}</button>}
+        {showDebtSpaces && debtSpaces.map(space => <button key={space.id} className={`shared-debt-space${debt?.id === space.id ? ' selected' : ''}`} aria-current={debt?.id === space.id ? 'true' : undefined} onClick={() => chooseDebt(space.id)}>
           <Users size={18}/><span><strong>{space.name}</strong><small>Shared debt space · {space.member_count} {space.member_count === 1 ? 'person' : 'people'}</small></span>{debt?.id === space.id && <Check size={18}/>}
         </button>)}
         {spaces.map(space => <div className={`space-option-row${!debt && space.id === activeSpace?.id ? ' selected' : ''}`} key={space.id} style={library ? {'--space-accent':space.accent} : undefined}>
@@ -145,7 +146,7 @@ export default function SpaceSwitcher({ library = false }) {
 
   return <div className={`space-switcher${library ? ' space-library-options' : ''}`}>
     {library ? options : <>
-    <button className="space-selector" onClick={() => { setOpen(true); void reloadDebtSpaces?.().catch(() => {}) }} aria-label={`Switch space. Current: ${currentName}`} aria-haspopup="dialog"><span className="space-symbol">{debtSpace || (!debt && activeSpace) ? <Users size={18}/> : debt ? <Landmark size={18}/> : <UserRound size={18}/>}</span><span className="space-selector-label">{currentName}<small>{debtSpace ? roleNames[debtSpace.role] : !debt && activeSpace ? roleNames[activeSpace.role] : 'Only you'}</small></span><ChevronDown size={16}/></button>
+    <button className="space-selector" onClick={() => { setOpen(true); if (showDebtSpaces) void reloadDebtSpaces?.().catch(() => {}) }} aria-label={`Switch space. Current: ${currentName}`} aria-haspopup="dialog"><span className="space-symbol">{debtSpace || (!debt && activeSpace) ? <Users size={18}/> : debt ? <Landmark size={18}/> : <UserRound size={18}/>}</span><span className="space-selector-label">{currentName}<small>{debtSpace ? roleNames[debtSpace.role] : !debt && activeSpace ? roleNames[activeSpace.role] : 'Only you'}</small></span><ChevronDown size={16}/></button>
     <Modal open={open} onClose={() => setOpen(false)} title={debt ? 'Switch workspace' : 'Your spaces'} layerClass="space-switcher-dialog">{options}</Modal>
     </>}
     <Modal protectChanges isDirty={Boolean(dirty)} open={manage} onClose={() => !pending.current && setManage(false)} title={editing ? editing.name : 'Create space'} layerClass="space-switcher-dialog">

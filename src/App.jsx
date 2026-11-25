@@ -513,7 +513,7 @@ export default function App() {
         <Route path="/spending" element={<Spending />} />
         <Route path="/budgets" element={<Budgets />} />
         <Route path="/goals" element={<GoalsDebts />} />
-        <Route path="/debt-management/*" element={<DebtWorkspace />} />
+        <Route path="/debt-management/*" element={activeSpace ? <Navigate to="/" replace/> : <DebtWorkspace/>} />
         <Route path="/after-hours" element={activeSpace || isGuest ? <Navigate to="/more" replace/> : <AfterHours key={session.user?.id}/>}/>
         <Route path="/spending-map" element={isGuest ? <Navigate to="/more" replace/> : <SpendingMap key={String(session.user?.id)+':'+(activeSpace?.id || 'personal')}/>}/>
         <Route path="/more" element={<More />} />

@@ -15,6 +15,7 @@ it('keeps all existing tools available with their real routes', () => {
   expect(screen.getByRole('link', {name:/Notes/})).toHaveAttribute('href','/notes')
   expect(screen.getByRole('link', {name:/Settings/})).toHaveAttribute('href','/settings')
   expect(screen.getByRole('link', {name:/Spaces/})).toHaveAttribute('href','/spaces')
+  expect(screen.getByRole('link', {name:/Debt Management/})).toHaveAttribute('href','/debt-management')
 })
 
 it('keeps sign out as the final More action', () => {
@@ -37,5 +38,6 @@ it('hides Personal-only AI in Spaces and exposes admin controls only to admins',
   mocks.app.activeSpace = {id:9}; mocks.app.user.role = 'admin'
   render(<MemoryRouter><More/></MemoryRouter>)
   expect(screen.queryByRole('link', {name:/Ask Budgetly/})).not.toBeInTheDocument()
+  expect(screen.queryByRole('link', {name:/Debt Management/})).not.toBeInTheDocument()
   expect(screen.getByRole('link', {name:/Admin controls/})).toHaveAttribute('href','/admin')
 })

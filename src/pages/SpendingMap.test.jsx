@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import SpendingMap from './SpendingMap'
+import { categoryAppearance } from '../lib/categoryIcons'
 
 const mocks = vi.hoisted(() => ({ api: vi.fn(), app: { settings:{currency:'KWD'}, refreshKey:0 } }))
 vi.mock('../App',()=>({ useApp:()=>mocks.app }))
@@ -8,6 +9,14 @@ vi.mock('../lib/api',()=>({api:mocks.api,money:n=>'KWD '+Number(n).toFixed(3)}))
 beforeEach(()=>{mocks.api.mockReset();mocks.app.refreshKey=0;delete mocks.app.activeSpace})
 afterEach(cleanup)
 const entry={id:1,type:'expense',amount:1,category_name:'Groceries',description:'Market',wallet_name:'Main',date:'2026-11-14T10:00:00'}
+
+it('resolves the existing category names to four distinct glyphs', () => {
+  const names = ['Bills', 'Lunch', 'Snacks', 'Lended money']
+  const appearances = names.map(name => categoryAppearance(name, {type:'expense'}))
+  expect(appearances.map(({key}) => key)).toEqual(['bills', 'lunch', 'snacks', 'lending'])
+  expect(new Set(appearances.map(({Icon}) => Icon)).size).toBe(4)
+  expect(categoryAppearance('Money lent').Icon).toBe(appearances[3].Icon)
+})
 
 it('loads beyond one ledger page and groups repeated category use by day',async()=>{
   mocks.api.mockResolvedValueOnce(Array.from({length:500},(_,i)=>({...entry,id:i+1})))

@@ -1,4 +1,9 @@
 {
+  "6.26.2": [
+    {"title":"Transactions header","detail":"The header and notification controls scroll with the page and stay clear of ledger records."},
+    {"title":"Four category icons","detail":"Bills, Lunch, Snacks, and Lending money have distinct icons wherever categories are shown."},
+    {"title":"Debt Management in Personal","detail":"Open private and shared debt workspaces from Personal. Shared budget Spaces keep their own navigation."}
+  ],
   "6.26.1": [
     {"title":"Faster bank alert review","detail":"Ignore an alert from the inbox list. In review, Change destination sits beside Approve transaction."},
     {"title":"A roomier Spending Map","detail":"Pan, pinch or scroll to zoom, then open a category pin for compact, scrollable transactions grouped by date."},

@@ -113,14 +113,14 @@ export default function AppShell({ children }) {
     lastVisit.current = visit
     recordPageVisit(user?.id, location.pathname)
   }, [user?.id, location.pathname, preferences.personalizedShortcuts])
-  const pages = activeSpace ? nav.filter(([path]) => path !== '/ask-ai' && path !== '/workbooks') : nav
+  const pages = activeSpace ? nav.filter(([path]) => !['/ask-ai', '/workbooks', '/debt-management'].includes(path)) : nav
   const visibleNav = user?.role === 'admin' ? [...pages, ['/admin', 'Admin', ShieldCheck, 'Account']] : pages
   const orderedNav = [...visibleNav].sort((a,b) => { const ia=preferences.navOrder.indexOf(a[0]), ib=preferences.navOrder.indexOf(b[0]); return ia < 0 || ib < 0 ? 0 : ia-ib })
   const matchingNav = orderedNav.filter(([, label]) => label.toLowerCase().includes(navSearch.trim().toLowerCase()))
   const isOverview = location.pathname === '/'
   const isLedger = ['/transactions', '/shared-transactions'].includes(location.pathname)
   const isUpcoming = location.pathname === '/upcoming'
-  const isDebt = debtRouteActive && !isGuest
+  const isDebt = debtRouteActive && !isGuest && !activeSpace
   const debtSpace = debtSpaces.find(space => space.id === debtLocation?.id)
   const requestedPreview = new URLSearchParams(location.search).get('preview')
   const preview = isDebt && debtSpace?.role === 'owner' && ['view','edit'].includes(requestedPreview) ? requestedPreview : null

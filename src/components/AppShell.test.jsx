@@ -3,10 +3,11 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import AppShell from './AppShell'
 
-const preferences = vi.hoisted(() => ({role:'user', sidebar:true}))
+const preferences = vi.hoisted(() => ({role:'user', sidebar:true, activeSpace:null}))
 vi.mock('../App', () => ({ useApp: () => ({
   user: { id: 1, username: 'Omar', role: preferences.role },
   settings: { display_name: 'Budgetly', support_sidebar_enabled: preferences.sidebar }, appearance: {},
+  activeSpace: preferences.activeSpace,
   refresh: vi.fn(), notify: vi.fn(), lock: vi.fn(),
 }) }))
 vi.mock('./TransactionModal', () => ({ default: () => null }))
@@ -17,7 +18,7 @@ vi.mock('./ScrollMemory', () => ({ default: () => null }))
 vi.mock('../lib/scrollLock', () => ({ useContainedScroll: vi.fn(), useScrollLock: vi.fn() }))
 
 beforeEach(() => {
-  preferences.role = 'user'; preferences.sidebar = true
+  preferences.role = 'user'; preferences.sidebar = true; preferences.activeSpace = null
   localStorage.removeItem('budgetly-sidebar-collapsed')
   vi.stubGlobal('matchMedia', () => ({ matches: false }))
   vi.stubGlobal('requestAnimationFrame', callback => callback())
@@ -91,4 +92,15 @@ test('page search still finds less-used tools and the mobile More link navigates
   expect(screen.getByRole('link', {name:'More tools'})).toHaveAttribute('href', '/more')
   fireEvent.change(screen.getByRole('searchbox', {name:'Find a page'}), {target:{value:'calendar'}})
   expect(screen.getByRole('link', {name:'Calendar'})).toHaveAttribute('href', '/calendar')
+})
+
+test('Debt Management appears in sidebar search only from Personal', () => {
+  const tree = <MemoryRouter><AppShell/></MemoryRouter>
+  const { rerender } = render(tree)
+  const finder = screen.getByRole('searchbox', { name: 'Find a page' })
+  fireEvent.change(finder, { target: { value: 'Debt Management' } })
+  expect(screen.getByRole('link', { name: 'Debt Management', exact: true })).toHaveAttribute('href', '/debt-management')
+  preferences.activeSpace = { id: 7, name: 'Home' }
+  rerender(<MemoryRouter><AppShell/></MemoryRouter>)
+  expect(screen.queryByRole('link', { name: 'Debt Management', exact: true })).not.toBeInTheDocument()
 })
