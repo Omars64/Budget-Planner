@@ -42,13 +42,14 @@ export default function Upcoming() {
   const [choicesError, setChoicesError] = useState('')
   const [choicesRetry, setChoicesRetry] = useState(0)
   const [plansRetry, setPlansRetry] = useState(0)
+  useEffect(()=>{setRows([]);setSelectedId(null);setDraft(null)},[user.id,activeSpace?.id])
   const [plansError, setPlansError] = useState('')
   useEffect(() => {
     const controller = new AbortController()
-    setRows([]); setLoading(true); setPlansError('')
+    setLoading(true); setPlansError('')
     api('/api/planned-transactions', { signal:controller.signal }).then(plans => {
       if (!controller.signal.aborted) setRows(plans)
-    }).catch(err => { if (!controller.signal.aborted) setPlansError(err.message) })
+    }).catch(err => { if (!controller.signal.aborted) {if ([401,403].includes(err.status)) setRows([]);setPlansError(err.message)} })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
   }, [user.id, activeSpace?.id, plansRetry])
@@ -121,7 +122,7 @@ export default function Upcoming() {
     } catch (err) { setError(err.message) } finally { setBusy(false) }
   }
   const remove = async row => {
-    if (!await confirm(`Delete "${row.description}" from upcoming entries?`)) return
+    if (!await confirm(`Delete "${row.description}" from upcoming entries in ${activeSpace?.name || "Personal"}? It will no longer be scheduled.`)) return
     try { await api(`/api/planned-transactions/${row.id}`, { method: 'DELETE', ...(row.revision ? { headers: { 'If-Match': row.revision } } : {}) }); setSelectedId(null); setRows(current => current.filter(item => item.id !== row.id)); void syncPlannedNotifications(user.id).catch(() => {}); notify('Upcoming entry deleted') } catch (err) { notify(err.message, 'error') }
   }
 
@@ -165,7 +166,7 @@ export default function Upcoming() {
       <p>Expense reminders use your device’s notification permissions and settings.</p>
     </Modal>
     <div className="poc-list" aria-live="polite">
-      {loading ? <p className="muted">Loading upcoming records…</p> : displayed.length === 0 ? !plansError && <p className="muted">No entries in this view.</p> : displayed.map(row => <button type="button" className="poc-line plan-row" key={row.id} onClick={() => setSelectedId(row.id)}>
+      {loading && !rows.length ? <p className="muted">Loading upcoming records…</p> : displayed.length === 0 ? !plansError && <p className="muted">No entries in this view.</p> : displayed.map(row => <button type="button" className="poc-line plan-row" key={row.id} onClick={() => setSelectedId(row.id)}>
         <span className="poc-marker"><CalendarClock size={18} aria-hidden="true"/></span>
         <span><strong>{row.description}</strong><small>{showTime(row.date)} · {row.wallet_name}</small><span className={`upcoming-status ${row.status}`}>{planLabel(row)}</span></span>
         <strong className={`upcoming-amount ${row.type}`}>{amountLabel(row)}</strong>

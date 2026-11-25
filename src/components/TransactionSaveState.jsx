@@ -3,7 +3,7 @@ import { CheckCircle2, CloudUpload, FilePenLine } from 'lucide-react'
 import { readDraft } from '../lib/transactionDraft'
 import { listOfflineQueue } from '../lib/offlineSync'
 
-export default function TransactionSaveState({ userId, spaceId, result, onResume }) {
+export default function TransactionSaveState({ userId, spaceId, localOnly, result, onResume }) {
   const key = `flowbudget_tx_draft_${userId}${spaceId ? `_space_${spaceId}` : ''}`
   const [draft, setDraft] = useState(() => readDraft(key))
   const [queued, setQueued] = useState(false)
@@ -32,6 +32,6 @@ export default function TransactionSaveState({ userId, spaceId, result, onResume
   const pending = result.queued
   return <div className="transaction-save-state" role="status">
     {pending ? <CloudUpload size={19} aria-hidden="true"/> : <CheckCircle2 size={19} aria-hidden="true"/>}
-    <span><strong>{pending ? 'Saved on this device · Pending sync' : 'Saved in Budgetly'}</strong><small>{pending ? 'Your entry will sync when the connection returns. Check the pending list below.' : 'Your entry was confirmed by the server.'}</small></span>
+    <span><strong>{pending ? 'Saved on this device · Sync pending' : localOnly ? 'Saved on this device' : 'Saved'}</strong><small>{pending ? 'Your entry will sync when the connection returns. Check the pending list below.' : localOnly ? 'This entry is in your guest workspace.' : 'Your entry was confirmed by the server.'}</small></span>
   </div>
 }

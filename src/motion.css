@@ -71,3 +71,11 @@
   *,*::before,*::after { animation:none!important; transition:none!important; scroll-behavior:auto!important; }
   :is(button,a) { scale:1!important; }
 }
+
+@media (prefers-reduced-motion:no-preference) {
+  :root[data-motion=full] .more-directory .more-tool:nth-child(-n+4),
+  :root[data-motion=full] .atlas-popup { animation:budgetly-lateral .22s ease-out backwards; }
+  :root[data-motion=full] .more-directory .more-tool:nth-child(2) { animation-delay:40ms; }
+  :root[data-motion=full] .atlas-pin { transition:scale .15s ease-out; }
+  :root[data-motion=full] .atlas-pin[aria-expanded=true] { scale:1.12; }
+}

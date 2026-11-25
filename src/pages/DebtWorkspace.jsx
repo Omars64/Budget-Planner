@@ -193,7 +193,7 @@ function DebtScreen({spaceId,tab,requestedPreview}) {
     } catch (problem) {setFormError(problem.message)}
   }
   const confirmDelete = async record => {
-    if (await confirm(`Delete “${record.name}” and its debt payment history?`)) {
+    if (await confirm(`Delete “${record.name}” in ${scope?.name || "Private debts"} and its payment history? Outstanding balance: ${fmt(remaining(record))}.`)) {
       await apply(draft=>{draft.records=draft.records.filter(row=>row.id!==record.id)},'Debt deleted')
     }
   }

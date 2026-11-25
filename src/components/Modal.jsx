@@ -55,7 +55,7 @@ export default function Modal({ open, onClose, title, subtitle, children, footer
       if (document.querySelector('dialog[open]') || document.body.classList.contains('driver-active') || activeDialogs.at(-1) !== dialog) return
       if (event.key === 'Escape') { event.preventDefault(); close.current() }
       if (event.key !== 'Tab' || !dialog.current) return
-      const focusable = [...dialog.current.querySelectorAll('button, input, select, textarea, a[href], summary')].filter(el => !el.disabled && el.getClientRects().length)
+      const focusable = [...dialog.current.querySelectorAll('button, input, select, textarea, a[href], summary')].filter(el => !el.disabled && el.tabIndex >= 0 && el.getClientRects().length)
       const first = focusable[0], last = focusable.at(-1)
       if (!first) { event.preventDefault(); return }
       if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog.current)) { event.preventDefault(); last.focus() }

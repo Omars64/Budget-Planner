@@ -32,6 +32,8 @@ const Feedback = lazy(() => import('./pages/Feedback'))
 const Upcoming = lazy(() => import('./pages/Upcoming'))
 const Planner = lazy(() => import('./pages/Planner'))
 const Attention = lazy(() => import('./pages/Attention'))
+const AfterHours = lazy(() => import('./pages/AfterHours'))
+const SpendingMap = lazy(() => import('./pages/SpendingMap'))
 const More = lazy(() => import('./pages/More'))
 const Spaces = lazy(() => import('./pages/Spaces'))
 const BankMessages = lazy(() => import('./pages/BankMessages'))
@@ -512,6 +514,8 @@ export default function App() {
         <Route path="/budgets" element={<Budgets />} />
         <Route path="/goals" element={<GoalsDebts />} />
         <Route path="/debt-management/*" element={<DebtWorkspace />} />
+        <Route path="/after-hours" element={activeSpace || isGuest ? <Navigate to="/more" replace/> : <AfterHours key={session.user?.id}/>}/>
+        <Route path="/spending-map" element={isGuest ? <Navigate to="/more" replace/> : <SpendingMap key={String(session.user?.id)+':'+(activeSpace?.id || 'personal')}/>}/>
         <Route path="/more" element={<More />} />
         <Route path="/spaces" element={<Spaces />} />
         <Route path="/wallets" element={<Wallets />} />

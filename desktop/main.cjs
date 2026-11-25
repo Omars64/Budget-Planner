@@ -6,7 +6,7 @@ const { appId, restorePalette, imageForPalette, applyPalette } = require('./pale
 
 const origin = 'https://budget-planner-ecru-seven.vercel.app'
 const assets = path.join(__dirname, '..', 'dist')
-const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.woff2': 'font/woff2' }
+const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.woff2': 'font/woff2' }
 let mainWindow
 let showOnPaletteReady
 

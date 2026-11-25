@@ -1,4 +1,9 @@
 {
+  "6.26.0": [
+    {"title":"After Hours","detail":"Open After Hours from More in your Personal workspace to visit Miami districts, edit their messages and play music from your device."},
+    {"title":"Spending Map","detail":"Open the map from More and select a category to see this month's transactions in the current workspace."},
+    {"title":"Everyday controls","detail":"Search for individual settings, see where a transaction was saved and check its wallet and workspace before deleting it."}
+  ],
   "6.25.4": [
     {"title":"Larger workbook imports","detail":"Import more rows and columns, and open large workbooks with a grid that renders only the visible cells."},
     {"title":"Clearer import choices","detail":"Google Sheets and Excel appear side by side. The info button explains workbook copies and import limits."}

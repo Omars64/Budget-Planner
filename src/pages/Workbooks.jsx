@@ -143,6 +143,7 @@ export default function Workbooks(){
       <div onClick={selectCell} onKeyDown={event=>{if(event.key==='Enter')selectCell(event)}}>
         <WorkbookGrid key={doc.id+':'+sheet.id} sheet={sheet} address={address} issues={doc.report.issues} revision={doc.revision}/>
       </div>
+      {doc.wb.worksheets.length>1 && <label className="field">Jump to worksheet<select value={tab} disabled={busy} onChange={event=>{const i=Number(event.target.value);void act(async()=>{await commit();setTab(i);choose(doc.wb.worksheets[i].getCell('A1'))})}}>{doc.wb.worksheets.map((s,i)=><option key={s.id} value={i}>{s.name}</option>)}</select></label>}
       <div className="workbook-tabs">{doc.wb.worksheets.map((s,i)=><button className="button ghost" aria-pressed={tab===i} disabled={busy} key={s.id} onClick={()=>act(async()=>{await commit();setTab(i);choose(s.getCell('A1'))})}>{s.name}</button>)}</div></div>
       {dirty&&error&&<button className="button ghost" onClick={()=>{choose(cell);setError('')}}>Discard cell edit</button>}</>}
     {!modal&&message}

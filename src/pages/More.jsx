@@ -10,10 +10,13 @@ import { SUPPORT_URL } from '../lib/support'
 const directory = [
   ['Plan ahead', ['/planner', '/upcoming', '/calendar', '/attention']],
   ['Understand your money', ['/budgets', '/goals', '/debt-management', '/analytics', '/spending']],
+  ['Explore', ['/after-hours', '/spending-map']],
   ['Your workspace', ['/bank-messages', '/spaces', '/notes', '/workbooks']],
   ['Help and account', ['/ask-ai', '/feedback', '/settings']],
 ]
 const shortDescriptions = {
+  '/after-hours':'Miami stations, music and money reviews',
+  '/spending-map':'Tap a category to see this month’s activity by day',
   '/planner':'Cash flow forecast',
   '/attention':'Budget and deadline alerts',
   '/goals':'Savings goals and repayments',
@@ -32,7 +35,7 @@ export default function More() {
   useEffect(() => { if (location.state?.focusSearch) finder.current?.focus() }, [location.key, location.state?.focusSearch])
   const [preferences] = useWorkspacePreferences(user?.id)
   const term = query.trim().toLowerCase()
-  const pages = workspaceNavigation.filter(([path,label,,,description]) => (!activeSpace || !['/ask-ai','/workbooks'].includes(path)) && `${label} ${description}`.toLowerCase().includes(term))
+  const pages = workspaceNavigation.filter(([path,label,,,description]) => (!activeSpace || !['/ask-ai','/workbooks','/after-hours'].includes(path)) && `${label} ${description}`.toLowerCase().includes(term))
   const groups = directory.map(([title, paths]) => [title, paths.map(path => pages.find(page => page[0] === path)).filter(Boolean)]).filter(([,items]) => items.length)
   return <div className="everyday-page more-page stack gap-24">
     <label className="more-finder"><Search size={18} aria-hidden="true"/><input ref={finder} type="search" aria-label="Find a tool" placeholder="Find a tool" value={query} onChange={event => setQuery(event.target.value)}/></label>

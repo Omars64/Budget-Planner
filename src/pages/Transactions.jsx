@@ -89,14 +89,14 @@ export default function Transactions() {
 
   const fmt = v => money(v, settings.currency, settings.compact_numbers)
   const grouped = useMemo(() => rows.reduce((acc, tx) => { const key = format(displayDate(tx.date), 'yyyy-MM-dd'); (acc[key] ||= []).push(tx); return acc }, {}), [rows])
-  const remove = async tx => { if (!await confirm(`Delete “${tx.description}”?`)) return; try {
+  const remove = async tx => { if (!await confirm(`Delete “${tx.description}” · ${fmt(tx.amount)} from ${tx.wallet_name || "wallet"} in ${activeSpace?.name || "Personal"}? This removes its effect on the balance.`)) return; try {
     const result = await api(`/api/transactions/${tx.id}?undo=true`, {method:'DELETE'})
     setSelected(null); refresh()
     notify(isGuest ? 'Transaction deleted from this device' : 'Transaction moved to Trash', 'success', result?.trash_id && (!activeSpace || activeSpace.role === 'owner') ? {label:'Undo',run:async()=>{await api(`/api/trash/${result.trash_id}/restore`,{method:'POST'});refresh();notify('Transaction restored')}} : null)
   } catch (err) { notify(err.message, 'error') } }
 
   return <div className="everyday-page transactions-page compact-transactions stack">
-    <TransactionSaveState userId={user?.id} spaceId={activeSpace?.id} result={saveResult} onResume={() => {setEditing(null);setModal(true)}}/>
+    <TransactionSaveState localOnly={isGuest} userId={user?.id} spaceId={activeSpace?.id} result={saveResult} onResume={() => {setEditing(null);setModal(true)}}/>
     {!isGuest && <OfflinePending scope={spaceKey}/>}
     <LedgerFilters compact userId={`${user?.id}:${spaceKey}`} value={filters} onChange={setFilters} wallets={wallets} categories={categories}
       balanceAction={<button type="button" className="button ghost ledger-balance-trigger" data-tour="wallet-balances" aria-label="Current wallet balances" aria-haspopup="dialog" onClick={() => setWalletBalancesOpen(true)}><Wallet size={16} aria-hidden="true"/><span>Wallet balances</span></button>}>
@@ -126,6 +126,6 @@ export default function Transactions() {
       </div>
     </Modal>
     <TransactionDetails tx={selected} fmt={fmt} shared={Boolean(activeSpace)} permission={activeSpace?.role === 'owner' ? 'edit' : activeSpace?.role || 'edit'} onClose={() => setSelected(null)} onEdit={canManage ? () => {setEditing(selected);setSelected(null);setModal(true)} : null} onDelete={canManage ? () => remove(selected) : null} onDuplicate={canAdd ? () => {writeDraft(`flowbudget_tx_draft_${user.id}${activeSpace ? `_space_${activeSpace.id}` : ''}`,duplicateDraft(selected,dateInput()));setSelected(null);setEditing(null);setModal(true)} : null}/>
-    <TransactionModal open={modal} editing={editing} onClose={() => setModal(false)} onSaved={(saved, scheduled) => {setModal(false);setSaveResult({queued:Boolean(saved.queued)});if (scheduled || isGuest) refresh();notify(saved.queued ? 'Saved on this device. Will sync when connected.' : editing?'Transaction updated':'Transaction added')}} />
+    <TransactionModal open={modal} editing={editing} onClose={() => setModal(false)} onSaved={(saved, scheduled) => {setModal(false);setSaveResult({queued:Boolean(saved.queued)});if (scheduled || isGuest) refresh();notify(saved.queued ? 'Saved on this device · Sync pending' : isGuest?'Saved on this device':'Saved')}} />
   </div>
 }

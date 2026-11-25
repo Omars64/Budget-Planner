@@ -147,6 +147,33 @@ public static class WalletIconArtwork
         }
     }
 
+    // Etch a wind-bent palm into the wallet face, inside its existing silhouette.
+    private static void Palm(Graphics g, Brush ink, float x, float y, float scale)
+    {
+        var transform = g.Save();
+        g.TranslateTransform(x, y);
+        g.ScaleTransform(scale, scale);
+        using (var trunk = new GraphicsPath()) {
+            trunk.AddBezier(-5, 33, -2, 23, 2, 14, 0, 0);
+            trunk.AddBezier(0, 0, 4, 8, 4, 22, 0, 33);
+            trunk.CloseFigure();
+            g.FillPath(ink, trunk);
+        }
+        foreach (int angle in new int[] {-85,-56,-29,14,44,76}) {
+            var crown = g.Save();
+            g.RotateTransform(angle);
+            using (var leaf = new GraphicsPath()) {
+                leaf.AddBezier(0, 0, 2, -10, 8, -17, 17, -16);
+                leaf.AddBezier(17, -16, 12, -15, 8, -9, 7, -7);
+                leaf.AddLine(7, -7, 7, -10);
+                leaf.AddBezier(7, -10, 5, -6, 2, -2, 0, 0);
+                g.FillPath(ink, leaf);
+            }
+            g.Restore(crown);
+        }
+        g.Restore(transform);
+    }
+
     private static void DrawMiamiWallet(Graphics g, Brush edge, Color pink, Color peach)
     {
         using (var detail = new SolidBrush(pink))
@@ -159,6 +186,8 @@ public static class WalletIconArtwork
             wallet.Inflate(-2, -2);
             using (var inside = Rounded(wallet, 10.24f, 9.07f, 10.24f, 9.07f))
                 g.SetClip(inside);
+            Palm(g, detail, 33, 59, .84f);
+            Palm(g, detail, 48, 68, .52f);
             Shape(g, edge, detail, new RectangleF(57, 54, 32, 21), 10, 10, 10, 10, true);
             g.FillEllipse(edge, 65, 62, 6, 6);
         }

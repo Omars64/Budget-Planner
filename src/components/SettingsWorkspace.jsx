@@ -37,6 +37,24 @@ export default function SettingsWorkspace({ children, guest = false, sections = 
   const parts = Children.toArray(children).map(child => ({ child, group: isValidElement(child) ? child.props.settingsId || child.props['data-settings-id'] || titleGroups[child.props.title] : null }))
   const available = sections.filter(group => parts.some(part => part.group === group.id))
   const visible = available.filter(group => `${group.title} ${group.description} ${group.terms || ''}`.toLowerCase().includes(query.trim().toLowerCase()))
+  const matches = []
+  const term = query.trim().toLowerCase()
+  if (term.length >= 2 && !admin) {
+    for (const element of body.current?.querySelectorAll('button, input:not([type=hidden]), select, textarea, summary') || []) {
+      const group = element.closest('[data-settings-group]')?.dataset.settingsGroup
+      const label = element.getAttribute('aria-label') || element.labels?.[0]?.childNodes[0]?.textContent || (element.matches('button,summary') ? element.textContent : '')
+      const text = label?.trim()
+      if (group && text?.toLowerCase().includes(term) && !matches.some(hit=>hit.group===group && hit.text===text)) matches.push({element,group,text})
+    }
+  }
+  async function revealControl(hit) {
+    await show(hit.group, true)
+    window.requestAnimationFrame(()=>{
+      for(let parent=hit.element.parentElement; parent && parent!==body.current; parent=parent.parentElement) if(parent.tagName==='DETAILS')parent.open=true
+      hit.element.scrollIntoView?.({block:'center'})
+      hit.element.focus()
+    })
+  }
   const current = sections.find(group => group.id === displayed)
 
   const show = useCallback(async (id, immediate = false) => {
@@ -98,15 +116,16 @@ export default function SettingsWorkspace({ children, guest = false, sections = 
       {mobileDetail ? <><button type="button" className="settings-back" onClick={back}><ArrowLeft size={20}/>{admin ? 'All admin tools' : 'All settings'}</button><h2 ref={heading} tabIndex={-1}>{current.title}</h2></> : <h2 ref={menuHeading} tabIndex={-1}>{title}</h2>}
     </div>
     <aside className="settings-menu palette-sheet" aria-label={admin ? 'Admin tools' : 'Settings categories'} hidden={mobileDetail}>
-      <label className="settings-search"><Search size={18} aria-hidden="true"/><input type="search" value={query} placeholder={admin ? 'Search admin tools' : 'Search settings'} aria-label={admin ? 'Search admin tools' : 'Search settings'} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && visible[0]) { event.preventDefault(); void show(visible[0].id) } }}/></label>
+      <label className="settings-search"><Search size={18} aria-hidden="true"/><input type="search" value={query} placeholder={admin ? 'Search admin tools' : 'Search settings'} aria-label={admin ? 'Search admin tools' : 'Search settings'} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && (matches.length || visible[0])) { event.preventDefault(); void (matches.length ? revealControl(matches[0]) : show(visible[0].id)) } }}/></label>
       <nav aria-label={admin ? 'Choose an admin tool' : 'Choose a settings category'}>
+        {matches.map(hit=><button type="button" className="settings-category" key={hit.group+hit.text} onClick={()=>revealControl(hit)}><span>{hit.text}<small>{available.find(g=>g.id===hit.group)?.title}</small></span><ChevronRight size={16}/></button>)}
         {visible.map(group => <div key={group.id}>
           {group.label && <p className="settings-menu-label">{group.label}</p>}
           <button type="button" className="settings-category" onClick={() => void show(group.id)}>
             <group.icon size={20} aria-hidden="true"/><span>{group.title}{group.description && <small>{group.description}</small>}</span><ChevronRight size={16} aria-hidden="true"/>
           </button>
         </div>)}
-        {!visible.length && <p className="muted" role="status">{admin ? 'No matching admin tools.' : 'No matching settings.'}</p>}
+        {!visible.length && !matches.length && <p className="muted" role="status">{admin ? 'No matching admin tools.' : 'No matching settings.'}</p>}
       </nav>
     </aside>
     <div className="settings-detail palette-sheet" ref={body} hidden={!mobileDetail}>
